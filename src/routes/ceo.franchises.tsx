@@ -28,8 +28,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Send, Copy, Trash2, Users } from "lucide-react";
+import { Building2, Plus, Send, Copy, Trash2, Users, Archive, RotateCcw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { PillarFlower } from "@/components/PillarFlower";
+import { getPillarScoresForUsers } from "@/lib/pillar-data";
+import type { PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/ceo/franchises")({
   component: FranchisesPage,
@@ -40,6 +43,8 @@ interface Franchise {
   name: string;
   location: string | null;
   created_at: string;
+  archived_at: string | null;
+  auto_delete_at: string | null;
 }
 
 interface InviteRow {
