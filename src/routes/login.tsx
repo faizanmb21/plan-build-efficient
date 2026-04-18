@@ -23,9 +23,8 @@ function LoginPage() {
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
-    if (!authLoading && session) {
-      navigate({ to: homeForRole(primaryRole) });
-    }
+    if (authLoading || !session) return;
+    navigate({ to: primaryRole ? homeForRole(primaryRole) : "/" });
   }, [authLoading, session, primaryRole, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
