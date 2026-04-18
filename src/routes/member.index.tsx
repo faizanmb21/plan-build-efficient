@@ -34,6 +34,12 @@ function MemberHome() {
   const [loading, setLoading] = React.useState(true);
   const [assignments, setAssignments] = React.useState<AssignmentRow[]>([]);
   const [stats, setStats] = React.useState<Record<string, CourseStat>>({});
+  const [pillarScores, setPillarScores] = React.useState<PillarScores | null>(null);
+
+  React.useEffect(() => {
+    if (!user) return;
+    getPillarScoresForUsers([user.id]).then(setPillarScores);
+  }, [user]);
 
   React.useEffect(() => {
     if (!user) return;
