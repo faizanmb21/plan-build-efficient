@@ -23,6 +23,7 @@ import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
 import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
+import { Route as MemberCoursesIdRouteImport } from './routes/member.courses.$id'
 import { Route as CeoCoursesIdEditRouteImport } from './routes/ceo.courses.$id.edit'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -95,6 +96,11 @@ const CeoCoursesIndexRoute = CeoCoursesIndexRouteImport.update({
   path: '/courses/',
   getParentRoute: () => CeoRoute,
 } as any)
+const MemberCoursesIdRoute = MemberCoursesIdRouteImport.update({
+  id: '/courses/$id',
+  path: '/courses/$id',
+  getParentRoute: () => MemberRoute,
+} as any)
 const CeoCoursesIdEditRoute = CeoCoursesIdEditRouteImport.update({
   id: '/courses/$id/edit',
   path: '/courses/$id/edit',
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
+  '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
@@ -166,6 +175,7 @@ export interface FileRouteTypes {
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/member/courses/$id'
     | '/ceo/courses/'
     | '/ceo/courses/$id/edit'
   fileRoutesByTo: FileRoutesByTo
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/ceo'
     | '/incharge'
     | '/member'
+    | '/member/courses/$id'
     | '/ceo/courses'
     | '/ceo/courses/$id/edit'
   id:
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/member/courses/$id'
     | '/ceo/courses/'
     | '/ceo/courses/$id/edit'
   fileRoutesById: FileRoutesById
@@ -312,6 +324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoCoursesIndexRouteImport
       parentRoute: typeof CeoRoute
     }
+    '/member/courses/$id': {
+      id: '/member/courses/$id'
+      path: '/courses/$id'
+      fullPath: '/member/courses/$id'
+      preLoaderRoute: typeof MemberCoursesIdRouteImport
+      parentRoute: typeof MemberRoute
+    }
     '/ceo/courses/$id/edit': {
       id: '/ceo/courses/$id/edit'
       path: '/courses/$id/edit'
@@ -354,10 +373,12 @@ const InchargeRouteWithChildren = InchargeRoute._addFileChildren(
 
 interface MemberRouteChildren {
   MemberIndexRoute: typeof MemberIndexRoute
+  MemberCoursesIdRoute: typeof MemberCoursesIdRoute
 }
 
 const MemberRouteChildren: MemberRouteChildren = {
   MemberIndexRoute: MemberIndexRoute,
+  MemberCoursesIdRoute: MemberCoursesIdRoute,
 }
 
 const MemberRouteWithChildren =
