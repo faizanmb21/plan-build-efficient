@@ -112,11 +112,31 @@ function MemberHome() {
   }, [user]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">My Courses</h1>
-        <p className="text-sm text-muted-foreground">Your assigned learning.</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">My Courses</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Your assigned learning.</p>
       </header>
+
+      {/* Personal pillar mastery */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display text-xl">Your skill flower</CardTitle>
+          <CardDescription>
+            Each petal is one of the 12 IRM Academy pillars. Petals fill outward
+            as you complete more lessons in that pillar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          {pillarScores ? (
+            <PillarFlower scores={pillarScores} size={360} showLegend />
+          ) : (
+            <div className="h-[360px] w-[360px] flex items-center justify-center text-sm text-muted-foreground">
+              Loading…
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
