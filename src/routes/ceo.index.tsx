@@ -1,11 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, BookOpen, Users, FileCheck, Sparkles } from "lucide-react";
+import { Building2, BookOpen, Users, FileCheck, Sparkles, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { PillarFlower } from "@/components/PillarFlower";
+import { getPillarScoresForUsers } from "@/lib/pillar-data";
+import type { PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/ceo/")({
   component: CeoDashboard,
@@ -21,17 +24,22 @@ interface Stats {
 function CeoDashboard() {
   const { profile } = useAuth();
   const [stats, setStats] = React.useState<Stats | null>(null);
+  const [scores, setScores] = React.useState<PillarScores | null>(null);
 
   React.useEffect(() => {
     (async () => {
-      const [f, c, m, s] = await Promise.all([
-        supabase.from("franchises").select("id", { count: "exact", head: true }),
+      const [f, c, m, s, memberRoles] = await Promise.all([
+        supabase
+          .from("franchises")
+          .select("id", { count: "exact", head: true })
+          .is("archived_at", null),
         supabase.from("courses").select("id", { count: "exact", head: true }),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
         supabase
           .from("submissions")
           .select("id", { count: "exact", head: true })
           .eq("status", "pending"),
+        supabase.from("user_roles").select("user_id").eq("role", "member"),
       ]);
       setStats({
         franchises: f.count ?? 0,
@@ -39,47 +47,123 @@ function CeoDashboard() {
         members: m.count ?? 0,
         pendingSubmissions: s.count ?? 0,
       });
+      const userIds = (memberRoles.data ?? []).map((r) => r.user_id);
+      const ps = await getPillarScoresForUsers(userIds);
+      setScores(ps);
     })();
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="font-display text-3xl font-bold tracking-tight">
           Welcome{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}
         </h1>
-        <p className="text-sm text-muted-foreground">Here's a quick look at your academy.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Here's a quick look at your academy.
+        </p>
       </header>
 
+      {/* Stat tiles — branded, flat icon style */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Franchises" value={stats?.franchises} icon={Building2} />
-        <StatCard label="Courses" value={stats?.courses} icon={BookOpen} />
-        <StatCard label="Users" value={stats?.members} icon={Users} />
-        <StatCard label="Pending grading" value={stats?.pendingSubmissions} icon={FileCheck} />
+        <StatTile
+          to="/ceo/franchises"
+          label="Franchises"
+          value={stats?.franchises}
+          icon={Building2}
+          gradient="from-[oklch(0.45_0.27_268)] to-[oklch(0.55_0.21_290)]"
+        />
+        <StatTile
+          to="/ceo/courses"
+          label="Courses"
+          value={stats?.courses}
+          icon={BookOpen}
+          gradient="from-[oklch(0.55_0.21_320)] to-[oklch(0.62_0.20_25)]"
+        />
+        <StatTile
+          to="/ceo/franchises"
+          label="Users"
+          value={stats?.members}
+          icon={Users}
+          gradient="from-[oklch(0.62_0.18_145)] to-[oklch(0.55_0.18_205)]"
+        />
+        <StatTile
+          to="/ceo/submissions"
+          label="Pending grading"
+          value={stats?.pendingSubmissions}
+          icon={FileCheck}
+          gradient="from-[oklch(0.78_0.16_75)] to-[oklch(0.62_0.20_25)]"
+        />
       </div>
+
+      {/* Pillar mastery flower — org-wide */}
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="font-display text-xl">12-pillar mastery</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Each petal is one skill pillar. Each ring outward = a deeper level
+                completed. Darker petals = more mastered across all members.
+              </p>
+            </div>
+            <Link to="/ceo/franchises">
+              <Button variant="outline" size="sm">
+                Compare franchises <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-2">
+            {scores ? (
+              <PillarFlower scores={scores} size={420} showLegend />
+            ) : (
+              <div className="flex h-[420px] w-[420px] items-center justify-center text-sm text-muted-foreground">
+                Loading mastery…
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function StatCard({
+function StatTile({
+  to,
   label,
   value,
   icon: Icon,
+  gradient,
 }: {
+  to: string;
   label: string;
   value: number | undefined;
   icon: React.ComponentType<{ className?: string }>;
+  gradient: string;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-        <Icon className="h-4 w-4 text-accent" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-bold">{value ?? "—"}</div>
-      </CardContent>
-    </Card>
+    <Link to={to} className="group block">
+      <Card className="hover-lift relative overflow-hidden border-border/60 transition-colors group-hover:border-accent/50">
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between">
+            <div
+              className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-sm`}
+            >
+              <Icon className="h-5 w-5" />
+            </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:text-accent" />
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="font-display text-3xl font-bold tracking-tight">
+            {value ?? "—"}
+          </div>
+          <div className="mt-0.5 text-sm text-muted-foreground">{label}</div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
