@@ -21,6 +21,8 @@ import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
+import { Route as CeoCoursesRouteImport } from './routes/ceo.courses'
+import { Route as CeoCoursesIdEditRouteImport } from './routes/ceo.courses.$id.edit'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -82,6 +84,16 @@ const CeoFranchisesRoute = CeoFranchisesRouteImport.update({
   path: '/franchises',
   getParentRoute: () => CeoRoute,
 } as any)
+const CeoCoursesRoute = CeoCoursesRouteImport.update({
+  id: '/courses',
+  path: '/courses',
+  getParentRoute: () => CeoRoute,
+} as any)
+const CeoCoursesIdEditRoute = CeoCoursesIdEditRouteImport.update({
+  id: '/$id/edit',
+  path: '/$id/edit',
+  getParentRoute: () => CeoCoursesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -91,22 +103,26 @@ export interface FileRoutesByFullPath {
   '/member': typeof MemberRouteWithChildren
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/ceo/courses': typeof CeoCoursesRouteWithChildren
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/ceo/courses': typeof CeoCoursesRouteWithChildren
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
+  '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -117,11 +133,13 @@ export interface FileRoutesById {
   '/member': typeof MemberRouteWithChildren
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/ceo/courses': typeof CeoCoursesRouteWithChildren
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -133,22 +151,26 @@ export interface FileRouteTypes {
     | '/member'
     | '/profile'
     | '/reset-password'
+    | '/ceo/courses'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/ceo/courses/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/profile'
     | '/reset-password'
+    | '/ceo/courses'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo'
     | '/incharge'
     | '/member'
+    | '/ceo/courses/$id/edit'
   id:
     | '__root__'
     | '/'
@@ -158,11 +180,13 @@ export interface FileRouteTypes {
     | '/member'
     | '/profile'
     | '/reset-password'
+    | '/ceo/courses'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/ceo/courses/$id/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -262,15 +286,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoFranchisesRouteImport
       parentRoute: typeof CeoRoute
     }
+    '/ceo/courses': {
+      id: '/ceo/courses'
+      path: '/courses'
+      fullPath: '/ceo/courses'
+      preLoaderRoute: typeof CeoCoursesRouteImport
+      parentRoute: typeof CeoRoute
+    }
+    '/ceo/courses/$id/edit': {
+      id: '/ceo/courses/$id/edit'
+      path: '/$id/edit'
+      fullPath: '/ceo/courses/$id/edit'
+      preLoaderRoute: typeof CeoCoursesIdEditRouteImport
+      parentRoute: typeof CeoCoursesRoute
+    }
   }
 }
 
+interface CeoCoursesRouteChildren {
+  CeoCoursesIdEditRoute: typeof CeoCoursesIdEditRoute
+}
+
+const CeoCoursesRouteChildren: CeoCoursesRouteChildren = {
+  CeoCoursesIdEditRoute: CeoCoursesIdEditRoute,
+}
+
+const CeoCoursesRouteWithChildren = CeoCoursesRoute._addFileChildren(
+  CeoCoursesRouteChildren,
+)
+
 interface CeoRouteChildren {
+  CeoCoursesRoute: typeof CeoCoursesRouteWithChildren
   CeoFranchisesRoute: typeof CeoFranchisesRoute
   CeoIndexRoute: typeof CeoIndexRoute
 }
 
 const CeoRouteChildren: CeoRouteChildren = {
+  CeoCoursesRoute: CeoCoursesRouteWithChildren,
   CeoFranchisesRoute: CeoFranchisesRoute,
   CeoIndexRoute: CeoIndexRoute,
 }
