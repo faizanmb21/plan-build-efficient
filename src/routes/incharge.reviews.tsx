@@ -1,0 +1,369 @@
+import * as React from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { CheckCircle2, Clock, RefreshCcw, FileText, ExternalLink, Loader2 } from "lucide-react";
+
+export const Route = createFileRoute("/incharge/reviews")({
+  component: ReviewsPage,
+});
+
+type SubmissionStatus = "pending" | "approved" | "revision";
+
+interface SubmissionRow {
+  id: string;
+  status: SubmissionStatus;
+  file_url: string;
+  grade: number | null;
+  feedback: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  user_id: string;
+  lesson_id: string;
+  lesson_title: string;
+  course_title: string;
+  member_name: string;
+}
+
+const STATUS_META: Record<
+  SubmissionStatus,
+  { label: string; icon: React.ComponentType<{ className?: string }>; cls: string }
+> = {
+  pending: { label: "Pending", icon: Clock, cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
+  approved: { label: "Approved", icon: CheckCircle2, cls: "bg-primary/15 text-primary" },
+  revision: { label: "Revision", icon: RefreshCcw, cls: "bg-destructive/15 text-destructive" },
+};
+
+function ReviewsPage() {
+  const { user } = useAuth();
+  const [tab, setTab] = React.useState<SubmissionStatus | "all">("pending");
+  const [rows, setRows] = React.useState<SubmissionRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [active, setActive] = React.useState<SubmissionRow | null>(null);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    const { data: subs, error } = await supabase
+      .from("submissions")
+      .select("id,status,file_url,grade,feedback,created_at,reviewed_at,user_id,lesson_id")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast.error(error.message);
+      setLoading(false);
+      return;
+    }
+
+    const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
+    const userIds = Array.from(new Set((subs ?? []).map((s) => s.user_id)));
+
+    const [{ data: lessons }, { data: profiles }] = await Promise.all([
+      lessonIds.length
+        ? supabase
+            .from("lessons")
+            .select("id,title,section_id,sections(course_id,courses(title))")
+            .in("id", lessonIds)
+        : Promise.resolve({ data: [] as any[] }),
+      userIds.length
+        ? supabase.from("profiles").select("id,full_name").in("id", userIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+    const lessonMap = new Map<string, { title: string; courseTitle: string }>();
+    (lessons ?? []).forEach((l: any) => {
+      lessonMap.set(l.id, {
+        title: l.title,
+        courseTitle: l.sections?.courses?.title ?? "Course",
+      });
+    });
+    const profileMap = new Map<string, string>();
+    (profiles ?? []).forEach((p: any) => {
+      profileMap.set(p.id, p.full_name ?? "Member");
+    });
+
+    const enriched: SubmissionRow[] = (subs ?? []).map((s) => ({
+      ...s,
+      status: s.status as SubmissionStatus,
+      lesson_title: lessonMap.get(s.lesson_id)?.title ?? "Lesson",
+      course_title: lessonMap.get(s.lesson_id)?.courseTitle ?? "Course",
+      member_name: profileMap.get(s.user_id) ?? "Member",
+    }));
+    setRows(enriched);
+    setLoading(false);
+  }, []);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const filtered = React.useMemo(
+    () => (tab === "all" ? rows : rows.filter((r) => r.status === tab)),
+    [rows, tab],
+  );
+
+  const counts = React.useMemo(
+    () => ({
+      pending: rows.filter((r) => r.status === "pending").length,
+      approved: rows.filter((r) => r.status === "approved").length,
+      revision: rows.filter((r) => r.status === "revision").length,
+      all: rows.length,
+    }),
+    [rows],
+  );
+
+  return (
+    <div className="space-y-6">
+      <header className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Grading queue</h1>
+          <p className="text-sm text-muted-foreground">
+            Review practical submissions from members in your franchise.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+          Refresh
+        </Button>
+      </header>
+
+      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+        <TabsList>
+          <TabsTrigger value="pending">Pending ({counts.pending})</TabsTrigger>
+          <TabsTrigger value="revision">Revision ({counts.revision})</TabsTrigger>
+          <TabsTrigger value="approved">Approved ({counts.approved})</TabsTrigger>
+          <TabsTrigger value="all">All ({counts.all})</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {loading ? (
+        <Card>
+          <CardContent className="flex items-center gap-2 p-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading submissions…
+          </CardContent>
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Nothing here</CardTitle>
+            <CardDescription>
+              {tab === "pending"
+                ? "No submissions waiting for review. 🎉"
+                : "No submissions match this filter."}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : (
+        <div className="grid gap-3">
+          {filtered.map((row) => (
+            <SubmissionCard key={row.id} row={row} onOpen={() => setActive(row)} />
+          ))}
+        </div>
+      )}
+
+      <ReviewDialog
+        row={active}
+        reviewerId={user?.id ?? ""}
+        onClose={() => setActive(null)}
+        onSaved={() => {
+          setActive(null);
+          load();
+        }}
+      />
+    </div>
+  );
+}
+
+function SubmissionCard({ row, onOpen }: { row: SubmissionRow; onOpen: () => void }) {
+  const meta = STATUS_META[row.status];
+  const Icon = meta.icon;
+  return (
+    <Card className="transition-colors hover:border-primary/40">
+      <CardContent className="flex items-center justify-between gap-4 p-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <p className="truncate font-medium">{row.lesson_title}</p>
+            <Badge variant="secondary" className={meta.cls}>
+              <Icon className="mr-1 h-3 w-3" />
+              {meta.label}
+            </Badge>
+          </div>
+          <p className="mt-1 truncate text-sm text-muted-foreground">
+            {row.member_name} · {row.course_title} · {new Date(row.created_at).toLocaleDateString()}
+            {row.grade !== null && ` · Grade ${row.grade}`}
+          </p>
+        </div>
+        <Button size="sm" onClick={onOpen}>
+          {row.status === "pending" ? "Review" : "Open"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewDialog({
+  row,
+  reviewerId,
+  onClose,
+  onSaved,
+}: {
+  row: SubmissionRow | null;
+  reviewerId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [status, setStatus] = React.useState<SubmissionStatus>("approved");
+  const [grade, setGrade] = React.useState<string>("");
+  const [feedback, setFeedback] = React.useState<string>("");
+  const [signedUrl, setSignedUrl] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!row) return;
+    setStatus((row.status === "pending" ? "approved" : row.status) as SubmissionStatus);
+    setGrade(row.grade?.toString() ?? "");
+    setFeedback(row.feedback ?? "");
+    setSignedUrl(null);
+    (async () => {
+      const { data } = await supabase.storage
+        .from("submissions")
+        .createSignedUrl(row.file_url, 60 * 30);
+      setSignedUrl(data?.signedUrl ?? null);
+    })();
+  }, [row]);
+
+  async function save() {
+    if (!row) return;
+    const gradeNum = grade.trim() === "" ? null : Number(grade);
+    if (gradeNum !== null && (Number.isNaN(gradeNum) || gradeNum < 0 || gradeNum > 100)) {
+      toast.error("Grade must be between 0 and 100");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("submissions")
+      .update({
+        status,
+        grade: gradeNum,
+        feedback: feedback.trim() || null,
+        reviewed_by: reviewerId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Review saved");
+    onSaved();
+  }
+
+  return (
+    <Dialog open={!!row} onOpenChange={(o) => (!o ? onClose() : null)}>
+      <DialogContent className="max-w-2xl">
+        {row && (
+          <>
+            <DialogHeader>
+              <DialogTitle>{row.lesson_title}</DialogTitle>
+              <DialogDescription>
+                {row.member_name} · {row.course_title} · Submitted{" "}
+                {new Date(row.created_at).toLocaleString()}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="rounded-md border p-3">
+                <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+                  Submitted file
+                </p>
+                {signedUrl ? (
+                  <a
+                    href={signedUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open submission in new tab
+                  </a>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Generating preview link…</p>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Decision</label>
+                  <Select value={status} onValueChange={(v) => setStatus(v as SubmissionStatus)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="approved">Approve</SelectItem>
+                      <SelectItem value="revision">Request revision</SelectItem>
+                      <SelectItem value="pending">Keep pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Grade (0–100, optional)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    placeholder="e.g. 85"
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Feedback</label>
+                <Textarea
+                  rows={4}
+                  placeholder="Notes for the member…"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose} disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={save} disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save review
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -20,6 +20,7 @@ import { Route as MemberIndexRouteImport } from './routes/member.index'
 import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
 import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
@@ -81,6 +82,11 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InchargeReviewsRoute = InchargeReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
+  getParentRoute: () => InchargeRoute,
+} as any)
 const CeoFranchisesRoute = CeoFranchisesRouteImport.update({
   id: '/franchises',
   path: '/franchises',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
+  '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
+  '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
+  '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/franchises'
+    | '/incharge/reviews'
     | '/invite/$token'
     | '/ceo/'
     | '/incharge/'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/franchises'
+    | '/incharge/reviews'
     | '/invite/$token'
     | '/ceo'
     | '/incharge'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/franchises'
+    | '/incharge/reviews'
     | '/invite/$token'
     | '/ceo/'
     | '/incharge/'
@@ -303,6 +315,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/incharge/reviews': {
+      id: '/incharge/reviews'
+      path: '/reviews'
+      fullPath: '/incharge/reviews'
+      preLoaderRoute: typeof InchargeReviewsRouteImport
+      parentRoute: typeof InchargeRoute
+    }
     '/ceo/franchises': {
       id: '/ceo/franchises'
       path: '/franchises'
@@ -360,10 +379,12 @@ const CeoRouteChildren: CeoRouteChildren = {
 const CeoRouteWithChildren = CeoRoute._addFileChildren(CeoRouteChildren)
 
 interface InchargeRouteChildren {
+  InchargeReviewsRoute: typeof InchargeReviewsRoute
   InchargeIndexRoute: typeof InchargeIndexRoute
 }
 
 const InchargeRouteChildren: InchargeRouteChildren = {
+  InchargeReviewsRoute: InchargeReviewsRoute,
   InchargeIndexRoute: InchargeIndexRoute,
 }
 
