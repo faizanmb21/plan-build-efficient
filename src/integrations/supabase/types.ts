@@ -402,6 +402,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      seed_demo_content: { Args: never; Returns: Json }
     }
     Enums: {
       app_role: "ceo" | "incharge" | "member"
