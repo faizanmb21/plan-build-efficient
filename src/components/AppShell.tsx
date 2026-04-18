@@ -73,7 +73,15 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
               <Menu className="h-5 w-5" />
             </button>
             <span className="text-sm text-muted-foreground">
-              {nav.find((n) => location.pathname === n.to || location.pathname.startsWith(n.to + "/"))?.label ?? ""}
+              {(() => {
+                const match = nav.find((n) => {
+                  const isRoot = n.to === "/ceo" || n.to === "/incharge" || n.to === "/member";
+                  return isRoot
+                    ? location.pathname === n.to
+                    : location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+                });
+                return match?.label ?? "";
+              })()}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -126,9 +134,16 @@ function SidebarInner({
       </div>
       <nav className="flex-1 space-y-1 p-3">
         {nav.map((item) => {
-          const active =
-            location.pathname === item.to ||
-            (item.to !== "/" && location.pathname.startsWith(item.to + "/"));
+          // Dashboard-style root items (e.g. "/ceo", "/incharge", "/member") should
+          // ONLY light up on the exact path. Sub-pages like "/ceo/franchises"
+          // share the same prefix, so prefix-matching the root would falsely
+          // highlight the Dashboard while a child page is active.
+          const isRootSection =
+            item.to === "/ceo" || item.to === "/incharge" || item.to === "/member";
+          const active = isRootSection
+            ? location.pathname === item.to
+            : location.pathname === item.to ||
+              location.pathname.startsWith(item.to + "/");
           const Icon = item.icon;
           return (
             <Link

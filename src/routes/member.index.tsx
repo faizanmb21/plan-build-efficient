@@ -8,6 +8,9 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Clock, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
+import { PillarFlower } from "@/components/PillarFlower";
+import { getPillarScoresForUsers } from "@/lib/pillar-data";
+import type { PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/member/")({
   component: MemberHome,
@@ -31,6 +34,12 @@ function MemberHome() {
   const [loading, setLoading] = React.useState(true);
   const [assignments, setAssignments] = React.useState<AssignmentRow[]>([]);
   const [stats, setStats] = React.useState<Record<string, CourseStat>>({});
+  const [pillarScores, setPillarScores] = React.useState<PillarScores | null>(null);
+
+  React.useEffect(() => {
+    if (!user) return;
+    getPillarScoresForUsers([user.id]).then(setPillarScores);
+  }, [user]);
 
   React.useEffect(() => {
     if (!user) return;
@@ -103,11 +112,31 @@ function MemberHome() {
   }, [user]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">My Courses</h1>
-        <p className="text-sm text-muted-foreground">Your assigned learning.</p>
+        <h1 className="font-display text-3xl font-bold tracking-tight">My Courses</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Your assigned learning.</p>
       </header>
+
+      {/* Personal pillar mastery */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display text-xl">Your skill flower</CardTitle>
+          <CardDescription>
+            Each petal is one of the 12 IRM Academy pillars. Petals fill outward
+            as you complete more lessons in that pillar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          {pillarScores ? (
+            <PillarFlower scores={pillarScores} size={360} showLegend />
+          ) : (
+            <div className="h-[360px] w-[360px] flex items-center justify-center text-sm text-muted-foreground">
+              Loading…
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

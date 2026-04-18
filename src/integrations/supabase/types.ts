@@ -87,6 +87,8 @@ export type Database = {
       }
       franchises: {
         Row: {
+          archived_at: string | null
+          auto_delete_at: string | null
           created_at: string
           id: string
           location: string | null
@@ -95,6 +97,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
+          auto_delete_at?: string | null
           created_at?: string
           id?: string
           location?: string | null
@@ -103,6 +107,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
+          auto_delete_at?: string | null
           created_at?: string
           id?: string
           location?: string | null
@@ -393,6 +399,7 @@ export type Database = {
     }
     Functions: {
       accept_invite: { Args: { _token: string }; Returns: Json }
+      archive_franchise: { Args: { _franchise_id: string }; Returns: Json }
       claim_first_ceo: { Args: never; Returns: boolean }
       get_user_franchise: { Args: { _user_id: string }; Returns: string }
       has_role: {
@@ -402,6 +409,11 @@ export type Database = {
         }
         Returns: boolean
       }
+      purge_franchise: {
+        Args: { _force?: boolean; _franchise_id: string }
+        Returns: Json
+      }
+      restore_franchise: { Args: { _franchise_id: string }; Returns: Json }
       seed_demo_content: { Args: never; Returns: Json }
     }
     Enums: {
