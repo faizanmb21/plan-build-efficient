@@ -17,7 +17,7 @@ import {
 import { Plus, BookOpen, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/ceo/courses")({
+export const Route = createFileRoute("/ceo/courses/")({
   component: CoursesPage,
 });
 

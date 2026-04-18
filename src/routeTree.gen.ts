@@ -21,7 +21,7 @@ import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
-import { Route as CeoCoursesRouteImport } from './routes/ceo.courses'
+import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
 import { Route as CeoCoursesIdEditRouteImport } from './routes/ceo.courses.$id.edit'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -84,15 +84,15 @@ const CeoFranchisesRoute = CeoFranchisesRouteImport.update({
   path: '/franchises',
   getParentRoute: () => CeoRoute,
 } as any)
-const CeoCoursesRoute = CeoCoursesRouteImport.update({
-  id: '/courses',
-  path: '/courses',
+const CeoCoursesIndexRoute = CeoCoursesIndexRouteImport.update({
+  id: '/courses/',
+  path: '/courses/',
   getParentRoute: () => CeoRoute,
 } as any)
 const CeoCoursesIdEditRoute = CeoCoursesIdEditRouteImport.update({
-  id: '/$id/edit',
-  path: '/$id/edit',
-  getParentRoute: () => CeoCoursesRoute,
+  id: '/courses/$id/edit',
+  path: '/courses/$id/edit',
+  getParentRoute: () => CeoRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -103,12 +103,12 @@ export interface FileRoutesByFullPath {
   '/member': typeof MemberRouteWithChildren
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/ceo/courses': typeof CeoCoursesRouteWithChildren
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRoutesByTo {
@@ -116,12 +116,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/ceo/courses': typeof CeoCoursesRouteWithChildren
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
+  '/ceo/courses': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRoutesById {
@@ -133,12 +133,12 @@ export interface FileRoutesById {
   '/member': typeof MemberRouteWithChildren
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/ceo/courses': typeof CeoCoursesRouteWithChildren
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRouteTypes {
@@ -151,12 +151,12 @@ export interface FileRouteTypes {
     | '/member'
     | '/profile'
     | '/reset-password'
-    | '/ceo/courses'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/ceo/courses/'
     | '/ceo/courses/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -164,12 +164,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/profile'
     | '/reset-password'
-    | '/ceo/courses'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo'
     | '/incharge'
     | '/member'
+    | '/ceo/courses'
     | '/ceo/courses/$id/edit'
   id:
     | '__root__'
@@ -180,12 +180,12 @@ export interface FileRouteTypes {
     | '/member'
     | '/profile'
     | '/reset-password'
-    | '/ceo/courses'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/ceo/courses/'
     | '/ceo/courses/$id/edit'
   fileRoutesById: FileRoutesById
 }
@@ -286,45 +286,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoFranchisesRouteImport
       parentRoute: typeof CeoRoute
     }
-    '/ceo/courses': {
-      id: '/ceo/courses'
+    '/ceo/courses/': {
+      id: '/ceo/courses/'
       path: '/courses'
-      fullPath: '/ceo/courses'
-      preLoaderRoute: typeof CeoCoursesRouteImport
+      fullPath: '/ceo/courses/'
+      preLoaderRoute: typeof CeoCoursesIndexRouteImport
       parentRoute: typeof CeoRoute
     }
     '/ceo/courses/$id/edit': {
       id: '/ceo/courses/$id/edit'
-      path: '/$id/edit'
+      path: '/courses/$id/edit'
       fullPath: '/ceo/courses/$id/edit'
       preLoaderRoute: typeof CeoCoursesIdEditRouteImport
-      parentRoute: typeof CeoCoursesRoute
+      parentRoute: typeof CeoRoute
     }
   }
 }
 
-interface CeoCoursesRouteChildren {
+interface CeoRouteChildren {
+  CeoFranchisesRoute: typeof CeoFranchisesRoute
+  CeoIndexRoute: typeof CeoIndexRoute
+  CeoCoursesIndexRoute: typeof CeoCoursesIndexRoute
   CeoCoursesIdEditRoute: typeof CeoCoursesIdEditRoute
 }
 
-const CeoCoursesRouteChildren: CeoCoursesRouteChildren = {
-  CeoCoursesIdEditRoute: CeoCoursesIdEditRoute,
-}
-
-const CeoCoursesRouteWithChildren = CeoCoursesRoute._addFileChildren(
-  CeoCoursesRouteChildren,
-)
-
-interface CeoRouteChildren {
-  CeoCoursesRoute: typeof CeoCoursesRouteWithChildren
-  CeoFranchisesRoute: typeof CeoFranchisesRoute
-  CeoIndexRoute: typeof CeoIndexRoute
-}
-
 const CeoRouteChildren: CeoRouteChildren = {
-  CeoCoursesRoute: CeoCoursesRouteWithChildren,
   CeoFranchisesRoute: CeoFranchisesRoute,
   CeoIndexRoute: CeoIndexRoute,
+  CeoCoursesIndexRoute: CeoCoursesIndexRoute,
+  CeoCoursesIdEditRoute: CeoCoursesIdEditRoute,
 }
 
 const CeoRouteWithChildren = CeoRoute._addFileChildren(CeoRouteChildren)
@@ -365,3 +355,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
