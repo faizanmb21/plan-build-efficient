@@ -8,6 +8,9 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Clock, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
+import { PillarFlower } from "@/components/PillarFlower";
+import { getPillarScoresForUsers } from "@/lib/pillar-data";
+import type { PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/member/")({
   component: MemberHome,
