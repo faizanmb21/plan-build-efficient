@@ -73,7 +73,15 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
               <Menu className="h-5 w-5" />
             </button>
             <span className="text-sm text-muted-foreground">
-              {nav.find((n) => location.pathname === n.to || location.pathname.startsWith(n.to + "/"))?.label ?? ""}
+              {(() => {
+                const match = nav.find((n) => {
+                  const isRoot = n.to === "/ceo" || n.to === "/incharge" || n.to === "/member";
+                  return isRoot
+                    ? location.pathname === n.to
+                    : location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+                });
+                return match?.label ?? "";
+              })()}
             </span>
           </div>
           <div className="flex items-center gap-2">
