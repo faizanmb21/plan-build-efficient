@@ -21,6 +21,7 @@ import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
+import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
 import { Route as CeoCoursesIdEditRouteImport } from './routes/ceo.courses.$id.edit'
 
@@ -84,6 +85,11 @@ const CeoFranchisesRoute = CeoFranchisesRouteImport.update({
   path: '/franchises',
   getParentRoute: () => CeoRoute,
 } as any)
+const CeoAssignRoute = CeoAssignRouteImport.update({
+  id: '/assign',
+  path: '/assign',
+  getParentRoute: () => CeoRoute,
+} as any)
 const CeoCoursesIndexRoute = CeoCoursesIndexRouteImport.update({
   id: '/courses/',
   path: '/courses/',
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/member': typeof MemberRouteWithChildren
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo': typeof CeoIndexRoute
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/member': typeof MemberRouteWithChildren
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/member'
     | '/profile'
     | '/reset-password'
+    | '/ceo/assign'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo/'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/profile'
     | '/reset-password'
+    | '/ceo/assign'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/member'
     | '/profile'
     | '/reset-password'
+    | '/ceo/assign'
     | '/ceo/franchises'
     | '/invite/$token'
     | '/ceo/'
@@ -286,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoFranchisesRouteImport
       parentRoute: typeof CeoRoute
     }
+    '/ceo/assign': {
+      id: '/ceo/assign'
+      path: '/assign'
+      fullPath: '/ceo/assign'
+      preLoaderRoute: typeof CeoAssignRouteImport
+      parentRoute: typeof CeoRoute
+    }
     '/ceo/courses/': {
       id: '/ceo/courses/'
       path: '/courses'
@@ -304,6 +323,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface CeoRouteChildren {
+  CeoAssignRoute: typeof CeoAssignRoute
   CeoFranchisesRoute: typeof CeoFranchisesRoute
   CeoIndexRoute: typeof CeoIndexRoute
   CeoCoursesIndexRoute: typeof CeoCoursesIndexRoute
@@ -311,6 +331,7 @@ interface CeoRouteChildren {
 }
 
 const CeoRouteChildren: CeoRouteChildren = {
+  CeoAssignRoute: CeoAssignRoute,
   CeoFranchisesRoute: CeoFranchisesRoute,
   CeoIndexRoute: CeoIndexRoute,
   CeoCoursesIndexRoute: CeoCoursesIndexRoute,
