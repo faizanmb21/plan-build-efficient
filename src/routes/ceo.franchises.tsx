@@ -70,6 +70,8 @@ function FranchisesPage() {
   const [invites, setInvites] = React.useState<InviteRow[]>([]);
   const [members, setMembers] = React.useState<MemberRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [showArchived, setShowArchived] = React.useState(false);
+  const [scoresByFranchise, setScoresByFranchise] = React.useState<Record<string, PillarScores>>({});
 
   const load = React.useCallback(async () => {
     const [f, i, p, r] = await Promise.all([
@@ -78,16 +80,27 @@ function FranchisesPage() {
       supabase.from("profiles").select("id, full_name, franchise_id"),
       supabase.from("user_roles").select("user_id, role"),
     ]);
-    setFranchises((f.data as Franchise[]) ?? []);
+    const allF = (f.data as Franchise[]) ?? [];
+    setFranchises(allF);
     setInvites((i.data as InviteRow[]) ?? []);
     const roleMap = new Map<string, string>();
     ((r.data as { user_id: string; role: string }[]) ?? []).forEach((x) =>
       roleMap.set(x.user_id, x.role),
     );
-    setMembers(
-      ((p.data as MemberRow[]) ?? []).map((m) => ({ ...m, role: roleMap.get(m.id) })),
-    );
+    const memberList = ((p.data as MemberRow[]) ?? []).map((m) => ({ ...m, role: roleMap.get(m.id) }));
+    setMembers(memberList);
     setLoading(false);
+
+    // Compute per-franchise pillar scores in background
+    const entries = await Promise.all(
+      allF
+        .filter((fr) => !fr.archived_at)
+        .map(async (fr) => {
+          const ids = memberList.filter((m) => m.franchise_id === fr.id).map((m) => m.id);
+          return [fr.id, await getPillarScoresForUsers(ids)] as const;
+        }),
+    );
+    setScoresByFranchise(Object.fromEntries(entries));
   }, []);
 
   React.useEffect(() => {
