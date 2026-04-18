@@ -21,6 +21,7 @@ import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
+import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
 import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
@@ -87,6 +88,11 @@ const InchargeReviewsRoute = InchargeReviewsRouteImport.update({
   path: '/reviews',
   getParentRoute: () => InchargeRoute,
 } as any)
+const CeoSeedRoute = CeoSeedRouteImport.update({
+  id: '/seed',
+  path: '/seed',
+  getParentRoute: () => CeoRoute,
+} as any)
 const CeoFranchisesRoute = CeoFranchisesRouteImport.update({
   id: '/franchises',
   path: '/franchises',
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
+  '/ceo/seed': typeof CeoSeedRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
+  '/ceo/seed': typeof CeoSeedRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo': typeof CeoIndexRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
+  '/ceo/seed': typeof CeoSeedRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/ceo/': typeof CeoIndexRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/franchises'
+    | '/ceo/seed'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/ceo/'
@@ -196,6 +206,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/franchises'
+    | '/ceo/seed'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/ceo'
@@ -215,6 +226,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/franchises'
+    | '/ceo/seed'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/ceo/'
@@ -322,6 +334,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InchargeReviewsRouteImport
       parentRoute: typeof InchargeRoute
     }
+    '/ceo/seed': {
+      id: '/ceo/seed'
+      path: '/seed'
+      fullPath: '/ceo/seed'
+      preLoaderRoute: typeof CeoSeedRouteImport
+      parentRoute: typeof CeoRoute
+    }
     '/ceo/franchises': {
       id: '/ceo/franchises'
       path: '/franchises'
@@ -363,6 +382,7 @@ declare module '@tanstack/react-router' {
 interface CeoRouteChildren {
   CeoAssignRoute: typeof CeoAssignRoute
   CeoFranchisesRoute: typeof CeoFranchisesRoute
+  CeoSeedRoute: typeof CeoSeedRoute
   CeoIndexRoute: typeof CeoIndexRoute
   CeoCoursesIndexRoute: typeof CeoCoursesIndexRoute
   CeoCoursesIdEditRoute: typeof CeoCoursesIdEditRoute
@@ -371,6 +391,7 @@ interface CeoRouteChildren {
 const CeoRouteChildren: CeoRouteChildren = {
   CeoAssignRoute: CeoAssignRoute,
   CeoFranchisesRoute: CeoFranchisesRoute,
+  CeoSeedRoute: CeoSeedRoute,
   CeoIndexRoute: CeoIndexRoute,
   CeoCoursesIndexRoute: CeoCoursesIndexRoute,
   CeoCoursesIdEditRoute: CeoCoursesIdEditRoute,
@@ -418,3 +439,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
