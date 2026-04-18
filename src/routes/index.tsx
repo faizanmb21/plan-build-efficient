@@ -1,26 +1,65 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import * as React from "react";
+import { useAuth, homeForRole } from "@/lib/auth";
+import { GraduationCap } from "lucide-react";
+import { ClaimCeoCard } from "./ceo.index";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
-
 function Index() {
-  return <PlaceholderIndex />;
+  const navigate = useNavigate();
+  const { loading, session, primaryRole, roles, refresh, signOut } = useAuth();
+
+  React.useEffect(() => {
+    if (loading) return;
+    if (!session) {
+      navigate({ to: "/login" });
+      return;
+    }
+    if (primaryRole) {
+      navigate({ to: homeForRole(primaryRole) });
+    }
+  }, [loading, session, primaryRole, navigate]);
+
+  if (loading || !session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <GraduationCap className="h-10 w-10 text-primary" />
+          <p className="text-sm">Loading IRM Academy…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Authenticated but no role — show bootstrap or waiting screen
+  if (!roles.length) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/5 via-background to-accent/5 p-4">
+        <div className="w-full max-w-md space-y-4">
+          <ClaimCeoCard onClaimed={() => refresh().then(() => navigate({ to: "/ceo" }))} />
+          <Card>
+            <CardHeader>
+              <CardTitle>Waiting for an invite</CardTitle>
+              <CardDescription>
+                If a CEO has already been set up, ask them to send you an invite link to join your
+                franchise.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={() => signOut().then(() => navigate({ to: "/login" }))}>
+                Sign out
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }

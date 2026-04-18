@@ -9,38 +9,205 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as MemberRouteImport } from './routes/member'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as InchargeRouteImport } from './routes/incharge'
+import { Route as CeoRouteImport } from './routes/ceo'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MemberIndexRouteImport } from './routes/member.index'
+import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
+import { Route as CeoIndexRouteImport } from './routes/ceo.index'
+import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemberRoute = MemberRouteImport.update({
+  id: '/member',
+  path: '/member',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InchargeRoute = InchargeRouteImport.update({
+  id: '/incharge',
+  path: '/incharge',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CeoRoute = CeoRouteImport.update({
+  id: '/ceo',
+  path: '/ceo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MemberIndexRoute = MemberIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MemberRoute,
+} as any)
+const InchargeIndexRoute = InchargeIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => InchargeRoute,
+} as any)
+const CeoIndexRoute = CeoIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CeoRoute,
+} as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ceo': typeof CeoRouteWithChildren
+  '/incharge': typeof InchargeRouteWithChildren
+  '/login': typeof LoginRoute
+  '/member': typeof MemberRouteWithChildren
+  '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/ceo/': typeof CeoIndexRoute
+  '/incharge/': typeof InchargeIndexRoute
+  '/member/': typeof MemberIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/ceo': typeof CeoIndexRoute
+  '/incharge': typeof InchargeIndexRoute
+  '/member': typeof MemberIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ceo': typeof CeoRouteWithChildren
+  '/incharge': typeof InchargeRouteWithChildren
+  '/login': typeof LoginRoute
+  '/member': typeof MemberRouteWithChildren
+  '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/ceo/': typeof CeoIndexRoute
+  '/incharge/': typeof InchargeIndexRoute
+  '/member/': typeof MemberIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/ceo'
+    | '/incharge'
+    | '/login'
+    | '/member'
+    | '/profile'
+    | '/reset-password'
+    | '/invite/$token'
+    | '/ceo/'
+    | '/incharge/'
+    | '/member/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/login'
+    | '/profile'
+    | '/reset-password'
+    | '/invite/$token'
+    | '/ceo'
+    | '/incharge'
+    | '/member'
+  id:
+    | '__root__'
+    | '/'
+    | '/ceo'
+    | '/incharge'
+    | '/login'
+    | '/member'
+    | '/profile'
+    | '/reset-password'
+    | '/invite/$token'
+    | '/ceo/'
+    | '/incharge/'
+    | '/member/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CeoRoute: typeof CeoRouteWithChildren
+  InchargeRoute: typeof InchargeRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  MemberRoute: typeof MemberRouteWithChildren
+  ProfileRoute: typeof ProfileRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  InviteTokenRoute: typeof InviteTokenRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/member': {
+      id: '/member'
+      path: '/member'
+      fullPath: '/member'
+      preLoaderRoute: typeof MemberRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/incharge': {
+      id: '/incharge'
+      path: '/incharge'
+      fullPath: '/incharge'
+      preLoaderRoute: typeof InchargeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ceo': {
+      id: '/ceo'
+      path: '/ceo'
+      fullPath: '/ceo'
+      preLoaderRoute: typeof CeoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +215,79 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/member/': {
+      id: '/member/'
+      path: '/'
+      fullPath: '/member/'
+      preLoaderRoute: typeof MemberIndexRouteImport
+      parentRoute: typeof MemberRoute
+    }
+    '/incharge/': {
+      id: '/incharge/'
+      path: '/'
+      fullPath: '/incharge/'
+      preLoaderRoute: typeof InchargeIndexRouteImport
+      parentRoute: typeof InchargeRoute
+    }
+    '/ceo/': {
+      id: '/ceo/'
+      path: '/'
+      fullPath: '/ceo/'
+      preLoaderRoute: typeof CeoIndexRouteImport
+      parentRoute: typeof CeoRoute
+    }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface CeoRouteChildren {
+  CeoIndexRoute: typeof CeoIndexRoute
+}
+
+const CeoRouteChildren: CeoRouteChildren = {
+  CeoIndexRoute: CeoIndexRoute,
+}
+
+const CeoRouteWithChildren = CeoRoute._addFileChildren(CeoRouteChildren)
+
+interface InchargeRouteChildren {
+  InchargeIndexRoute: typeof InchargeIndexRoute
+}
+
+const InchargeRouteChildren: InchargeRouteChildren = {
+  InchargeIndexRoute: InchargeIndexRoute,
+}
+
+const InchargeRouteWithChildren = InchargeRoute._addFileChildren(
+  InchargeRouteChildren,
+)
+
+interface MemberRouteChildren {
+  MemberIndexRoute: typeof MemberIndexRoute
+}
+
+const MemberRouteChildren: MemberRouteChildren = {
+  MemberIndexRoute: MemberIndexRoute,
+}
+
+const MemberRouteWithChildren =
+  MemberRoute._addFileChildren(MemberRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CeoRoute: CeoRouteWithChildren,
+  InchargeRoute: InchargeRouteWithChildren,
+  LoginRoute: LoginRoute,
+  MemberRoute: MemberRouteWithChildren,
+  ProfileRoute: ProfileRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  InviteTokenRoute: InviteTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
