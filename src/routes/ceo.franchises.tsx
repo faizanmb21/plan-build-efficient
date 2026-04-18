@@ -107,65 +107,122 @@ function FranchisesPage() {
     load();
   }, [load]);
 
-  if (loading) {
-    return <div className="text-sm text-muted-foreground">Loading…</div>;
+  const visible = franchises.filter((f) => (showArchived ? !!f.archived_at : !f.archived_at));
+
+  async function archive(id: string, name: string) {
+    if (!confirm(`Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`)) return;
+    const { error } = await supabase.rpc("archive_franchise", { _franchise_id: id });
+    if (error) return toast.error(error.message);
+    toast.success("Franchise archived");
+    load();
+  }
+  async function restore(id: string) {
+    const { error } = await supabase.rpc("restore_franchise", { _franchise_id: id });
+    if (error) return toast.error(error.message);
+    toast.success("Franchise restored");
+    load();
+  }
+  async function purge(id: string, name: string, archivedAt: string | null, force: boolean) {
+    const msg = force
+      ? `Permanently delete "${name}" RIGHT NOW? This cannot be undone.`
+      : `Permanently delete "${name}"? This cannot be undone.`;
+    if (!confirm(msg)) return;
+    const { error } = await supabase.rpc("purge_franchise", { _franchise_id: id, _force: force });
+    if (error) return toast.error(error.message);
+    toast.success("Franchise deleted permanently");
+    load();
   }
 
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Franchises &amp; team</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Franchises &amp; team</h1>
           <p className="text-sm text-muted-foreground">
-            Create franchises, invite incharges &amp; members.
+            Create franchises, invite incharges &amp; members. Archived franchises can be restored within 30 days.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setShowArchived((v) => !v)}>
+            {showArchived ? "Show active" : `Show archived (${franchises.filter((f) => f.archived_at).length})`}
+          </Button>
           <NewFranchiseDialog onCreated={load} />
-          <NewInviteDialog franchises={franchises} onCreated={load} />
+          <NewInviteDialog franchises={franchises.filter((f) => !f.archived_at)} onCreated={load} />
         </div>
       </header>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Franchises ({franchises.length})
+          {showArchived ? "Archived" : "Franchises"} ({visible.length})
         </h2>
-        {franchises.length === 0 ? (
+        {visible.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              No franchises yet. Create your first one to start adding members.
+              {showArchived ? "Nothing archived." : "No franchises yet. Create your first one to start adding members."}
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {franchises.map((f) => {
+            {visible.map((f) => {
               const team = members.filter((m) => m.franchise_id === f.id);
+              const scores = scoresByFranchise[f.id];
+              const isArchived = !!f.archived_at;
+              const purgeReady =
+                isArchived && f.archived_at &&
+                new Date(f.archived_at).getTime() < Date.now() - 30 * 24 * 60 * 60 * 1000;
               return (
-                <Card key={f.id}>
+                <Card key={f.id} className={isArchived ? "opacity-70" : "hover-lift"}>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Building2 className="h-4 w-4 text-accent" /> {f.name}
-                    </CardTitle>
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Building2 className="h-4 w-4 text-accent" /> {f.name}
+                      </CardTitle>
+                      {isArchived && <Badge variant="destructive">Archived</Badge>}
+                    </div>
                     {f.location && <CardDescription>{f.location}</CardDescription>}
                   </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
+                  <CardContent className="space-y-3 text-sm">
+                    {!isArchived && scores && (
+                      <div className="flex justify-center">
+                        <PillarFlower scores={scores} size={180} showLabels={false} />
+                      </div>
+                    )}
                     <div className="flex items-center gap-1 text-muted-foreground">
-                      <Users className="h-3.5 w-3.5" /> {team.length} member
-                      {team.length === 1 ? "" : "s"}
+                      <Users className="h-3.5 w-3.5" /> {team.length} member{team.length === 1 ? "" : "s"}
                     </div>
-                    {team.slice(0, 4).map((m) => (
-                      <div
-                        key={m.id}
-                        className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs"
-                      >
+                    {team.slice(0, 3).map((m) => (
+                      <div key={m.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
                         <span className="truncate">{m.full_name ?? "Unnamed"}</span>
-                        {m.role && (
-                          <Badge variant="outline" className="capitalize">
-                            {m.role}
-                          </Badge>
-                        )}
+                        {m.role && <Badge variant="outline" className="capitalize">{m.role}</Badge>}
                       </div>
                     ))}
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {!isArchived ? (
+                        <Button size="sm" variant="outline" onClick={() => archive(f.id, f.name)}>
+                          <Archive className="h-3.5 w-3.5" /> Archive
+                        </Button>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => restore(f.id)}>
+                            <RotateCcw className="h-3.5 w-3.5" /> Restore
+                          </Button>
+                          {purgeReady ? (
+                            <Button size="sm" variant="destructive" onClick={() => purge(f.id, f.name, f.archived_at, false)}>
+                              <Trash2 className="h-3.5 w-3.5" /> Delete forever
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => purge(f.id, f.name, f.archived_at, true)}>
+                              <AlertTriangle className="h-3.5 w-3.5" /> Force delete
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {isArchived && f.auto_delete_at && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Auto-purge after {new Date(f.auto_delete_at).toLocaleDateString()}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               );
