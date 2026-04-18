@@ -107,6 +107,10 @@ function FranchisesPage() {
     load();
   }, [load]);
 
+  if (loading) {
+    return <div className="text-sm text-muted-foreground">Loading…</div>;
+  }
+
   const visible = franchises.filter((f) => (showArchived ? !!f.archived_at : !f.archived_at));
 
   async function archive(id: string, name: string) {
