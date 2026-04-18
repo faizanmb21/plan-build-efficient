@@ -20,6 +20,17 @@ export const seedDemo = createServerFn({ method: "POST" }).handler(async () => {
   const skipped: string[] = [];
   const failed: { email: string; error: string }[] = [];
 
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      ok: false as const,
+      created,
+      skipped,
+      failed,
+      error:
+        "Seeder is unavailable in this preview because the backend admin secret is not exposed here yet. Open the published app and run the seeder there.",
+    };
+  }
+
   // 1. Create auth users (idempotent: skip if exists)
   for (const acc of ACCOUNTS) {
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
