@@ -104,7 +104,7 @@ export type Database = {
           captured_at: string
           id: string
           kind: string
-          session_id: string
+          session_id: string | null
           storage_path: string
           user_id: string
         }
@@ -112,7 +112,7 @@ export type Database = {
           captured_at?: string
           id?: string
           kind: string
-          session_id: string
+          session_id?: string | null
           storage_path: string
           user_id: string
         }
@@ -120,7 +120,7 @@ export type Database = {
           captured_at?: string
           id?: string
           kind?: string
-          session_id?: string
+          session_id?: string | null
           storage_path?: string
           user_id?: string
         }

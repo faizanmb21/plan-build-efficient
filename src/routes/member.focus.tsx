@@ -5,8 +5,9 @@ import { useFocusTracker } from "@/hooks/use-focus-tracker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Play, Square, Activity, Clock, Coffee } from "lucide-react";
+import { Monitor, Play, Square, Activity, Clock, Coffee, Camera, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/member/focus")({
   component: FocusPage,
@@ -25,6 +26,42 @@ function FocusPage() {
   const [todayActive, setTodayActive] = React.useState(0);
   const [todayIdle, setTodayIdle] = React.useState(0);
   const [snapCount, setSnapCount] = React.useState(0);
+  const [uploadingCheckin, setUploadingCheckin] = React.useState(false);
+  const checkinRef = React.useRef<HTMLInputElement>(null);
+
+  async function onCheckinPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Photo must be under 8MB");
+      return;
+    }
+    setUploadingCheckin(true);
+    try {
+      const ts = Date.now();
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${user.id}/manual/${ts}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("attendance")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+      const { error: insErr } = await supabase.from("attendance_snapshots").insert({
+        user_id: user.id,
+        kind: "manual",
+        storage_path: path,
+        session_id: state.sessionId,
+      });
+      if (insErr) throw insErr;
+      toast.success("Check-in photo uploaded");
+      reload();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      toast.error(msg);
+    } finally {
+      setUploadingCheckin(false);
+      if (checkinRef.current) checkinRef.current.value = "";
+    }
+  }
 
   const reload = React.useCallback(async () => {
     if (!user) return;
@@ -124,6 +161,38 @@ function FocusPage() {
             <Stat label="Idle today" value={fmt(todayIdle)} icon={Coffee} />
             <Stat label="Snapshots" value={snapCount.toString()} icon={Monitor} />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Camera className="h-5 w-5 text-primary" /> Check-in photo
+          </CardTitle>
+          <CardDescription>
+            Upload a quick selfie as proof of attendance. Your incharge and CEO will see it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <input
+            ref={checkinRef}
+            type="file"
+            accept="image/*"
+            capture="user"
+            className="hidden"
+            onChange={onCheckinPhoto}
+          />
+          <Button
+            onClick={() => checkinRef.current?.click()}
+            disabled={uploadingCheckin}
+            className="gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            {uploadingCheckin ? "Uploading…" : "Upload check-in photo"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            On mobile, this opens the camera. On desktop, pick an image file (max 8MB).
+          </p>
         </CardContent>
       </Card>
     </div>
