@@ -181,13 +181,13 @@ function CourseEditor() {
     toast.success("Thumbnail uploaded — remember to Save");
   }
 
-  async function addSection() {
-    const title = prompt("Section title");
-    if (!title?.trim()) return;
+  async function addSectionWithTitle(rawTitle: string) {
+    const title = rawTitle.trim();
+    if (!title) return;
     const position = sections.length;
     const { data, error } = await supabase
       .from("sections")
-      .insert({ course_id: courseId, title: title.trim(), position })
+      .insert({ course_id: courseId, title, position })
       .select("id,title,position")
       .single();
     if (error) {
@@ -195,6 +195,8 @@ function CourseEditor() {
       return;
     }
     setSections((s) => [...s, { ...data, lessons: [] }]);
+    setNewSectionTitle("");
+    setSectionDialogOpen(false);
   }
 
   async function renameSection(id: string, title: string) {
