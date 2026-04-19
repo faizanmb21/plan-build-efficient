@@ -151,15 +151,12 @@ function SidebarInner({
               to={item.to}
               onClick={onNavigate}
               className={cn(
-                "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200",
+                "group relative flex items-center gap-3 rounded-full px-3 py-2 text-sm font-medium transition-all duration-200",
                 active
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-0.5",
+                  ? "bg-primary/80 text-primary-foreground shadow-[0_4px_16px_-4px_oklch(0.62_0.24_268/0.5),inset_0_1px_0_0_oklch(1_0_0/0.2)] border border-white/15 backdrop-blur-md"
+                  : "text-sidebar-foreground/75 hover:bg-white/5 hover:text-sidebar-accent-foreground hover:translate-x-0.5 border border-transparent hover:border-white/10",
               )}
             >
-              {active && (
-                <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-sidebar-primary-foreground/80" />
-              )}
               <Icon className={cn("h-4 w-4 transition-transform", active ? "scale-110" : "group-hover:scale-110")} />
               {item.label}
             </Link>
