@@ -223,6 +223,8 @@ function CourseEditor() {
     setCourse((c) => (c && !c.thumbnail_url ? { ...c, thumbnail_url: thumbnailUrl } : c));
     toast.success("Course thumbnail set from video");
   }
+
+  async function addSectionWithTitle(rawTitle: string) {
     const title = rawTitle.trim();
     if (!title) return;
     const position = sections.length;
