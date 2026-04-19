@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
+import { downscaleImage } from "@/lib/image-downscale";
 import {
   DndContext,
   DragEndEvent,
@@ -273,17 +274,19 @@ function CourseEditor() {
     }
   }
 
-  async function uploadThumbnail(file: File) {
+  async function uploadThumbnail(original: File) {
     // Validate type + size up front (Udemy-style standards)
-    if (!file.type.startsWith("image/")) {
+    if (!original.type.startsWith("image/")) {
       toast.error("Please choose an image file (JPG, PNG, or WebP).");
       return;
     }
-    const MAX_BYTES = 5 * 1024 * 1024;
-    if (file.size > MAX_BYTES) {
-      toast.error("Image must be 5MB or smaller.");
+    const MAX_BYTES = 10 * 1024 * 1024;
+    if (original.size > MAX_BYTES) {
+      toast.error("Image must be 10MB or smaller.");
       return;
     }
+    // Always downscale before upload — keeps the site light.
+    const file = await downscaleImage(original, { maxDimension: 1600, quality: 0.82 });
     const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
     const path = `${courseId}/${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await supabase.storage.from("thumbnails").upload(path, file, {
