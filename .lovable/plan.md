@@ -1,66 +1,52 @@
 
 
-User wants the existing grading system populated with realistic seed data so they can see it working end-to-end across all three roles (member, incharge, CEO) without manually clicking through grading flows. Combined with the previous plan, this becomes: build the CEO grades hub AND seed enough graded submissions to make every view non-empty.
+User wants two things:
+1. **Test end-to-end** — they're explicitly asking me to verify the CEO/member/incharge flows in the browser. This is a sanctioned browser-test request.
+2. **Build `/incharge/grades`** — a franchise-scoped version of the CEO grades hub.
+
+Let me check what exists for the incharge side and what data shape the franchise-scoped query needs.
+<br>
+The CEO grades hub at `src/routes/ceo.grades.tsx` already has 3 tabs (By member / By franchise / By course) with CSV export and a per-member drill-down via `MemberGradeReport`. For incharge, the "By franchise" tab is irrelevant (they only see one franchise). So the incharge version becomes 2 tabs: **By member** and **By course**, scoped to their franchise via `get_user_franchise(auth.uid())` (RLS already enforces this — incharges can only SELECT submissions/profiles for their own franchise, so the same queries naturally return franchise-scoped data).
+
+`MemberGradeReport` already exists and works for any member id — RLS lets incharges read their own franchise members' submissions, so reusing it as-is is fine.
 
 ## Plan
 
-### Part A — Seed graded submission data
+### Step 1 — Create `/incharge/grades` route
 
-Extend `seed_demo_content()` (the existing SQL seeder, runnable from `/ceo/seed`) to populate **letter-graded submissions across every member, every pillar course**, so member/incharge/CEO views all light up immediately.
+New file: `src/routes/incharge.grades.tsx`
+- Protected by `RoleGuard allow={["incharge"]}` (the parent `incharge.tsx` layout already does this).
+- 2 tabs: **By member**, **By pillar**.
+- **By member** table: name, total graded, A+/A/B/C counts, average %, redo count, last graded. Searchable. Click row → opens `MemberGradeReport` dialog (already exists).
+- **By pillar** table: pillar/course title, members graded, submissions graded, avg %, pass rate, redo rate.
+- "Download CSV" button on each tab.
+- Header tile strip: total members, total graded, franchise average %, pending reviews count → links to `/incharge/reviews`.
+- All queries naturally franchise-scoped by RLS — no extra `franchise_id` filter needed in the JS, but I'll add `.eq('franchise_id', myFranchise)` defensively for clarity and a tiny perf boost.
 
-What gets seeded (idempotent — only inserts where rows don't already exist):
-- For **each of the 21 members**, across **all 12 pillar courses**, insert ~3 practical submissions per member (covering different lessons), with a realistic mix:
-  - ~40% **A** (80%, approved)
-  - ~25% **A+** (100%, approved)
-  - ~20% **B** (60%, approved)
-  - ~10% **C** (revision / redo)
-  - ~5% **pending** (awaiting incharge review)
-- Each graded row gets: `letter_grade`, numeric `grade`, realistic `feedback` text (rotating from a small bank of ~8 phrases per outcome), `reviewed_by` set to the member's franchise incharge, `reviewed_at` randomized across the last 30 days.
-- For every approved submission, also upsert `lesson_progress` (`completed: true`, `progress_percent: 100`) so the member's course progress bars advance.
-- For every C/revision submission, leave `lesson_progress.completed = false` so the redo flow is visible.
+### Step 2 — Add "Grades" link to incharge sidebar
 
-Result after running the seeder once: ~750 graded submissions with realistic distributions, spread across 3 franchises and 12 pillars.
+Edit `src/routes/incharge.tsx` — add `{ to: "/incharge/grades", label: "Grades", icon: GraduationCap }` to the `nav` array between "Members" and "Attendance".
 
-### Part B — CEO grading overview hub `/ceo/grades`
+### Step 3 — Browser test (after the file is created)
 
-New file `src/routes/ceo.grades.tsx` with three tabs:
-- **By member** — every member's name, franchise, total graded, A+/A/B/C counts, average %, redo count, last graded. Sortable + searchable + franchise filter. Click row → per-member drill-down dialog.
-- **By franchise** — per-franchise totals: members, submissions graded, average %, mini grade-distribution bar.
-- **By course (pillar)** — per-pillar totals: graded, average %, pass rate, redo rate.
+Sequence:
+1. Navigate to `/login` → log in as `ceo@irmacademy.test` / `Academy@123`.
+2. Click **Grades** in the sidebar → screenshot the 3 tabs populated.
+3. Click a member row → drill-down dialog → screenshot. Click "Download CSV" → confirm download fires (toast/network).
+4. Click "Open printable report" → confirm new tab opens `/ceo/grades/report?member=...`.
+5. Sign out → log in as `member01@irmacademy.test` / `Academy@123` → navigate to `/member/grades` → screenshot graded submissions list.
+6. Sign out → log in as `incharge.sargodha@irmacademy.test` / `Academy@123` → navigate to `/incharge/reviews` → screenshot queue. Then navigate to the new `/incharge/grades` → screenshot.
 
-Each row: "View details" → drawer showing per-course breakdown + full submission timeline.
-Each table: "Download CSV" button (built client-side, no new dependency).
-
-### Part C — Per-member grade drill-down (shared component)
-
-`src/components/MemberGradeReport.tsx` — used by `/ceo/grades` and from the existing `/ceo/franchises/$id` member cards (add a small "View grades" button there).
-- Header: name, franchise, average %, total graded.
-- Per-pillar breakdown grid (12 pillars, avg %, count, latest letter).
-- Submission timeline with letter, %, feedback, reviewer, date.
-- "Open printable report" → new tab to `/ceo/grades/report?member=...` for browser print-to-PDF.
-
-### Part D — Printable report route
-
-`src/routes/ceo.grades.report.tsx` — minimal print-styled layout, supports `?scope=member|franchise|course&id=...`. Calls `window.print()` on mount. No native PDF library (avoids Worker runtime issues).
-
-### Part E — Sidebar link
-
-`src/components/AppShell.tsx` — add "Grades" entry under the CEO nav pointing to `/ceo/grades`.
+Report which views were verified populated, which (if any) were empty (likely means the seeder hasn't been run yet — in that case, instruct the user to run `/ceo/seed` first).
 
 ### Files touched
 
-- `supabase/migrations/<new>.sql` — replace `seed_demo_content()` body with the extended version that populates letter-graded submissions + lesson_progress.
-- `src/routes/ceo.grades.tsx` — new hub.
-- `src/routes/ceo.grades.report.tsx` — new printable view.
-- `src/components/MemberGradeReport.tsx` — new shared drill-down.
-- `src/routes/ceo.franchises.$id.tsx` — add "View grades" button per member card.
-- `src/components/AppShell.tsx` — add Grades nav link.
-- `src/lib/grade-utils.ts` — letter→numeric, aggregation helpers, CSV builder.
+- New: `src/routes/incharge.grades.tsx` — franchise-scoped grades hub (~250 lines, mirrors `ceo.grades.tsx` structure but trimmed to 2 tabs).
+- Edited: `src/routes/incharge.tsx` — add Grades nav item + GraduationCap icon import.
 
-### Verification flow (after approving + running seeder once from `/ceo/seed`)
+### Verification
 
-1. Log in as `member01@irmacademy.test` → `/member/grades` shows ~36 graded items with letter grades, feedback, mix of pass/redo. Course progress bars are partially full.
-2. Log in as `incharge.sargodha@irmacademy.test` → `/incharge/reviews` shows the small set of pending submissions plus a history of already-graded ones.
-3. Log in as `ceo@irmacademy.test` → `/ceo/grades` shows all three tabs populated with real distributions; click any member → drill-down with full per-pillar breakdown; CSV download works; printable report opens.
-4. `/ceo/franchises/{id}` → each member card has a "View grades" button opening the same drill-down.
+- Incharge sidebar shows "Grades" → table only lists members of their own franchise.
+- CSV downloads contain only their franchise's data (RLS enforces this; defensive `.eq()` reinforces).
+- Per-member drill-down opens `MemberGradeReport` and works identically to the CEO view.
 
