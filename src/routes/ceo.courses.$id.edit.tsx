@@ -455,6 +455,45 @@ function CourseEditor() {
           ))}
         </CardContent>
       </Card>
+
+      <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New section</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              addSectionWithTitle(newSectionTitle);
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Section title</label>
+              <Input
+                autoFocus
+                value={newSectionTitle}
+                onChange={(e) => setNewSectionTitle(e.target.value)}
+                placeholder="e.g. Module 1 — Foundations"
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSectionDialogOpen(false);
+                  setNewSectionTitle("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">Add section</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
