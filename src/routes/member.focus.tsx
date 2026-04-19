@@ -59,7 +59,7 @@ function FocusPage() {
       <div>
         <h1 className="text-3xl font-display font-semibold tracking-tight">Focus session</h1>
         <p className="text-muted-foreground mt-1">
-          Clock in to start tracking your training time. Webcam check-ins happen every 5 minutes.
+          Clock in to start tracking your training time. Screen snapshots are captured every 5 minutes.
         </p>
       </div>
 
@@ -71,8 +71,8 @@ function FocusPage() {
           </CardTitle>
           <CardDescription>
             {state.running
-              ? "Focused time is being recorded. Stay on this tab — switching away counts as idle."
-              : "Starting requires webcam permission. Screen share is optional but recommended."}
+              ? "Focused time is being recorded. Stay on this tab — switching away counts as idle. Stopping screen share will clock you out."
+              : "You'll be asked to pick a screen or window to share. Sharing is required."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -83,13 +83,9 @@ function FocusPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Badge variant={state.webcamReady ? "default" : "outline"}>
-              <Camera className="h-3 w-3 mr-1" />
-              Webcam {state.webcamReady ? "on" : "off"}
-            </Badge>
             <Badge variant={state.screenReady ? "default" : "outline"}>
               <Monitor className="h-3 w-3 mr-1" />
-              Screen {state.screenReady ? "on" : "off"}
+              Screen {state.screenReady ? "sharing" : "off"}
             </Badge>
             {state.lastSnapshotAt && (
               <Badge variant="outline">
