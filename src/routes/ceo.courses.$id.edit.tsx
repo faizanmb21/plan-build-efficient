@@ -649,10 +649,21 @@ function CourseEditor() {
               </label>
             </div>
           </div>
-          <div>
-            <Button onClick={saveMeta} disabled={savingMeta}>
-              <Save className="h-4 w-4" /> {savingMeta ? "Saving…" : "Save details"}
+          <div className="flex items-center gap-3">
+            <Button onClick={saveMeta} disabled={savingMeta || !metaDirty}>
+              {metaSavedFlash ? (
+                <>
+                  <Check className="h-4 w-4" /> Saved
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" /> {savingMeta ? "Saving…" : "Save details"}
+                </>
+              )}
             </Button>
+            {metaDirty && !savingMeta && (
+              <span className="text-xs text-muted-foreground">Unsaved changes</span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -660,16 +671,45 @@ function CourseEditor() {
       {/* Curriculum */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Curriculum</CardTitle>
+          <div className="flex items-center gap-3">
+            <CardTitle>Curriculum</CardTitle>
+            <span
+              className="flex items-center gap-1 text-xs text-muted-foreground"
+              aria-live="polite"
+            >
+              {mutationCount > 0 ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+                </>
+              ) : curriculumSavedFlash ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-accent" /> All changes saved
+                </>
+              ) : sections.length > 0 ? (
+                <>
+                  <Check className="h-3.5 w-3.5 opacity-60" /> Auto-saved
+                </>
+              ) : null}
+            </span>
+          </div>
           <Button onClick={() => setSectionDialogOpen(true)} size="sm">
             <Plus className="h-4 w-4" /> Add section
           </Button>
         </CardHeader>
         <CardContent className="space-y-3">
           {sections.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No sections yet. Add your first section to start building lessons.
-            </p>
+            <div className="rounded-lg border border-dashed bg-muted/20 p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No sections yet. Add your first section to start building lessons.
+              </p>
+              <Button
+                onClick={() => setSectionDialogOpen(true)}
+                size="sm"
+                className="mt-3"
+              >
+                <Plus className="h-4 w-4" /> Add section
+              </Button>
+            </div>
           )}
           <DndContext
             sensors={sensors}
@@ -717,6 +757,18 @@ function CourseEditor() {
                 })()}
             </DragOverlay>
           </DndContext>
+          {sections.length > 0 && (
+            <div className="sticky bottom-0 -mx-6 -mb-6 mt-4 border-t border-white/5 bg-background/80 px-6 py-3 backdrop-blur-md">
+              <Button
+                onClick={() => setSectionDialogOpen(true)}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <Plus className="h-4 w-4" /> Add section
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
