@@ -19,6 +19,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as MemberIndexRouteImport } from './routes/member.index'
 import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
+import { Route as MemberGradesRouteImport } from './routes/member.grades'
 import { Route as MemberFocusRouteImport } from './routes/member.focus'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
@@ -83,6 +84,11 @@ const CeoIndexRoute = CeoIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => CeoRoute,
+} as any)
+const MemberGradesRoute = MemberGradesRouteImport.update({
+  id: '/grades',
+  path: '/grades',
+  getParentRoute: () => MemberRoute,
 } as any)
 const MemberFocusRoute = MemberFocusRouteImport.update({
   id: '/focus',
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
+  '/member/grades': typeof MemberGradesRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
@@ -194,6 +201,7 @@ export interface FileRoutesByTo {
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
+  '/member/grades': typeof MemberGradesRoute
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
+  '/member/grades': typeof MemberGradesRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
@@ -249,6 +258,7 @@ export interface FileRouteTypes {
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
+    | '/member/grades'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
@@ -271,6 +281,7 @@ export interface FileRouteTypes {
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
+    | '/member/grades'
     | '/ceo'
     | '/incharge'
     | '/member'
@@ -297,6 +308,7 @@ export interface FileRouteTypes {
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
+    | '/member/grades'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
@@ -389,6 +401,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/ceo/'
       preLoaderRoute: typeof CeoIndexRouteImport
       parentRoute: typeof CeoRoute
+    }
+    '/member/grades': {
+      id: '/member/grades'
+      path: '/grades'
+      fullPath: '/member/grades'
+      preLoaderRoute: typeof MemberGradesRouteImport
+      parentRoute: typeof MemberRoute
     }
     '/member/focus': {
       id: '/member/focus'
@@ -547,12 +566,14 @@ const InchargeRouteWithChildren = InchargeRoute._addFileChildren(
 
 interface MemberRouteChildren {
   MemberFocusRoute: typeof MemberFocusRoute
+  MemberGradesRoute: typeof MemberGradesRoute
   MemberIndexRoute: typeof MemberIndexRoute
   MemberCoursesIdRoute: typeof MemberCoursesIdRoute
 }
 
 const MemberRouteChildren: MemberRouteChildren = {
   MemberFocusRoute: MemberFocusRoute,
+  MemberGradesRoute: MemberGradesRoute,
   MemberIndexRoute: MemberIndexRoute,
   MemberCoursesIdRoute: MemberCoursesIdRoute,
 }
