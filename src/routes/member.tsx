@@ -2,6 +2,8 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell, type NavItem } from "@/components/AppShell";
 import { LayoutDashboard, Award, Activity } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { useGradeNotifications } from "@/hooks/use-grade-notifications";
 
 const nav: NavItem[] = [
   { to: "/member", label: "My Courses", icon: LayoutDashboard },
@@ -14,6 +16,8 @@ export const Route = createFileRoute("/member")({
 });
 
 function MemberLayout() {
+  const { user } = useAuth();
+  useGradeNotifications(user?.id);
   return (
     <RoleGuard allow={["member"]}>
       <AppShell nav={nav} roleLabel="Member">
