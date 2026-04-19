@@ -36,7 +36,7 @@ import {
   formatDuration,
   type PlaylistVideo,
 } from "@/lib/youtube-playlist";
-import { ListVideo, Loader2 } from "lucide-react";
+import { ListVideo, Loader2, GripVertical } from "lucide-react";
 import {
   ArrowLeft,
   ChevronDown,
@@ -52,6 +52,23 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 export const Route = createFileRoute("/ceo/courses/$id/edit")({
   component: CourseEditor,
