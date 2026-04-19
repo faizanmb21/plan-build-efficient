@@ -354,22 +354,100 @@ function CourseEditor() {
       );
   }
 
-  async function moveLesson(sectionId: string, idx: number, dir: -1 | 1) {
-    const sec = sections.find((s) => s.id === sectionId);
-    if (!sec) return;
-    const target = idx + dir;
-    if (target < 0 || target >= sec.lessons.length) return;
-    const a = sec.lessons[idx];
-    const b = sec.lessons[target];
-    const nextLessons = [...sec.lessons];
-    nextLessons[idx] = { ...b, position: idx };
-    nextLessons[target] = { ...a, position: target };
-    setSections((s) => s.map((x) => (x.id === sectionId ? { ...x, lessons: nextLessons } : x)));
-    await Promise.all([
-      supabase.from("lessons").update({ position: idx }).eq("id", b.id),
-      supabase.from("lessons").update({ position: target }).eq("id", a.id),
-    ]);
+  // ----- Drag and drop -----
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const [activeDrag, setActiveDrag] = React.useState<
+    | { kind: "section"; id: string; title: string }
+    | { kind: "lesson"; id: string; title: string; type: LessonType }
+    | null
+  >(null);
+
+  function findLessonContainer(lessonId: string): string | null {
+    for (const sec of sections) {
+      if (sec.lessons.some((l) => l.id === lessonId)) return sec.id;
+    }
+    return null;
   }
+
+  function onDragStart(e: DragStartEvent) {
+    const data = e.active.data.current as
+      | { kind: "section"; section: Section }
+      | { kind: "lesson"; lesson: Lesson }
+      | undefined;
+    if (!data) return;
+    if (data.kind === "section") {
+      setActiveDrag({ kind: "section", id: data.section.id, title: data.section.title });
+    } else {
+      setActiveDrag({
+        kind: "lesson",
+        id: data.lesson.id,
+        title: data.lesson.title,
+        type: data.lesson.type,
+      });
+    }
+  }
+
+  async function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    setActiveDrag(null);
+    if (!over || active.id === over.id) return;
+
+    const activeData = active.data.current as
+      | { kind: "section"; section: Section }
+      | { kind: "lesson"; lesson: Lesson }
+      | undefined;
+    if (!activeData) return;
+
+    if (activeData.kind === "section") {
+      const oldIdx = sections.findIndex((s) => s.id === active.id);
+      const newIdx = sections.findIndex((s) => s.id === over.id);
+      if (oldIdx < 0 || newIdx < 0 || oldIdx === newIdx) return;
+      const next = arrayMove(sections, oldIdx, newIdx);
+      await persistSectionOrder(next);
+      return;
+    }
+
+    // Lesson drag
+    const fromSectionId = findLessonContainer(active.id as string);
+    if (!fromSectionId) return;
+
+    // Determine target section: if over is a section drop zone, use that; if over is a lesson, use its section
+    const overData = over.data.current as
+      | { kind: "section"; section: Section }
+      | { kind: "lesson"; lesson: Lesson }
+      | { kind: "section-empty"; sectionId: string }
+      | undefined;
+    let toSectionId: string | null = null;
+    let toIndex: number | null = null;
+    if (overData?.kind === "lesson") {
+      toSectionId = findLessonContainer(over.id as string);
+      const toSec = sections.find((s) => s.id === toSectionId);
+      if (toSec) toIndex = toSec.lessons.findIndex((l) => l.id === over.id);
+    } else if (overData?.kind === "section-empty") {
+      toSectionId = overData.sectionId;
+      toIndex = 0;
+    } else if (overData?.kind === "section") {
+      toSectionId = overData.section.id;
+      toIndex = overData.section.lessons.length;
+    }
+    if (!toSectionId || toIndex === null) return;
+
+    const next = sections.map((s) => ({ ...s, lessons: [...s.lessons] }));
+    const fromSec = next.find((s) => s.id === fromSectionId)!;
+    const toSec = next.find((s) => s.id === toSectionId)!;
+    const fromIdx = fromSec.lessons.findIndex((l) => l.id === active.id);
+    if (fromIdx < 0) return;
+    const [moved] = fromSec.lessons.splice(fromIdx, 1);
+    if (fromSectionId === toSectionId) {
+      // Adjust index after removal
+      const adjusted = fromIdx < toIndex ? toIndex - 1 : toIndex;
+      toSec.lessons.splice(adjusted, 0, moved);
+    } else {
+      toSec.lessons.splice(toIndex, 0, { ...moved, section_id: toSectionId });
+    }
+    await persistLessonChanges(next, new Set([fromSectionId, toSectionId]));
+  }
+
 
   if (loading || !course) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
