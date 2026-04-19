@@ -1050,7 +1050,7 @@ function AddLessonDialog({
             </p>
           )}
 
-          {supportsAssignment && (
+          {supportsAssignment && !(type === "video" && videoSource === "playlist") && (
             <div className="space-y-2 rounded-md border bg-muted/30 p-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -1124,10 +1124,33 @@ function AddLessonDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={bulkAdding}
+            >
               Cancel
             </Button>
-            <Button type="submit">Add lesson</Button>
+            {type === "video" && videoSource === "playlist" ? (
+              <Button
+                type="button"
+                onClick={bulkAddPlaylist}
+                disabled={
+                  bulkAdding ||
+                  playlistItems.length === 0 ||
+                  Object.values(playlistSelected).filter(Boolean).length === 0
+                }
+              >
+                {bulkAdding && bulkProgress
+                  ? `Adding ${bulkProgress.done}/${bulkProgress.total}…`
+                  : `Add ${Object.values(playlistSelected).filter(Boolean).length} lesson${
+                      Object.values(playlistSelected).filter(Boolean).length === 1 ? "" : "s"
+                    }`}
+              </Button>
+            ) : (
+              <Button type="submit">Add lesson</Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
