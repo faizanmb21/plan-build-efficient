@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Send, Copy, Trash2, Users, Archive, RotateCcw, AlertTriangle, ArrowRight, ShieldCheck, MapPin } from "lucide-react";
+import {
+  Building2,
+  Plus,
+  Send,
+  Copy,
+  Trash2,
+  Users,
+  Archive,
+  RotateCcw,
+  AlertTriangle,
+  ArrowRight,
+  ShieldCheck,
+  MapPin,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PillarFlower } from "@/components/PillarFlower";
 import { getPillarScoresForUsers } from "@/lib/pillar-data";
@@ -67,12 +80,14 @@ interface MemberRow {
 }
 
 function FranchisesPage() {
+  const navigate = useNavigate();
   const [franchises, setFranchises] = React.useState<Franchise[]>([]);
   const [invites, setInvites] = React.useState<InviteRow[]>([]);
   const [members, setMembers] = React.useState<MemberRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [showArchived, setShowArchived] = React.useState(false);
   const [scoresByFranchise, setScoresByFranchise] = React.useState<Record<string, PillarScores>>({});
+  const [franchiseOpen, setFranchiseOpen] = React.useState(false);
   const [inviteOpen, setInviteOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
@@ -82,18 +97,23 @@ function FranchisesPage() {
       supabase.from("profiles").select("id, full_name, franchise_id"),
       supabase.from("user_roles").select("user_id, role"),
     ]);
+
     const allF = (f.data as Franchise[]) ?? [];
     setFranchises(allF);
     setInvites((i.data as InviteRow[]) ?? []);
+
     const roleMap = new Map<string, string>();
-    ((r.data as { user_id: string; role: string }[]) ?? []).forEach((x) =>
-      roleMap.set(x.user_id, x.role),
-    );
-    const memberList = ((p.data as MemberRow[]) ?? []).map((m) => ({ ...m, role: roleMap.get(m.id) }));
+    ((r.data as { user_id: string; role: string }[]) ?? []).forEach((x) => {
+      roleMap.set(x.user_id, x.role);
+    });
+
+    const memberList = ((p.data as MemberRow[]) ?? []).map((m) => ({
+      ...m,
+      role: roleMap.get(m.id),
+    }));
     setMembers(memberList);
     setLoading(false);
 
-    // Compute per-franchise pillar scores in background
     const entries = await Promise.all(
       allF
         .filter((fr) => !fr.archived_at)
@@ -102,6 +122,7 @@ function FranchisesPage() {
           return [fr.id, await getPillarScoresForUsers(ids)] as const;
         }),
     );
+
     setScoresByFranchise(Object.fromEntries(entries));
   }, []);
 
@@ -116,25 +137,42 @@ function FranchisesPage() {
   const visible = franchises.filter((f) => (showArchived ? !!f.archived_at : !f.archived_at));
 
   async function archive(id: string, name: string) {
-    if (!confirm(`Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`)) return;
+    if (
+      !confirm(
+        `Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`,
+      )
+    ) {
+      return;
+    }
+
     const { error } = await supabase.rpc("archive_franchise", { _franchise_id: id });
     if (error) return toast.error(error.message);
+
     toast.success("Franchise archived");
     load();
   }
+
   async function restore(id: string) {
     const { error } = await supabase.rpc("restore_franchise", { _franchise_id: id });
     if (error) return toast.error(error.message);
+
     toast.success("Franchise restored");
     load();
   }
-  async function purge(id: string, name: string, archivedAt: string | null, force: boolean) {
+
+  async function purge(id: string, name: string, force: boolean) {
     const msg = force
       ? `Permanently delete "${name}" RIGHT NOW? This cannot be undone.`
       : `Permanently delete "${name}"? This cannot be undone.`;
+
     if (!confirm(msg)) return;
-    const { error } = await supabase.rpc("purge_franchise", { _franchise_id: id, _force: force });
+
+    const { error } = await supabase.rpc("purge_franchise", {
+      _franchise_id: id,
+      _force: force,
+    });
     if (error) return toast.error(error.message);
+
     toast.success("Franchise deleted permanently");
     load();
   }
@@ -145,14 +183,21 @@ function FranchisesPage() {
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight">Franchises &amp; team</h1>
           <p className="text-sm text-muted-foreground">
-            Create franchises, invite incharges &amp; members. Archived franchises can be restored within 30 days.
+            Create franchises, invite incharges &amp; members. Archived franchises can be
+            restored within 30 days.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" size="sm" onClick={() => setShowArchived((v) => !v)}>
-            {showArchived ? "Show active" : `Show archived (${franchises.filter((f) => f.archived_at).length})`}
+            {showArchived
+              ? "Show active"
+              : `Show archived (${franchises.filter((f) => f.archived_at).length})`}
           </Button>
-          <NewFranchiseDialog onCreated={load} />
+          <NewFranchiseDialog
+            onCreated={load}
+            open={franchiseOpen}
+            onOpenChange={setFranchiseOpen}
+          />
           <NewInviteDialog
             franchises={franchises.filter((f) => !f.archived_at)}
             onCreated={load}
@@ -169,7 +214,21 @@ function FranchisesPage() {
         {visible.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              {showArchived ? "Nothing archived." : "No franchises yet. Create your first one to start adding members."}
+              {showArchived ? (
+                "Nothing archived."
+              ) : (
+                <>
+                  No franchises yet.{" "}
+                  <button
+                    type="button"
+                    onClick={() => setFranchiseOpen(true)}
+                    className="font-semibold text-accent underline-offset-4 hover:underline"
+                  >
+                    Create your first one
+                  </button>{" "}
+                  to start adding members.
+                </>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -178,16 +237,23 @@ function FranchisesPage() {
               const team = members.filter((m) => m.franchise_id === f.id);
               const memberCount = team.filter((m) => m.role === "member").length;
               const incharge =
-                team.find((m) => m.id === f.manager_id) ??
-                team.find((m) => m.role === "incharge");
+                team.find((m) => m.id === f.manager_id) ?? team.find((m) => m.role === "incharge");
               const scores = scoresByFranchise[f.id];
               const isArchived = !!f.archived_at;
               const purgeReady =
-                isArchived && f.archived_at &&
+                isArchived &&
+                !!f.archived_at &&
                 new Date(f.archived_at).getTime() < Date.now() - 30 * 24 * 60 * 60 * 1000;
 
               const cardInner = (
-                <Card className={isArchived ? "opacity-70" : "hover-lift h-full transition-colors group-hover:border-accent/50"}>
+                <Card
+                  interactive={!isArchived}
+                  className={
+                    isArchived
+                      ? "opacity-70"
+                      : "h-full cursor-pointer transition-all duration-200 group-hover:border-accent/50 group-hover:shadow-lg group-focus-visible:border-accent/50"
+                  }
+                >
                   <CardHeader>
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="flex items-center gap-2 text-base">
@@ -207,6 +273,7 @@ function FranchisesPage() {
                         <PillarFlower scores={scores} size={180} showLabels={false} />
                       </div>
                     )}
+
                     <div className="space-y-1.5 text-muted-foreground">
                       <div className="flex items-center gap-1.5">
                         <ShieldCheck className="h-3.5 w-3.5" />
@@ -215,16 +282,23 @@ function FranchisesPage() {
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5" /> {memberCount} member{memberCount === 1 ? "" : "s"}
+                        <Users className="h-3.5 w-3.5" /> {memberCount} member
+                        {memberCount === 1 ? "" : "s"}
                       </div>
                     </div>
+
                     {!isArchived && (
-                      <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs font-medium text-accent">
+                      <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs font-medium text-accent transition-all duration-200 group-hover:border-accent/50 group-hover:bg-accent/10">
                         <span>Click for more details</span>
-                        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                        <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
                       </div>
                     )}
-                    <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+
+                    <div
+                      className="flex flex-wrap gap-2 pt-1"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
                       {!isArchived ? (
                         <Button size="sm" variant="outline" onClick={() => archive(f.id, f.name)}>
                           <Archive className="h-3.5 w-3.5" /> Archive
@@ -235,17 +309,27 @@ function FranchisesPage() {
                             <RotateCcw className="h-3.5 w-3.5" /> Restore
                           </Button>
                           {purgeReady ? (
-                            <Button size="sm" variant="destructive" onClick={() => purge(f.id, f.name, f.archived_at, false)}>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => purge(f.id, f.name, false)}
+                            >
                               <Trash2 className="h-3.5 w-3.5" /> Delete forever
                             </Button>
                           ) : (
-                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => purge(f.id, f.name, f.archived_at, true)}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => purge(f.id, f.name, true)}
+                            >
                               <AlertTriangle className="h-3.5 w-3.5" /> Force delete
                             </Button>
                           )}
                         </>
                       )}
                     </div>
+
                     {isArchived && f.auto_delete_at && (
                       <p className="text-[11px] text-muted-foreground">
                         Auto-purge after {new Date(f.auto_delete_at).toLocaleDateString()}
@@ -258,9 +342,21 @@ function FranchisesPage() {
               return isArchived ? (
                 <div key={f.id}>{cardInner}</div>
               ) : (
-                <Link key={f.id} to="/ceo/franchises/$id" params={{ id: f.id }} className="group block">
+                <div
+                  key={f.id}
+                  role="button"
+                  tabIndex={0}
+                  className="group block rounded-2xl focus-visible:outline-none"
+                  onClick={() => navigate({ to: "/ceo/franchises/$id", params: { id: f.id } })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      navigate({ to: "/ceo/franchises/$id", params: { id: f.id } });
+                    }
+                  }}
+                >
                   {cardInner}
-                </Link>
+                </div>
               );
             })}
           </div>
@@ -301,8 +397,18 @@ function FranchisesPage() {
   );
 }
 
-function NewFranchiseDialog({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = React.useState(false);
+function NewFranchiseDialog({
+  onCreated,
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  onCreated: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [name, setName] = React.useState("");
   const [location, setLocation] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -310,15 +416,18 @@ function NewFranchiseDialog({ onCreated }: { onCreated: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+
     const { error } = await supabase.from("franchises").insert({
       name: name.trim(),
       location: location.trim() || null,
     });
+
     setBusy(false);
     if (error) {
       toast.error(error.message);
       return;
     }
+
     toast.success("Franchise created");
     setName("");
     setLocation("");
@@ -391,6 +500,7 @@ function NewInviteDialog({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+
     const { data, error } = await supabase
       .from("invites")
       .insert({
@@ -400,11 +510,13 @@ function NewInviteDialog({
       })
       .select("token")
       .single();
+
     setBusy(false);
     if (error) {
       toast.error(error.message);
       return;
     }
+
     const link = `${window.location.origin}/invite/${data.token}`;
     await navigator.clipboard.writeText(link).catch(() => {});
     toast.success("Invite created — link copied to clipboard");
