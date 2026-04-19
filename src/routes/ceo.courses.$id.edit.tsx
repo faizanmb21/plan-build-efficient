@@ -26,6 +26,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { parseVideoUrl } from "@/lib/video-embed";
 import {
   ArrowLeft,
   ChevronDown,
@@ -683,27 +685,96 @@ function LessonEditorDialog({
 
           {draft.type === "video" && (
             <div className="space-y-3">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Upload video</label>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
-                  <Upload className="h-4 w-4" />
-                  {uploading ? "Uploading…" : "Choose file"}
-                  <input
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) uploadFile(f, "video");
-                    }}
+              <Tabs
+                value={draft.content?.source === "upload" ? "upload" : "link"}
+                onValueChange={(v) =>
+                  setDraft((d) => ({ ...d, content: { ...d.content, source: v } }))
+                }
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="link">Paste link</TabsTrigger>
+                  <TabsTrigger value="upload">Upload file</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="link" className="space-y-2 pt-3">
+                  <label className="text-sm font-medium">Video URL</label>
+                  <Input
+                    type="url"
+                    placeholder="https://www.youtube.com/watch?v=… (YouTube, Vimeo, Loom, Drive, or .mp4)"
+                    value={draft.content?.url ?? ""}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        content: { ...draft.content, url: e.target.value, source: "link" },
+                      })
+                    }
                   />
-                </label>
-                {draft.content?.path && (
-                  <p className="break-all text-xs text-muted-foreground">
-                    Stored: {draft.content.path}
+                  {(() => {
+                    const u = (draft.content?.url ?? "").trim();
+                    if (!u) {
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Members will watch the video inside the lesson page — no redirects.
+                        </p>
+                      );
+                    }
+                    const parsed = parseVideoUrl(u);
+                    if (!parsed) {
+                      return (
+                        <p className="text-xs text-destructive">
+                          Couldn't recognize this link. Supported: YouTube, Vimeo, Loom, Google Drive, or a direct .mp4/.webm URL.
+                        </p>
+                      );
+                    }
+                    return (
+                      <>
+                        <p className="text-xs text-muted-foreground">
+                          Detected: <span className="font-medium capitalize">{parsed.provider}</span> — preview below.
+                        </p>
+                        <div className="aspect-video w-full overflow-hidden rounded-md border bg-black">
+                          {parsed.provider === "direct" ? (
+                            <video src={parsed.embedUrl} controls className="h-full w-full" />
+                          ) : (
+                            <iframe
+                              src={parsed.embedUrl}
+                              className="h-full w-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                              title="Video preview"
+                            />
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </TabsContent>
+
+                <TabsContent value="upload" className="space-y-2 pt-3">
+                  <label className="text-sm font-medium">Upload video</label>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
+                    <Upload className="h-4 w-4" />
+                    {uploading ? "Uploading…" : "Choose file"}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadFile(f, "video");
+                      }}
+                    />
+                  </label>
+                  {draft.content?.path && (
+                    <p className="break-all text-xs text-muted-foreground">
+                      Stored: {draft.content.path}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Heavy files use storage. Prefer the “Paste link” tab when possible.
                   </p>
-                )}
-              </div>
+                </TabsContent>
+              </Tabs>
+
               <div className="space-y-2">
                 <label className="text-sm font-medium">Duration (seconds, optional)</label>
                 <Input

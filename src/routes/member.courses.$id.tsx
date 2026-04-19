@@ -20,6 +20,7 @@ import {
   Download,
 } from "lucide-react";
 import { toast } from "sonner";
+import { parseVideoUrl } from "@/lib/video-embed";
 
 export const Route = createFileRoute("/member/courses/$id")({
   component: CoursePlayer,
@@ -283,7 +284,9 @@ function LessonView({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {lesson.type === "video" && <VideoPlayer path={lesson.content?.path} />}
+        {lesson.type === "video" && (
+          <VideoPlayer path={lesson.content?.path} url={lesson.content?.url} />
+        )}
         {lesson.type === "pdf" && <PdfViewer path={lesson.content?.path} />}
         {lesson.type === "quiz" && <QuizRunner content={lesson.content} onPass={onComplete} done={done} />}
         {lesson.type === "practical" && (
@@ -332,14 +335,45 @@ function useSignedUrl(bucket: string, path: string | undefined) {
   return url;
 }
 
-function VideoPlayer({ path }: { path?: string }) {
-  const url = useSignedUrl("course-content", path);
-  if (!path) return <EmptyMedia label="No video uploaded" />;
-  if (!url) return <div className="aspect-video w-full animate-pulse rounded-md bg-muted" />;
+function VideoPlayer({ path, url }: { path?: string; url?: string }) {
+  const signed = useSignedUrl("course-content", path);
+
+  // Prefer pasted link if present
+  if (url && url.trim()) {
+    const parsed = parseVideoUrl(url);
+    if (!parsed) {
+      return (
+        <EmptyMedia label="This video link isn't supported. Edit the lesson and paste a YouTube, Vimeo, Loom, Drive, or .mp4 URL." />
+      );
+    }
+    if (parsed.provider === "direct") {
+      return (
+        <video
+          key={parsed.embedUrl}
+          src={parsed.embedUrl}
+          controls
+          className="aspect-video w-full rounded-md bg-black"
+        />
+      );
+    }
+    return (
+      <iframe
+        key={parsed.embedUrl}
+        src={parsed.embedUrl}
+        className="aspect-video w-full rounded-md border bg-black"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        title="Lesson video"
+      />
+    );
+  }
+
+  if (!path) return <EmptyMedia label="No video added yet" />;
+  if (!signed) return <div className="aspect-video w-full animate-pulse rounded-md bg-muted" />;
   return (
     <video
-      key={url}
-      src={url}
+      key={signed}
+      src={signed}
       controls
       className="aspect-video w-full rounded-md bg-black"
     />
