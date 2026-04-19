@@ -167,7 +167,7 @@ If you cannot access the video, score conservatively (50-65) and note this in co
       frames_analyzed: 0,
       raw_response: raw as Record<string, unknown>,
     };
-    const { error: insErr, data: inserted } = await supabaseAdmin
+    const { error: insErr, data: inserted } = await (supabaseAdmin as any)
       .from("ai_reviews")
       .insert(insertPayload)
       .select("id")
