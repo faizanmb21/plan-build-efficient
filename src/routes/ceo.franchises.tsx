@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -80,7 +80,6 @@ interface MemberRow {
 }
 
 function FranchisesPage() {
-  const navigate = useNavigate();
   const [franchises, setFranchises] = React.useState<Franchise[]>([]);
   const [invites, setInvites] = React.useState<InviteRow[]>([]);
   const [members, setMembers] = React.useState<MemberRow[]>([]);
@@ -245,15 +244,8 @@ function FranchisesPage() {
                 !!f.archived_at &&
                 new Date(f.archived_at).getTime() < Date.now() - 30 * 24 * 60 * 60 * 1000;
 
-              const cardInner = (
-                <Card
-                  interactive={!isArchived}
-                  className={
-                    isArchived
-                      ? "opacity-70"
-                      : "h-full cursor-pointer transition-all duration-200 group-hover:border-accent/50 group-hover:shadow-lg group-focus-visible:border-accent/50"
-                  }
-                >
+              const cardBody = (
+                <>
                   <CardHeader>
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="flex items-center gap-2 text-base">
@@ -293,70 +285,75 @@ function FranchisesPage() {
                         <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
                       </div>
                     )}
-
-                    <div
-                      className="flex flex-wrap gap-2 pt-1"
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    >
-                      {!isArchived ? (
-                        <Button size="sm" variant="outline" onClick={() => archive(f.id, f.name)}>
-                          <Archive className="h-3.5 w-3.5" /> Archive
-                        </Button>
-                      ) : (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => restore(f.id)}>
-                            <RotateCcw className="h-3.5 w-3.5" /> Restore
-                          </Button>
-                          {purgeReady ? (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => purge(f.id, f.name, false)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Delete forever
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive"
-                              onClick={() => purge(f.id, f.name, true)}
-                            >
-                              <AlertTriangle className="h-3.5 w-3.5" /> Force delete
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    {isArchived && f.auto_delete_at && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Auto-purge after {new Date(f.auto_delete_at).toLocaleDateString()}
-                      </p>
-                    )}
                   </CardContent>
-                </Card>
+                </>
               );
 
-              return isArchived ? (
-                <div key={f.id}>{cardInner}</div>
-              ) : (
-                <div
-                  key={f.id}
-                  role="button"
-                  tabIndex={0}
-                  className="group block rounded-2xl focus-visible:outline-none"
-                  onClick={() => navigate({ to: "/ceo/franchises/$id", params: { id: f.id } })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      navigate({ to: "/ceo/franchises/$id", params: { id: f.id } });
-                    }
-                  }}
-                >
-                  {cardInner}
+              const actionFooter = (
+                <div className="space-y-2 border-t border-border/60 px-6 py-3">
+                  <div className="flex flex-wrap gap-2">
+                    {!isArchived ? (
+                      <Button size="sm" variant="outline" onClick={() => archive(f.id, f.name)}>
+                        <Archive className="h-3.5 w-3.5" /> Archive
+                      </Button>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => restore(f.id)}>
+                          <RotateCcw className="h-3.5 w-3.5" /> Restore
+                        </Button>
+                        {purgeReady ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => purge(f.id, f.name, false)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Delete forever
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            onClick={() => purge(f.id, f.name, true)}
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" /> Force delete
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {isArchived && f.auto_delete_at && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Auto-purge after {new Date(f.auto_delete_at).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
+              );
+
+              if (isArchived) {
+                return (
+                  <Card key={f.id} className="opacity-70">
+                    {cardBody}
+                    {actionFooter}
+                  </Card>
+                );
+              }
+
+              return (
+                <Card
+                  key={f.id}
+                  className="group overflow-hidden p-0 transition-all duration-200 hover:border-accent/50 hover:shadow-lg focus-within:border-accent/50"
+                >
+                  <Link
+                    to="/ceo/franchises/$id"
+                    params={{ id: f.id }}
+                    preload="intent"
+                    className="block cursor-pointer rounded-t-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    {cardBody}
+                  </Link>
+                  {actionFooter}
+                </Card>
               );
             })}
           </div>
