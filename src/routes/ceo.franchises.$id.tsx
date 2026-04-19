@@ -387,7 +387,7 @@ function FranchiseDetailPage() {
                         {m.role ?? "member"}
                       </Badge>
                       {m.stats.liveNow && (
-                        <Badge className="bg-emerald-600 hover:bg-emerald-600 gap-1">
+                        <Badge className="gap-1">
                           <Radio className="h-3 w-3 animate-pulse" /> Live
                         </Badge>
                       )}

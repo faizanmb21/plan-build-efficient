@@ -5,8 +5,9 @@ import { useFocusTracker } from "@/hooks/use-focus-tracker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Play, Square, Activity, Clock, Coffee } from "lucide-react";
+import { Monitor, Play, Square, Activity, Clock, Coffee, Camera, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/member/focus")({
   component: FocusPage,
