@@ -604,51 +604,188 @@ function SectionCard({
   );
 }
 
-function AddLessonDialog({ onAdd }: { onAdd: (type: LessonType, title: string) => void }) {
+function AddLessonDialog({
+  onAdd,
+}: {
+  onAdd: (
+    type: LessonType,
+    title: string,
+    content?: any,
+    duration?: number | null,
+  ) => void;
+}) {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState<LessonType>("video");
   const [title, setTitle] = React.useState("");
+  const [videoUrl, setVideoUrl] = React.useState("");
+  const [duration, setDuration] = React.useState<number | null>(null);
+  const [pdfUrl, setPdfUrl] = React.useState("");
+  const [practicalBrief, setPracticalBrief] = React.useState("");
+  const [assignmentEnabled, setAssignmentEnabled] = React.useState(false);
+  const [assignmentBrief, setAssignmentBrief] = React.useState("");
+
+  function reset() {
+    setType("video");
+    setTitle("");
+    setVideoUrl("");
+    setDuration(null);
+    setPdfUrl("");
+    setPracticalBrief("");
+    setAssignmentEnabled(false);
+    setAssignmentBrief("");
+  }
+
+  function buildContent(): any {
+    const assignment =
+      assignmentEnabled && assignmentBrief.trim()
+        ? { assignment: { brief: assignmentBrief.trim() } }
+        : {};
+    if (type === "video") return { url: videoUrl.trim(), source: "link", ...assignment };
+    if (type === "pdf") return { url: pdfUrl.trim(), ...assignment };
+    if (type === "quiz")
+      return { questions: [], passing_score: 70, max_attempts: 3, ...assignment };
+    return { brief: practicalBrief.trim() };
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd(type, title.trim());
-    setTitle("");
+    onAdd(type, title.trim(), buildContent(), duration);
+    reset();
     setOpen(false);
   }
 
+  const supportsAssignment = type === "video" || type === "pdf" || type === "quiz";
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="w-full">
           <Plus className="h-4 w-4" /> Add lesson
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>New lesson</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Type</label>
-            <Select value={type} onValueChange={(v: LessonType) => setType(v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="video">Video</SelectItem>
-                <SelectItem value="pdf">PDF</SelectItem>
-                <SelectItem value="quiz">Quiz</SelectItem>
-                <SelectItem value="practical">Practical assignment</SelectItem>
-              </SelectContent>
-            </Select>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Type</label>
+              <Select value={type} onValueChange={(v: LessonType) => setType(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="video">Video</SelectItem>
+                  <SelectItem value="pdf">PDF</SelectItem>
+                  <SelectItem value="quiz">Quiz</SelectItem>
+                  <SelectItem value="practical">Practical assignment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Title</label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
+            </div>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Title</label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
-          </div>
+
+          {type === "video" && (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Video URL</label>
+                <UrlAutoFillInput
+                  value={videoUrl}
+                  onChange={setVideoUrl}
+                  onMetadata={(meta) => {
+                    if (meta.title && !title.trim()) setTitle(meta.title);
+                    if (meta.durationSeconds && !duration)
+                      setDuration(Math.round(meta.durationSeconds));
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  YouTube, Vimeo, Loom, Drive, or .mp4. You can also upload a file later by editing the lesson.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Duration (seconds, optional)</label>
+                <Input
+                  type="number"
+                  value={duration ?? ""}
+                  onChange={(e) => setDuration(e.target.value ? Number(e.target.value) : null)}
+                />
+              </div>
+            </>
+          )}
+
+          {type === "pdf" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">PDF URL (optional)</label>
+              <Input
+                value={pdfUrl}
+                onChange={(e) => setPdfUrl(e.target.value)}
+                placeholder="Paste a public PDF URL — or upload after creating"
+              />
+            </div>
+          )}
+
+          {type === "practical" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Brief / instructions</label>
+              <Textarea
+                rows={5}
+                value={practicalBrief}
+                onChange={(e) => setPracticalBrief(e.target.value)}
+                placeholder="What does the member need to do and submit?"
+              />
+            </div>
+          )}
+
+          {type === "quiz" && (
+            <p className="text-xs text-muted-foreground">
+              The lesson will be created with a blank quiz. Open the lesson after creating to add questions.
+            </p>
+          )}
+
+          {supportsAssignment && (
+            <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Attach a tech-test / project</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. If added, members must submit it for this lesson to count as complete.
+                  </p>
+                </div>
+                <Switch
+                  checked={assignmentEnabled}
+                  onCheckedChange={setAssignmentEnabled}
+                  aria-label="Attach assignment"
+                />
+              </div>
+              {assignmentEnabled && (
+                <Textarea
+                  rows={4}
+                  value={assignmentBrief}
+                  onChange={(e) => setAssignmentBrief(e.target.value)}
+                  placeholder="Describe the tech test or project the member must complete and submit."
+                  required
+                />
+              )}
+            </div>
+          )}
+
           <DialogFooter>
-            <Button type="submit">Add</Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit">Add lesson</Button>
           </DialogFooter>
         </form>
       </DialogContent>
