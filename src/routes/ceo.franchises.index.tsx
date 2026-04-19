@@ -41,6 +41,7 @@ import {
   ArrowRight,
   ShieldCheck,
   MapPin,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PillarFlower } from "@/components/PillarFlower";
@@ -360,9 +361,19 @@ function FranchisesPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Invites ({invites.length})
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Invites ({invites.length})
+          </h2>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <p>
+            <span className="font-semibold text-foreground">Invites are not emailed automatically.</span>{" "}
+            After creating an invite, copy the link and share it with the recipient yourself
+            (WhatsApp, email, SMS, etc.). They'll use it to create their account and join.
+          </p>
+        </div>
         {invites.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -515,7 +526,9 @@ function NewInviteDialog({
 
     const link = `${window.location.origin}/invite/${data.token}`;
     await navigator.clipboard.writeText(link).catch(() => {});
-    toast.success("Invite created — link copied to clipboard");
+    toast.success("Invite link copied — share it with the recipient (no email is sent)", {
+      duration: 6000,
+    });
     setEmail("");
     setFranchiseId("");
     setOpen(false);
@@ -531,10 +544,12 @@ function NewInviteDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Send invite</DialogTitle>
+          <DialogTitle>Create invite link</DialogTitle>
           <DialogDescription>
-            Generate an invite link. Share it with the person — when they open it they can create
-            their account and join your academy.
+            This generates an invite link — <span className="font-semibold">no email is sent</span>.
+            After clicking Create, the link is copied to your clipboard so you can share it
+            manually (WhatsApp, email, SMS, etc.). The recipient uses it to create their account
+            and join your academy.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
