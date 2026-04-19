@@ -640,6 +640,16 @@ function AddLessonDialog({
   const [assignmentAttachmentName, setAssignmentAttachmentName] = React.useState<string | null>(null);
   const [uploading, setUploading] = React.useState<null | "video" | "pdf" | "assignment">(null);
 
+  // Playlist import state (only for video lessons)
+  const [playlistUrl, setPlaylistUrl] = React.useState("");
+  const [playlistLoading, setPlaylistLoading] = React.useState(false);
+  const [playlistItems, setPlaylistItems] = React.useState<PlaylistVideo[]>([]);
+  const [playlistTitle, setPlaylistTitle] = React.useState<string | null>(null);
+  const [playlistSelected, setPlaylistSelected] = React.useState<Record<string, boolean>>({});
+  const [playlistTitles, setPlaylistTitles] = React.useState<Record<string, string>>({});
+  const [bulkAdding, setBulkAdding] = React.useState(false);
+  const [bulkProgress, setBulkProgress] = React.useState<{ done: number; total: number } | null>(null);
+
   function reset() {
     setType("video");
     setTitle("");
@@ -655,6 +665,69 @@ function AddLessonDialog({
     setAssignmentBrief("");
     setAssignmentAttachmentPath(null);
     setAssignmentAttachmentName(null);
+    setPlaylistUrl("");
+    setPlaylistItems([]);
+    setPlaylistTitle(null);
+    setPlaylistSelected({});
+    setPlaylistTitles({});
+    setBulkProgress(null);
+  }
+
+  async function loadPlaylist() {
+    if (!playlistUrl.trim()) return;
+    setPlaylistLoading(true);
+    setPlaylistItems([]);
+    try {
+      const res = await fetchYoutubePlaylist(playlistUrl.trim());
+      setPlaylistItems(res.items);
+      setPlaylistTitle(res.playlistTitle);
+      const sel: Record<string, boolean> = {};
+      const titles: Record<string, string> = {};
+      for (const it of res.items) {
+        sel[it.videoId] = true;
+        titles[it.videoId] = it.title;
+      }
+      setPlaylistSelected(sel);
+      setPlaylistTitles(titles);
+      toast.success(`Found ${res.items.length} video${res.items.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load playlist");
+    } finally {
+      setPlaylistLoading(false);
+    }
+  }
+
+  async function bulkAddPlaylist() {
+    const chosen = playlistItems.filter((it) => playlistSelected[it.videoId]);
+    if (chosen.length === 0) {
+      toast.error("Select at least one video.");
+      return;
+    }
+    setBulkAdding(true);
+    setBulkProgress({ done: 0, total: chosen.length });
+    let added = 0;
+    try {
+      for (const it of chosen) {
+        const lessonTitle = (playlistTitles[it.videoId] ?? it.title).trim() || it.title;
+        await onAdd(
+          "video",
+          lessonTitle,
+          { url: it.watchUrl, source: "link" },
+          it.durationSeconds ?? null,
+        );
+        added += 1;
+        setBulkProgress({ done: added, total: chosen.length });
+      }
+      toast.success(`Added ${added} lesson${added === 1 ? "" : "s"} from playlist`);
+      reset();
+      setOpen(false);
+    } catch (err) {
+      toast.error(
+        `Added ${added}/${chosen.length}. ${err instanceof Error ? err.message : "Bulk add failed."}`,
+      );
+    } finally {
+      setBulkAdding(false);
+    }
   }
 
   async function uploadToBucket(file: File, prefix: string, kind: "video" | "pdf" | "assignment") {
