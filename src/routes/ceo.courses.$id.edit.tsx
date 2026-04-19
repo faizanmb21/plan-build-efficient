@@ -206,7 +206,23 @@ function CourseEditor() {
     toast.success("Thumbnail uploaded — remember to Save");
   }
 
-  async function addSectionWithTitle(rawTitle: string) {
+  // Auto-set the course thumbnail from a YouTube video/playlist thumbnail URL,
+  // but ONLY if the course doesn't already have one. Never overwrites a manually-set image.
+  async function maybeAutoSetThumbnail(thumbnailUrl: string | null | undefined) {
+    if (!thumbnailUrl) return;
+    if (!course) return;
+    if (course.thumbnail_url) return; // respect existing thumbnail
+    const { error } = await supabase
+      .from("courses")
+      .update({ thumbnail_url: thumbnailUrl })
+      .eq("id", courseId);
+    if (error) {
+      // silent — this is a nice-to-have, don't interrupt the lesson-add flow
+      return;
+    }
+    setCourse((c) => (c && !c.thumbnail_url ? { ...c, thumbnail_url: thumbnailUrl } : c));
+    toast.success("Course thumbnail set from video");
+  }
     const title = rawTitle.trim();
     if (!title) return;
     const position = sections.length;
