@@ -653,23 +653,14 @@ function CourseEditor() {
 
 function SectionCard({
   section,
-  isFirst,
-  isLast,
-  onMoveUp,
-  onMoveDown,
   onRename,
   onDelete,
   onAddLesson,
   onUpdateLesson,
   onDeleteLesson,
-  onMoveLesson,
   courseId,
 }: {
   section: Section;
-  isFirst: boolean;
-  isLast: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   onRename: (t: string) => void;
   onDelete: () => void;
   onAddLesson: (
@@ -680,80 +671,123 @@ function SectionCard({
   ) => Promise<void> | void;
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
-  onMoveLesson: (idx: number, dir: -1 | 1) => void;
   courseId: string;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [title, setTitle] = React.useState(section.title);
   const [open, setOpen] = React.useState(true);
 
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="rounded-lg border">
-      <div className="flex items-center justify-between gap-2 p-3">
-        <div className="flex flex-1 items-center gap-2">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7">
-              <ChevronDown
-                className={`h-4 w-4 transition-transform ${open ? "" : "-rotate-90"}`}
-              />
-            </Button>
-          </CollapsibleTrigger>
-          {editing ? (
-            <Input
-              autoFocus
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={() => {
-                setEditing(false);
-                if (title.trim() && title !== section.title) onRename(title.trim());
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              }}
-              className="h-8"
-            />
-          ) : (
-            <button
-              className="text-left font-medium hover:underline"
-              onClick={() => setEditing(true)}
-            >
-              {section.title}
-            </button>
-          )}
-          <Badge variant="secondary" className="ml-1">
-            {section.lessons.length} {section.lessons.length === 1 ? "lesson" : "lessons"}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" disabled={isFirst} onClick={onMoveUp}>
-            <ChevronUp className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" disabled={isLast} onClick={onMoveDown}>
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={onDelete}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+  const sortable = useSortable({
+    id: section.id,
+    data: { kind: "section", section },
+  });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.4 : 1,
+  };
 
-      <CollapsibleContent className="space-y-2 border-t bg-muted/30 p-3">
-        {section.lessons.map((l, i) => (
-          <LessonRow
-            key={l.id}
-            lesson={l}
-            isFirst={i === 0}
-            isLast={i === section.lessons.length - 1}
-            onMoveUp={() => onMoveLesson(i, -1)}
-            onMoveDown={() => onMoveLesson(i, 1)}
-            onUpdate={onUpdateLesson}
-            onDelete={() => onDeleteLesson(l)}
-            courseId={courseId}
-          />
-        ))}
-        <AddLessonDialog onAdd={onAddLesson} courseId={courseId} />
-      </CollapsibleContent>
-    </Collapsible>
+  return (
+    <div ref={sortable.setNodeRef} style={style}>
+      <Collapsible open={open} onOpenChange={setOpen} className="rounded-lg border bg-background">
+        <div className="flex items-center justify-between gap-2 p-3">
+          <div className="flex flex-1 items-center gap-2">
+            <button
+              type="button"
+              {...sortable.attributes}
+              {...sortable.listeners}
+              className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+              aria-label="Drag section"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${open ? "" : "-rotate-90"}`}
+                />
+              </Button>
+            </CollapsibleTrigger>
+            {editing ? (
+              <Input
+                autoFocus
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={() => {
+                  setEditing(false);
+                  if (title.trim() && title !== section.title) onRename(title.trim());
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+                className="h-8"
+              />
+            ) : (
+              <button
+                className="text-left font-medium hover:underline"
+                onClick={() => setEditing(true)}
+              >
+                {section.title}
+              </button>
+            )}
+            <Badge variant="secondary" className="ml-1">
+              {section.lessons.length} {section.lessons.length === 1 ? "lesson" : "lessons"}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button size="icon" variant="ghost" onClick={onDelete}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <CollapsibleContent className="space-y-2 border-t bg-muted/30 p-3">
+          <SectionLessonsDroppable section={section}>
+            <SortableContext
+              items={section.lessons.map((l) => l.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {section.lessons.length === 0 && (
+                <p className="rounded-md border border-dashed bg-background/50 p-3 text-center text-xs text-muted-foreground">
+                  Drop a lesson here or add a new one below.
+                </p>
+              )}
+              {section.lessons.map((l) => (
+                <LessonRow
+                  key={l.id}
+                  lesson={l}
+                  onUpdate={onUpdateLesson}
+                  onDelete={() => onDeleteLesson(l)}
+                  courseId={courseId}
+                />
+              ))}
+            </SortableContext>
+          </SectionLessonsDroppable>
+          <AddLessonDialog onAdd={onAddLesson} courseId={courseId} />
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
+function SectionLessonsDroppable({
+  section,
+  children,
+}: {
+  section: Section;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `section-empty-${section.id}`,
+    data: { kind: "section-empty", sectionId: section.id },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`space-y-2 rounded-md transition-colors ${isOver ? "bg-accent/30 ring-1 ring-accent" : ""}`}
+    >
+      {children}
+    </div>
   );
 }
 
