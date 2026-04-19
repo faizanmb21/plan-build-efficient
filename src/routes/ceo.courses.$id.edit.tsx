@@ -1075,6 +1075,50 @@ function LessonEditorDialog({
               onChange={(content) => setDraft({ ...draft, content })}
             />
           )}
+
+          {(draft.type === "video" || draft.type === "pdf" || draft.type === "quiz") && (
+            <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Attached tech-test / project</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. When attached, members must submit it for this lesson to count as complete.
+                  </p>
+                </div>
+                <Switch
+                  checked={!!draft.content?.assignment}
+                  onCheckedChange={(v) =>
+                    setDraft((d) => {
+                      const { assignment, ...rest } = d.content ?? {};
+                      return {
+                        ...d,
+                        content: v
+                          ? { ...rest, assignment: { brief: assignment?.brief ?? "" } }
+                          : rest,
+                      };
+                    })
+                  }
+                  aria-label="Attach assignment"
+                />
+              </div>
+              {draft.content?.assignment && (
+                <Textarea
+                  rows={4}
+                  value={draft.content.assignment.brief ?? ""}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      content: {
+                        ...d.content,
+                        assignment: { ...d.content.assignment, brief: e.target.value },
+                      },
+                    }))
+                  }
+                  placeholder="Describe the tech test or project the member must complete and submit."
+                />
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
