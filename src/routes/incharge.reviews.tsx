@@ -24,7 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { CheckCircle2, Clock, RefreshCcw, FileText, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, RefreshCcw, FileText, ExternalLink, Loader2, Sparkles } from "lucide-react";
+import { reviewSubmission } from "@/server/review-submission";
 
 export const Route = createFileRoute("/incharge/reviews")({
   component: ReviewsPage,
@@ -239,6 +240,13 @@ function ReviewDialog({
   const [feedback, setFeedback] = React.useState<string>("");
   const [signedUrl, setSignedUrl] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiReview, setAiReview] = React.useState<{
+    score: number;
+    comments: string;
+    rubric: Record<string, number>;
+    model: string;
+  } | null>(null);
 
   React.useEffect(() => {
     if (!row) return;
@@ -246,13 +254,53 @@ function ReviewDialog({
     setGrade(row.grade?.toString() ?? "");
     setFeedback(row.feedback ?? "");
     setSignedUrl(null);
+    setAiReview(null);
     (async () => {
       const { data } = await supabase.storage
         .from("submissions")
         .createSignedUrl(row.file_url, 60 * 30);
       setSignedUrl(data?.signedUrl ?? null);
+      // Load latest existing AI review
+      const { data: existing } = await supabase
+        .from("ai_reviews")
+        .select("score, comments, rubric, model")
+        .eq("submission_id", row.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existing && existing.score !== null) {
+        setAiReview({
+          score: existing.score,
+          comments: existing.comments ?? "",
+          rubric: (existing.rubric ?? {}) as Record<string, number>,
+          model: existing.model,
+        });
+      }
     })();
   }, [row]);
+
+  async function runAi() {
+    if (!row) return;
+    setAiLoading(true);
+    try {
+      const res = await reviewSubmission({ data: { submissionId: row.id } });
+      if (!res.ok) {
+        toast.error(res.error ?? "AI review failed");
+      } else {
+        setAiReview({
+          score: res.score,
+          comments: res.comments,
+          rubric: res.rubric,
+          model: res.model,
+        });
+        toast.success("AI review ready");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "AI review failed");
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   async function save() {
     if (!row) return;
