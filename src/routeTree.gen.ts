@@ -22,6 +22,7 @@ import { Route as CeoIndexRouteImport } from './routes/ceo.index'
 import { Route as MemberFocusRouteImport } from './routes/member.focus'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
+import { Route as InchargeMembersRouteImport } from './routes/incharge.members'
 import { Route as InchargeAttendanceRouteImport } from './routes/incharge.attendance'
 import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
@@ -96,6 +97,11 @@ const InchargeReviewsRoute = InchargeReviewsRouteImport.update({
   path: '/reviews',
   getParentRoute: () => InchargeRoute,
 } as any)
+const InchargeMembersRoute = InchargeMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
+  getParentRoute: () => InchargeRoute,
+} as any)
 const InchargeAttendanceRoute = InchargeAttendanceRouteImport.update({
   id: '/attendance',
   path: '/attendance',
@@ -150,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
+  '/incharge/members': typeof InchargeMembersRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
+  '/incharge/members': typeof InchargeMembersRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
@@ -194,6 +202,7 @@ export interface FileRoutesById {
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
+  '/incharge/members': typeof InchargeMembersRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
@@ -219,6 +228,7 @@ export interface FileRouteTypes {
     | '/ceo/franchises'
     | '/ceo/seed'
     | '/incharge/attendance'
+    | '/incharge/members'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/ceo/franchises'
     | '/ceo/seed'
     | '/incharge/attendance'
+    | '/incharge/members'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/ceo/franchises'
     | '/ceo/seed'
     | '/incharge/attendance'
+    | '/incharge/members'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
@@ -377,6 +389,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InchargeReviewsRouteImport
       parentRoute: typeof InchargeRoute
     }
+    '/incharge/members': {
+      id: '/incharge/members'
+      path: '/members'
+      fullPath: '/incharge/members'
+      preLoaderRoute: typeof InchargeMembersRouteImport
+      parentRoute: typeof InchargeRoute
+    }
     '/incharge/attendance': {
       id: '/incharge/attendance'
       path: '/attendance'
@@ -460,12 +479,14 @@ const CeoRouteWithChildren = CeoRoute._addFileChildren(CeoRouteChildren)
 
 interface InchargeRouteChildren {
   InchargeAttendanceRoute: typeof InchargeAttendanceRoute
+  InchargeMembersRoute: typeof InchargeMembersRoute
   InchargeReviewsRoute: typeof InchargeReviewsRoute
   InchargeIndexRoute: typeof InchargeIndexRoute
 }
 
 const InchargeRouteChildren: InchargeRouteChildren = {
   InchargeAttendanceRoute: InchargeAttendanceRoute,
+  InchargeMembersRoute: InchargeMembersRoute,
   InchargeReviewsRoute: InchargeReviewsRoute,
   InchargeIndexRoute: InchargeIndexRoute,
 }
@@ -502,12 +523,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

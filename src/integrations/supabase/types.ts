@@ -556,6 +556,10 @@ export type Database = {
         Args: { _force?: boolean; _franchise_id: string }
         Returns: Json
       }
+      remove_member_from_franchise: {
+        Args: { _user_id: string }
+        Returns: Json
+      }
       restore_franchise: { Args: { _franchise_id: string }; Returns: Json }
       seed_demo_content: { Args: never; Returns: Json }
     }
