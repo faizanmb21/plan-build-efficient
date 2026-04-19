@@ -274,35 +274,57 @@ function CourseEditor() {
   }
 
   async function uploadThumbnail(file: File) {
-    const ext = file.name.split(".").pop();
+    // Validate type + size up front (Udemy-style standards)
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file (JPG, PNG, or WebP).");
+      return;
+    }
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+      toast.error("Image must be 5MB or smaller.");
+      return;
+    }
+    const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
     const path = `${courseId}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from("thumbnails").upload(path, file, {
+    const { error: upErr } = await supabase.storage.from("thumbnails").upload(path, file, {
       upsert: true,
+      contentType: file.type,
     });
-    if (error) {
-      toast.error(error.message);
+    if (upErr) {
+      toast.error(upErr.message);
       return;
     }
     const { data } = supabase.storage.from("thumbnails").getPublicUrl(path);
-    setCourse((c) => (c ? { ...c, thumbnail_url: data.publicUrl } : c));
-    toast.success("Thumbnail uploaded — remember to Save");
+    const url = `${data.publicUrl}?v=${Date.now()}`;
+    // Persist immediately — no need to click Save details
+    const { error: dbErr } = await supabase
+      .from("courses")
+      .update({ thumbnail_url: url })
+      .eq("id", courseId);
+    if (dbErr) {
+      toast.error(dbErr.message);
+      return;
+    }
+    setCourse((c) => (c ? { ...c, thumbnail_url: url } : c));
+    toast.success("Thumbnail updated");
   }
 
-  // Auto-set the course thumbnail from a YouTube video/playlist thumbnail URL,
-  // but ONLY if the course doesn't already have one. Never overwrites a manually-set image.
-  async function maybeAutoSetThumbnail(thumbnailUrl: string | null | undefined) {
+  // Auto-set the course thumbnail from a YouTube video/playlist thumbnail URL.
+  // `force=true` (used by playlist import) overwrites any existing thumbnail;
+  // otherwise we respect a manually-set image.
+  async function maybeAutoSetThumbnail(
+    thumbnailUrl: string | null | undefined,
+    opts: { force?: boolean } = {},
+  ) {
     if (!thumbnailUrl) return;
     if (!course) return;
-    if (course.thumbnail_url) return; // respect existing thumbnail
+    if (!opts.force && course.thumbnail_url) return;
     const { error } = await supabase
       .from("courses")
       .update({ thumbnail_url: thumbnailUrl })
       .eq("id", courseId);
-    if (error) {
-      // silent — this is a nice-to-have, don't interrupt the lesson-add flow
-      return;
-    }
-    setCourse((c) => (c && !c.thumbnail_url ? { ...c, thumbnail_url: thumbnailUrl } : c));
+    if (error) return;
+    setCourse((c) => (c ? { ...c, thumbnail_url: thumbnailUrl } : c));
     toast.success("Course thumbnail set from video");
   }
 
@@ -628,26 +650,34 @@ function CourseEditor() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Thumbnail</label>
             <div className="flex items-center gap-3">
-              {course.thumbnail_url && (
+              {course.thumbnail_url ? (
                 <img
                   src={course.thumbnail_url}
                   alt="Thumbnail"
-                  className="h-16 w-28 rounded object-cover"
+                  className="aspect-video h-20 w-36 rounded-md border border-white/10 object-cover"
                 />
+              ) : (
+                <div className="flex aspect-video h-20 w-36 items-center justify-center rounded-md border border-dashed border-white/15 text-xs text-muted-foreground">
+                  No image
+                </div>
               )}
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
                 <Upload className="h-4 w-4" /> Upload image
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) uploadThumbnail(f);
+                    e.target.value = "";
                   }}
                 />
               </label>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Recommended 1280×720 (16:9). JPG, PNG or WebP, up to 5MB. Saves automatically.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Button onClick={saveMeta} disabled={savingMeta || !metaDirty}>
@@ -836,7 +866,10 @@ function SectionCard({
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
   courseId: string;
-  onAutoThumbnail?: (url: string | null | undefined) => void | Promise<void>;
+  onAutoThumbnail?: (
+    url: string | null | undefined,
+    opts?: { force?: boolean },
+  ) => void | Promise<void>;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [title, setTitle] = React.useState(section.title);
@@ -1007,7 +1040,10 @@ function AddLessonDialog({
     duration?: number | null,
   ) => Promise<void> | void;
   courseId: string;
-  onAutoThumbnail?: (url: string | null | undefined) => void | Promise<void>;
+  onAutoThumbnail?: (
+    url: string | null | undefined,
+    opts?: { force?: boolean },
+  ) => void | Promise<void>;
 }) {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState<LessonType>("video");
@@ -1104,10 +1140,10 @@ function AddLessonDialog({
         added += 1;
         setBulkProgress({ done: added, total: chosen.length });
       }
-      // Auto-set course thumbnail from the first selected video's thumbnail (playlist cover proxy)
+      // Auto-set course thumbnail from the first selected video (force: explicit playlist import)
       const firstThumb = chosen[0]?.thumbnailUrl ?? null;
       if (firstThumb && onAutoThumbnail) {
-        await onAutoThumbnail(firstThumb);
+        await onAutoThumbnail(firstThumb, { force: true });
       }
       toast.success(`Added ${added} lesson${added === 1 ? "" : "s"} from playlist`);
       reset();
