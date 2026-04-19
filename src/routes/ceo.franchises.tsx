@@ -80,7 +80,6 @@ interface MemberRow {
 }
 
 function FranchisesPage() {
-  const navigate = useNavigate();
   const [franchises, setFranchises] = React.useState<Franchise[]>([]);
   const [invites, setInvites] = React.useState<InviteRow[]>([]);
   const [members, setMembers] = React.useState<MemberRow[]>([]);
