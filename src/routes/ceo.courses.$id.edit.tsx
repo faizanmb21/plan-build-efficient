@@ -785,7 +785,11 @@ function SectionCard({
               ))}
             </SortableContext>
           </SectionLessonsDroppable>
-          <AddLessonDialog onAdd={onAddLesson} courseId={courseId} />
+          <AddLessonDialog
+            onAdd={onAddLesson}
+            courseId={courseId}
+            onAutoThumbnail={onAutoThumbnail}
+          />
         </CollapsibleContent>
       </Collapsible>
     </div>
