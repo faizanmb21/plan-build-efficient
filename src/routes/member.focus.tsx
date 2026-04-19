@@ -122,7 +122,7 @@ function FocusPage() {
           <div className="grid grid-cols-3 gap-4">
             <Stat label="Active today" value={fmt(todayActive)} icon={Clock} />
             <Stat label="Idle today" value={fmt(todayIdle)} icon={Coffee} />
-            <Stat label="Check-ins" value={snapCount.toString()} icon={Camera} />
+            <Stat label="Snapshots" value={snapCount.toString()} icon={Monitor} />
           </div>
         </CardContent>
       </Card>
