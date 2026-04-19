@@ -147,12 +147,34 @@ function CoursesPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {courses.map((c) => (
-            <Card key={c.id} className="flex flex-col">
-              <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-                <CardTitle className="text-base">{c.title}</CardTitle>
-                <Badge variant={c.status === "published" ? "default" : "secondary"}>
+            <Card key={c.id} className="flex flex-col overflow-hidden">
+              <div className="relative aspect-video w-full bg-muted">
+                {c.thumbnail_url ? (
+                  <img
+                    src={c.thumbnail_url}
+                    alt={c.title}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <BookOpen className="h-8 w-8" />
+                      <span className="text-2xl font-semibold">
+                        {c.title.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <Badge
+                  variant={c.status === "published" ? "default" : "secondary"}
+                  className="absolute right-2 top-2"
+                >
                   {c.status}
                 </Badge>
+              </div>
+              <CardHeader className="space-y-0 pb-2">
+                <CardTitle className="text-base line-clamp-1">{c.title}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col justify-between gap-4">
                 <p className="text-sm text-muted-foreground line-clamp-3">
