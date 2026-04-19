@@ -1024,3 +1024,64 @@ function QuizEditor({
     </div>
   );
 }
+
+function UrlAutoFillInput({
+  value,
+  onChange,
+  onMetadata,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+  onMetadata: (meta: { title: string | null; durationSeconds: number | null }) => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  const lastFetched = React.useRef<string>("");
+
+  async function tryFetch(url: string) {
+    const trimmed = url.trim();
+    if (!trimmed || trimmed === lastFetched.current) return;
+    const parsed = parseVideoUrl(trimmed);
+    if (!parsed) return;
+    lastFetched.current = trimmed;
+    setBusy(true);
+    const meta = await fetchVideoMetadata(trimmed);
+    setBusy(false);
+    if (!meta) return;
+    if (meta.title || meta.durationSeconds) {
+      onMetadata({ title: meta.title, durationSeconds: meta.durationSeconds });
+      const bits: string[] = [];
+      if (meta.title) bits.push("title");
+      if (meta.durationSeconds) bits.push("duration");
+      if (bits.length) toast.success(`Auto-filled ${bits.join(" + ")} from ${meta.provider}`);
+    }
+  }
+
+  return (
+    <div className="flex gap-2">
+      <Input
+        type="url"
+        placeholder="https://www.youtube.com/watch?v=… (YouTube, Vimeo, Loom, Drive, or .mp4)"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => tryFetch(e.target.value)}
+        onPaste={(e) => {
+          const pasted = e.clipboardData.getData("text");
+          // Slight delay so onChange fires first
+          setTimeout(() => tryFetch(pasted), 50);
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy || !value.trim()}
+        onClick={() => {
+          lastFetched.current = ""; // force refetch
+          tryFetch(value);
+        }}
+      >
+        {busy ? "Fetching…" : "Auto-fill"}
+      </Button>
+    </div>
+  );
+}
