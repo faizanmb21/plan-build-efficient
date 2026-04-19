@@ -310,11 +310,13 @@ function CourseEditor() {
     const title = rawTitle.trim();
     if (!title) return;
     const position = sections.length;
+    beginMutation();
     const { data, error } = await supabase
       .from("sections")
       .insert({ course_id: courseId, title, position })
       .select("id,title,position")
       .single();
+    endMutation();
     if (error) {
       toast.error(error.message);
       return;
@@ -325,14 +327,18 @@ function CourseEditor() {
   }
 
   async function renameSection(id: string, title: string) {
+    beginMutation();
     const { error } = await supabase.from("sections").update({ title }).eq("id", id);
+    endMutation();
     if (error) toast.error(error.message);
     else setSections((s) => s.map((sec) => (sec.id === id ? { ...sec, title } : sec)));
   }
 
   async function deleteSection(id: string) {
     if (!confirm("Delete this section and its lessons?")) return;
+    beginMutation();
     const { error } = await supabase.from("sections").delete().eq("id", id);
+    endMutation();
     if (error) toast.error(error.message);
     else setSections((s) => s.filter((sec) => sec.id !== id));
   }
@@ -343,9 +349,12 @@ function CourseEditor() {
       .map((s, i) => ({ id: s.id, position: i }))
       .filter((u) => prevPosById.get(u.id) !== u.position);
     setSections(next.map((s, i) => ({ ...s, position: i })));
+    if (updates.length === 0) return;
+    beginMutation();
     await Promise.all(
       updates.map((u) => supabase.from("sections").update({ position: u.position }).eq("id", u.id)),
     );
+    endMutation();
   }
 
   async function persistLessonChanges(next: Section[], affected: Set<string>) {
@@ -367,6 +376,8 @@ function CourseEditor() {
         lessons: sec.lessons.map((l, i) => ({ ...l, position: i, section_id: sec.id })),
       })),
     );
+    if (updates.length === 0) return;
+    beginMutation();
     await Promise.all(
       updates.map((u) =>
         supabase
@@ -375,6 +386,7 @@ function CourseEditor() {
           .eq("id", u.id),
       ),
     );
+    endMutation();
   }
 
   async function addLesson(
@@ -393,6 +405,7 @@ function CourseEditor() {
       quiz: { questions: [], passing_score: 70, max_attempts: 3 },
       practical: { brief: "" },
     };
+    beginMutation();
     const { data, error } = await supabase
       .from("lessons")
       .insert({
@@ -405,6 +418,7 @@ function CourseEditor() {
       })
       .select("id,section_id,title,type,position,duration_seconds,content")
       .single();
+    endMutation();
     if (error) {
       toast.error(error.message);
       return;
@@ -417,6 +431,7 @@ function CourseEditor() {
   }
 
   async function updateLesson(lesson: Lesson) {
+    beginMutation();
     const { error } = await supabase
       .from("lessons")
       .update({
@@ -425,6 +440,7 @@ function CourseEditor() {
         duration_seconds: lesson.duration_seconds,
       })
       .eq("id", lesson.id);
+    endMutation();
     if (error) toast.error(error.message);
     else {
       setSections((s) =>
@@ -443,7 +459,9 @@ function CourseEditor() {
 
   async function deleteLesson(lesson: Lesson) {
     if (!confirm("Delete this lesson?")) return;
+    beginMutation();
     const { error } = await supabase.from("lessons").delete().eq("id", lesson.id);
+    endMutation();
     if (error) toast.error(error.message);
     else
       setSections((s) =>
