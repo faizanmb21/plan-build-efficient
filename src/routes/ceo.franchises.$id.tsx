@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PillarFlower } from "@/components/PillarFlower";
+import { MemberGradeReport } from "@/components/MemberGradeReport";
+import { GraduationCap } from "lucide-react";
 import { PILLARS, type PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/ceo/franchises/$id")({
@@ -81,6 +83,7 @@ function FranchiseDetailPage() {
   const [orgScores, setOrgScores] = React.useState<PillarScores>(EMPTY_SCORES);
   const [loading, setLoading] = React.useState(true);
   const [snapMember, setSnapMember] = React.useState<MemberDetail | null>(null);
+  const [gradeMember, setGradeMember] = React.useState<MemberDetail | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -442,9 +445,16 @@ function FranchiseDetailPage() {
                       size="sm"
                       variant="outline"
                       className="flex-1"
+                      onClick={() => setGradeMember(m)}
+                    >
+                      <GraduationCap className="h-3.5 w-3.5" /> Grades
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => setSnapMember(m)}
                     >
-                      <Camera className="h-3.5 w-3.5" /> View snapshots
+                      <Camera className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       size="sm"
@@ -463,6 +473,21 @@ function FranchiseDetailPage() {
       </section>
 
       <SnapshotDialog member={snapMember} onClose={() => setSnapMember(null)} />
+
+      <Dialog open={!!gradeMember} onOpenChange={(o) => !o && setGradeMember(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Member grade report</DialogTitle>
+          </DialogHeader>
+          {gradeMember && (
+            <MemberGradeReport
+              userId={gradeMember.id}
+              fullName={gradeMember.full_name}
+              franchiseName={franchise?.name ?? null}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
