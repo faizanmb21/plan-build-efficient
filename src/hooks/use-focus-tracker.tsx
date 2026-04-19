@@ -157,36 +157,19 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
       }
       if (sessionRef.current) return;
 
-      // 1. Webcam (mandatory)
-      let cam: MediaStream | null = null;
-      try {
-        cam = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480 },
-          audio: false,
-        });
-      } catch (e) {
-        console.error("webcam failed", e);
-        toast.error("Webcam access required. Allow camera in your browser, then try again.");
-        return;
-      }
-      webcamStream.current = cam;
-
-      // 2. Screen share (also mandatory)
-      let scr: MediaStream | null = null;
+      // Screen share (mandatory) — must be called directly from the click handler
+      let scr: MediaStream;
       try {
         scr = await (navigator.mediaDevices as MediaDevices & {
           getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
         }).getDisplayMedia({ video: true, audio: false });
       } catch (e) {
         console.error("screen share failed", e);
-        cam.getTracks().forEach((t) => t.stop());
-        webcamStream.current = null;
-        toast.error("Screen share required. Pick your entire screen when prompted, then try again.");
+        toast.error("Screen share required. Pick a screen/window when prompted, then try again.");
         return;
       }
       screenStream.current = scr;
       scr.getVideoTracks()[0]?.addEventListener("ended", () => {
-        // If user stops sharing mid-session, auto clock out
         toast("Screen share ended — clocking out.");
         stop();
       });
