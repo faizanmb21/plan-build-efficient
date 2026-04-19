@@ -26,6 +26,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { parseVideoUrl } from "@/lib/video-embed";
 import {
   ArrowLeft,
   ChevronDown,
