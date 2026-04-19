@@ -366,12 +366,12 @@ function FranchisesPage() {
             Invites ({invites.length})
           </h2>
         </div>
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
           <p>
-            <span className="font-semibold">Invites are not emailed automatically.</span> After
-            creating an invite, copy the link and share it with the recipient yourself (WhatsApp,
-            email, etc.). They'll use it to create their account and join.
+            <span className="font-semibold text-foreground">Invites are not emailed automatically.</span>{" "}
+            After creating an invite, copy the link and share it with the recipient yourself
+            (WhatsApp, email, SMS, etc.). They'll use it to create their account and join.
           </p>
         </div>
         {invites.length === 0 ? (
