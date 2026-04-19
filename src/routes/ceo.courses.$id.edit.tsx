@@ -1578,35 +1578,72 @@ function LessonRow({
     opacity: sortable.isDragging ? 0.4 : 1,
   };
 
+  const duration = formatLessonDuration(lesson.duration_seconds);
+
   return (
     <>
       <div
         ref={sortable.setNodeRef}
         style={style}
-        className="flex items-center gap-2 rounded-md border bg-background p-2"
+        className="group/lesson flex items-center gap-2 rounded-md border border-white/5 bg-background p-2 transition-colors hover:border-white/15"
       >
         <button
           type="button"
           {...sortable.attributes}
           {...sortable.listeners}
-          className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+          className="cursor-grab touch-none rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/lesson:opacity-100 hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
           aria-label="Drag lesson"
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
-        <Icon className="h-4 w-4 text-accent" />
+        <Icon className="h-4 w-4 text-muted-foreground" />
         <button
           className="flex-1 text-left text-sm hover:underline"
           onClick={() => setOpen(true)}
         >
           {lesson.title}
         </button>
-        <Badge variant="outline" className="text-xs capitalize">
-          {lesson.type}
-        </Badge>
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onDelete}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        {duration && (
+          <span className="hidden text-xs tabular-nums text-muted-foreground sm:inline">
+            {duration}
+          </span>
+        )}
+        <span
+          className={`hidden rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide sm:inline ${LESSON_TYPE_CHIP[lesson.type]}`}
+        >
+          {LESSON_TYPE_LABEL[lesson.type]}
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              aria-label="Lesson actions"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                setOpen(true);
+              }}
+            >
+              <Pencil className="h-4 w-4" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                onDelete();
+              }}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <LessonEditorDialog
         open={open}
