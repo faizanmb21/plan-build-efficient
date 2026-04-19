@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseVideoUrl } from "@/lib/video-embed";
+import { fetchVideoMetadata } from "@/lib/video-metadata";
 import {
   ArrowLeft,
   ChevronDown,
