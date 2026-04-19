@@ -820,6 +820,7 @@ function SectionLessonsDroppable({
 function AddLessonDialog({
   onAdd,
   courseId,
+  onAutoThumbnail,
 }: {
   onAdd: (
     type: LessonType,
@@ -828,6 +829,7 @@ function AddLessonDialog({
     duration?: number | null,
   ) => Promise<void> | void;
   courseId: string;
+  onAutoThumbnail?: (url: string | null | undefined) => void | Promise<void>;
 }) {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState<LessonType>("video");
