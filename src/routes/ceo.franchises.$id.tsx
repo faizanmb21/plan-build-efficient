@@ -64,8 +64,12 @@ function FranchiseDetailPage() {
     );
     const scoreMap = new Map(perMemberScores);
 
-    const mList: MemberDetail[] = ((profs as MemberDetail[]) ?? []).map((p) => ({
-      ...p,
+    const profileRows =
+      (profs as { id: string; full_name: string | null; phone: string | null }[] | null) ?? [];
+    const mList: MemberDetail[] = profileRows.map((p) => ({
+      id: p.id,
+      full_name: p.full_name,
+      phone: p.phone,
       role: roleMap.get(p.id),
       scores: scoreMap.get(p.id),
     }));
