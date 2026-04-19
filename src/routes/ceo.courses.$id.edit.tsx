@@ -444,7 +444,9 @@ function CourseEditor() {
               onMoveDown={() => moveSection(idx, 1)}
               onRename={(t) => renameSection(section.id, t)}
               onDelete={() => deleteSection(section.id)}
-              onAddLesson={(type, title) => addLesson(section.id, type, title)}
+              onAddLesson={(type, title, content, duration) =>
+                addLesson(section.id, type, title, content, duration)
+              }
               onUpdateLesson={updateLesson}
               onDeleteLesson={deleteLesson}
               onMoveLesson={(i, dir) => moveLesson(section.id, i, dir)}
