@@ -241,13 +241,18 @@ function CourseEditor() {
       .update({
         title: course.title,
         description: course.description,
-        status: course.status,
         thumbnail_url: course.thumbnail_url,
       })
       .eq("id", courseId);
     setSavingMeta(false);
-    if (error) toast.error(error.message);
-    else toast.success("Course details saved");
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setMetaBaseline({ title: course.title, description: course.description });
+    setMetaSavedFlash(true);
+    setTimeout(() => setMetaSavedFlash(false), 2000);
+    toast.success("Course details saved");
   }
 
   async function toggleStatus(next: "draft" | "published") {
@@ -262,6 +267,8 @@ function CourseEditor() {
       setCourse((c) => (c ? { ...c, status: prev } : c));
       toast.error(error.message);
     } else {
+      setStatusSavedFlash(true);
+      setTimeout(() => setStatusSavedFlash(false), 2000);
       toast.success(next === "published" ? "Course published" : "Course set to draft");
     }
   }
