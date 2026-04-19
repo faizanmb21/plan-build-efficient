@@ -1253,20 +1253,90 @@ function LessonEditorDialog({
                 />
               </div>
               {draft.content?.assignment && (
-                <Textarea
-                  rows={4}
-                  value={draft.content.assignment.brief ?? ""}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      content: {
-                        ...d.content,
-                        assignment: { ...d.content.assignment, brief: e.target.value },
-                      },
-                    }))
-                  }
-                  placeholder="Describe the tech test or project the member must complete and submit."
-                />
+                <div className="space-y-2">
+                  <Textarea
+                    rows={4}
+                    value={draft.content.assignment.brief ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        content: {
+                          ...d.content,
+                          assignment: { ...d.content.assignment, brief: e.target.value },
+                        },
+                      }))
+                    }
+                    placeholder="Describe the tech test or project the member must complete and submit."
+                  />
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Brief attachment (optional)</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
+                        <Upload className="h-4 w-4" />
+                        {uploading
+                          ? "Uploading…"
+                          : draft.content.assignment.attachment_path
+                            ? "Replace file"
+                            : "Attach file (PDF, audio, video, doc…)"}
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            setUploading(true);
+                            const ext = f.name.split(".").pop() ?? "bin";
+                            const path = `assignments/${courseId}/${crypto.randomUUID()}.${ext}`;
+                            const { error } = await supabase.storage
+                              .from("course-content")
+                              .upload(path, f, { upsert: true, contentType: f.type });
+                            setUploading(false);
+                            if (error) {
+                              toast.error(error.message);
+                              return;
+                            }
+                            setDraft((d) => ({
+                              ...d,
+                              content: {
+                                ...d.content,
+                                assignment: {
+                                  ...d.content.assignment,
+                                  attachment_path: path,
+                                  attachment_name: f.name,
+                                },
+                              },
+                            }));
+                            toast.success("Attached — remember to Save");
+                          }}
+                        />
+                      </label>
+                      {draft.content.assignment.attachment_name && (
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <FileText className="h-3.5 w-3.5" />
+                          {draft.content.assignment.attachment_name}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() =>
+                              setDraft((d) => {
+                                const { attachment_path, attachment_name, ...rest } =
+                                  d.content.assignment;
+                                return {
+                                  ...d,
+                                  content: { ...d.content, assignment: rest },
+                                };
+                              })
+                            }
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}
