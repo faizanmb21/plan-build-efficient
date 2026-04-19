@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseVideoUrl } from "@/lib/video-embed";
+import { fetchVideoMetadata } from "@/lib/video-metadata";
 import {
   ArrowLeft,
   ChevronDown,
@@ -698,16 +699,27 @@ function LessonEditorDialog({
 
                 <TabsContent value="link" className="space-y-2 pt-3">
                   <label className="text-sm font-medium">Video URL</label>
-                  <Input
-                    type="url"
-                    placeholder="https://www.youtube.com/watch?v=… (YouTube, Vimeo, Loom, Drive, or .mp4)"
+                  <UrlAutoFillInput
                     value={draft.content?.url ?? ""}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        content: { ...draft.content, url: e.target.value, source: "link" },
-                      })
+                    onChange={(url) =>
+                      setDraft((d) => ({
+                        ...d,
+                        content: { ...d.content, url, source: "link" },
+                      }))
                     }
+                    onMetadata={(meta) => {
+                      setDraft((d) => {
+                        const next: Lesson = { ...d };
+                        // Only fill title if empty or still placeholder-ish
+                        if (meta.title && (!d.title || d.title.trim() === "" || d.title === "New video lesson")) {
+                          next.title = meta.title;
+                        }
+                        if (meta.durationSeconds && !d.duration_seconds) {
+                          next.duration_seconds = Math.round(meta.durationSeconds);
+                        }
+                        return next;
+                      });
+                    }}
                   />
                   {(() => {
                     const u = (draft.content?.url ?? "").trim();
@@ -726,11 +738,17 @@ function LessonEditorDialog({
                         </p>
                       );
                     }
+                    const canBlockScrub = parsed.provider === "direct";
                     return (
                       <>
                         <p className="text-xs text-muted-foreground">
                           Detected: <span className="font-medium capitalize">{parsed.provider}</span> — preview below.
                         </p>
+                        {!canBlockScrub && (
+                          <p className="text-xs text-muted-foreground italic">
+                            Note: fast-forward blocking only works on uploaded files and direct .mp4 links — {parsed.provider} embeds use their own player.
+                          </p>
+                        )}
                         <div className="aspect-video w-full overflow-hidden rounded-md border bg-black">
                           {parsed.provider === "direct" ? (
                             <video src={parsed.embedUrl} controls className="h-full w-full" />
@@ -1003,6 +1021,67 @@ function QuizEditor({
           <Plus className="h-3.5 w-3.5" /> Short answer
         </Button>
       </div>
+    </div>
+  );
+}
+
+function UrlAutoFillInput({
+  value,
+  onChange,
+  onMetadata,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+  onMetadata: (meta: { title: string | null; durationSeconds: number | null }) => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  const lastFetched = React.useRef<string>("");
+
+  async function tryFetch(url: string) {
+    const trimmed = url.trim();
+    if (!trimmed || trimmed === lastFetched.current) return;
+    const parsed = parseVideoUrl(trimmed);
+    if (!parsed) return;
+    lastFetched.current = trimmed;
+    setBusy(true);
+    const meta = await fetchVideoMetadata(trimmed);
+    setBusy(false);
+    if (!meta) return;
+    if (meta.title || meta.durationSeconds) {
+      onMetadata({ title: meta.title, durationSeconds: meta.durationSeconds });
+      const bits: string[] = [];
+      if (meta.title) bits.push("title");
+      if (meta.durationSeconds) bits.push("duration");
+      if (bits.length) toast.success(`Auto-filled ${bits.join(" + ")} from ${meta.provider}`);
+    }
+  }
+
+  return (
+    <div className="flex gap-2">
+      <Input
+        type="url"
+        placeholder="https://www.youtube.com/watch?v=… (YouTube, Vimeo, Loom, Drive, or .mp4)"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => tryFetch(e.target.value)}
+        onPaste={(e) => {
+          const pasted = e.clipboardData.getData("text");
+          // Slight delay so onChange fires first
+          setTimeout(() => tryFetch(pasted), 50);
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy || !value.trim()}
+        onClick={() => {
+          lastFetched.current = ""; // force refetch
+          tryFetch(value);
+        }}
+      >
+        {busy ? "Fetching…" : "Auto-fill"}
+      </Button>
     </div>
   );
 }
