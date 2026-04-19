@@ -472,7 +472,10 @@ function ReviewDialog({
                         variant="ghost"
                         className="ml-auto h-6 text-xs"
                         onClick={() => {
-                          setGrade(aiReview.score.toString());
+                          const s = aiReview.score;
+                          const suggested: LetterGrade =
+                            s >= 95 ? "A+" : s >= 75 ? "A" : s >= 55 ? "B" : "C";
+                          setLetter(suggested);
                           setFeedback(aiReview.comments);
                         }}
                       >
