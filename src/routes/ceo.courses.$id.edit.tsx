@@ -213,6 +213,7 @@ function CourseEditor() {
       return;
     }
     setCourse(c);
+    setMetaBaseline({ title: c.title, description: c.description });
     const lessonsBySection = new Map<string, Lesson[]>();
     for (const l of lessons ?? []) {
       const arr = lessonsBySection.get(l.section_id) ?? [];
