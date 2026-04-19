@@ -1341,19 +1341,11 @@ function AddLessonDialog({
 
 function LessonRow({
   lesson,
-  isFirst,
-  isLast,
-  onMoveUp,
-  onMoveDown,
   onUpdate,
   onDelete,
   courseId,
 }: {
   lesson: Lesson;
-  isFirst: boolean;
-  isLast: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   onUpdate: (l: Lesson) => void;
   onDelete: () => void;
   courseId: string;
@@ -1361,9 +1353,32 @@ function LessonRow({
   const [open, setOpen] = React.useState(false);
   const Icon = LESSON_ICONS[lesson.type];
 
+  const sortable = useSortable({
+    id: lesson.id,
+    data: { kind: "lesson", lesson },
+  });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.4 : 1,
+  };
+
   return (
     <>
-      <div className="flex items-center gap-2 rounded-md border bg-background p-2">
+      <div
+        ref={sortable.setNodeRef}
+        style={style}
+        className="flex items-center gap-2 rounded-md border bg-background p-2"
+      >
+        <button
+          type="button"
+          {...sortable.attributes}
+          {...sortable.listeners}
+          className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+          aria-label="Drag lesson"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
         <Icon className="h-4 w-4 text-accent" />
         <button
           className="flex-1 text-left text-sm hover:underline"
@@ -1374,18 +1389,6 @@ function LessonRow({
         <Badge variant="outline" className="text-xs capitalize">
           {lesson.type}
         </Badge>
-        <Button size="icon" variant="ghost" className="h-7 w-7" disabled={isFirst} onClick={onMoveUp}>
-          <ChevronUp className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          disabled={isLast}
-          onClick={onMoveDown}
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </Button>
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onDelete}>
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
