@@ -59,6 +59,7 @@ import {
   DragStartEvent,
   PointerSensor,
   closestCenter,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
