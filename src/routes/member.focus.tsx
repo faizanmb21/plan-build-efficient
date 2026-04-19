@@ -163,6 +163,38 @@ function FocusPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Camera className="h-5 w-5 text-primary" /> Check-in photo
+          </CardTitle>
+          <CardDescription>
+            Upload a quick selfie as proof of attendance. Your incharge and CEO will see it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <input
+            ref={checkinRef}
+            type="file"
+            accept="image/*"
+            capture="user"
+            className="hidden"
+            onChange={onCheckinPhoto}
+          />
+          <Button
+            onClick={() => checkinRef.current?.click()}
+            disabled={uploadingCheckin}
+            className="gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            {uploadingCheckin ? "Uploading…" : "Upload check-in photo"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            On mobile, this opens the camera. On desktop, pick an image file (max 8MB).
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
