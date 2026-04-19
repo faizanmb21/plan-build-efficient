@@ -335,6 +335,44 @@ function useSignedUrl(bucket: string, path: string | undefined) {
   return url;
 }
 
+/**
+ * Video element that prevents fast-forwarding past the furthest point already watched.
+ * Rewinding is allowed. Only works for HTMLVideoElement (uploaded files / direct .mp4).
+ */
+function NoSeekVideo({ src }: { src: string }) {
+  const ref = React.useRef<HTMLVideoElement | null>(null);
+  const maxWatched = React.useRef(0);
+  const seekedToast = React.useRef(0);
+
+  return (
+    <video
+      ref={ref}
+      key={src}
+      src={src}
+      controls
+      controlsList="nodownload"
+      onContextMenu={(e) => e.preventDefault()}
+      onTimeUpdate={(e) => {
+        const t = e.currentTarget.currentTime;
+        if (t > maxWatched.current) maxWatched.current = t;
+      }}
+      onSeeking={(e) => {
+        const v = e.currentTarget;
+        // Allow a small buffer (1.5s) so natural buffering doesn't trigger a snap-back
+        if (v.currentTime > maxWatched.current + 1.5) {
+          v.currentTime = maxWatched.current;
+          const now = Date.now();
+          if (now - seekedToast.current > 3000) {
+            seekedToast.current = now;
+            toast("You can't skip ahead — only rewind is allowed.");
+          }
+        }
+      }}
+      className="aspect-video w-full rounded-md bg-black"
+    />
+  );
+}
+
 function VideoPlayer({ path, url }: { path?: string; url?: string }) {
   const signed = useSignedUrl("course-content", path);
 
@@ -347,14 +385,7 @@ function VideoPlayer({ path, url }: { path?: string; url?: string }) {
       );
     }
     if (parsed.provider === "direct") {
-      return (
-        <video
-          key={parsed.embedUrl}
-          src={parsed.embedUrl}
-          controls
-          className="aspect-video w-full rounded-md bg-black"
-        />
-      );
+      return <NoSeekVideo src={parsed.embedUrl} />;
     }
     return (
       <iframe
@@ -370,14 +401,7 @@ function VideoPlayer({ path, url }: { path?: string; url?: string }) {
 
   if (!path) return <EmptyMedia label="No video added yet" />;
   if (!signed) return <div className="aspect-video w-full animate-pulse rounded-md bg-muted" />;
-  return (
-    <video
-      key={signed}
-      src={signed}
-      controls
-      className="aspect-video w-full rounded-md bg-black"
-    />
-  );
+  return <NoSeekVideo src={signed} />;
 }
 
 function PdfViewer({ path }: { path?: string }) {
