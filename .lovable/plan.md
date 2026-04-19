@@ -1,45 +1,61 @@
 
-Goal: make every active franchise card reliably open its detail page, while keeping archive/delete actions working and preserving the “Click for more details” hover feedback.
+Goal: make franchise cards reliably open the franchise detail page with all member details.
 
-1. Fix the card click architecture on `src/routes/ceo.franchises.tsx`
-- Replace the current clickable `<div role="button" ... onClick={navigate}>` wrapper with a real TanStack `<Link>`.
-- Use the typed route path:
-  - `to="/ceo/franchises/$id"`
-  - `params={{ id: f.id }}`
-  - `preload="intent"` for faster feeling navigation.
-- Keep archived cards non-clickable.
+What’s actually going wrong
+- The URL is changing to `/ceo/franchises/$id`, but the detail view is not rendering properly.
+- The main cause is route structure: `src/routes/ceo.franchises.tsx` is currently acting like a full page, while `src/routes/ceo.franchises.$id.tsx` is registered as its child route.
+- In TanStack Router, a parent route with child routes should be a layout route that renders `<Outlet />`. Right now the franchises route renders the list directly and does not provide a proper child-rendering structure.
+- The console error during link preload (`Cannot read properties of undefined (reading '_nonReactive')`) is consistent with the current broken parent/child route setup.
+- That’s why card clicks feel broken: the link/preload starts, the URL can change, but the detail route does not mount cleanly.
 
-2. Remove the brittle nested-interaction setup
-- The current structure mixes a click-wrapper with inner buttons (`Archive`, `Restore`, `Delete`) and manual `stopPropagation()`.
-- Refactor so the clickable area is semantic and predictable:
-  - Make the main card body the link.
-  - Keep action buttons in a separate footer/container outside the link for active cards.
-- This avoids click conflicts and makes hover/focus states consistent.
+Implementation plan
+1. Convert `src/routes/ceo.franchises.tsx` into a layout route
+- Keep the route path `/ceo/franchises`.
+- Change its component to render an `<Outlet />` instead of the franchise list directly.
+- This makes it the proper parent for the detail route `/ceo/franchises/$id`.
 
-3. Restore clear hover and focus feedback
-- Apply the hover classes directly on the clickable `Link` + card surface so the whole card visibly responds.
-- Ensure the “Click for more details” row animates from the same `group` parent.
-- Add keyboard-visible focus ring and keep the cursor pointer on the actual clickable surface.
+2. Move the current franchise list page into a new index child route
+- Create `src/routes/ceo.franchises.index.tsx`.
+- Move the existing Franchises list UI and logic there:
+  - loading franchises
+  - invite/franchise dialogs
+  - archive/restore/delete actions
+  - card hover states
+  - clickable “Create your first one”
+- This preserves `/ceo/franchises` as the overview page, but now in the correct TanStack route shape.
 
-4. Keep the detail page as the destination for all franchise details
-- The detail route already exists in `src/routes/ceo.franchises.$id.tsx`.
-- Preserve the current detailed content there:
+3. Keep the detail page as the child detail route
+- Keep `src/routes/ceo.franchises.$id.tsx` as the destination for card clicks.
+- Preserve the current detail content:
   - franchise header
   - incharge
   - member list
-  - lesson stats (`coursesStarted`, `coursesCompleted`, `lastActive`)
-- If needed, tighten loading/not-found handling so navigation feels more intentional.
+  - member stats (`coursesStarted`, `coursesCompleted`, `lastActive`)
+  - mastery chart
+- Add small resilience cleanup if needed so missing/invalid franchises show a clear not-found state.
 
-5. End-to-end verification after implementation
-- Test active franchise card click from CEO → Franchises list.
-- Confirm the detail page opens for multiple franchises.
-- Confirm archive/delete buttons still work without navigating.
-- Confirm hover state appears across the clickable card and “Click for more details” animates.
-- Confirm keyboard Enter/Space behavior still works if we keep a non-link fallback anywhere.
+4. Keep card navigation semantic and conflict-free
+- Keep the franchise card body as a real `<Link>` to `/ceo/franchises/$id`.
+- Keep action buttons outside the link so Archive/Restore/Delete do not interfere with navigation.
+- Preserve hover/focus states on the clickable card body, including the “Click for more details” feedback.
+
+5. Verify end-to-end after the refactor
+- Open `/ceo/franchises` and confirm the overview list still renders.
+- Click multiple active franchise cards and confirm each opens its own detail page.
+- Confirm the detail page shows all member details and stats.
+- Confirm archive/delete actions still work without navigating.
+- Confirm hover/focus styles still appear on the clickable area.
+- Confirm the preload error is gone when hovering/clicking cards.
 
 Technical details
-- Likely root cause: the current card uses a non-semantic clickable wrapper (`div` + `useNavigate`) around nested interactive controls. That pattern is fragile and can fail intermittently.
-- Best fix: use TanStack Router’s `<Link>` for navigation instead of programmatic `navigate()` on a wrapper.
-- Files to update:
-  - `src/routes/ceo.franchises.tsx` — primary fix
-  - optionally minor polish in `src/routes/ceo.franchises.$id.tsx` if loading/error UX needs cleanup
+- Best-practice TanStack structure here is:
+```text
+/ceo/franchises            -> layout route with <Outlet />
+/ceo/franchises/           -> index route (overview list)
+/ceo/franchises/$id        -> detail route
+```
+- Important files to update:
+  - `src/routes/ceo.franchises.tsx` — convert to layout
+  - `src/routes/ceo.franchises.index.tsx` — new overview page
+  - `src/routes/ceo.franchises.$id.tsx` — keep detail page, optionally polish loading/not-found
+- Do not manually edit `src/routeTree.gen.ts`; it should regenerate from the file-based routes.
