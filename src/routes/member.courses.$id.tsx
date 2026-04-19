@@ -275,6 +275,10 @@ function LessonView({
   onSubmissionSaved: () => void;
   userId: string;
 }) {
+  const hasAssignment =
+    (lesson.type === "video" || lesson.type === "pdf" || lesson.type === "quiz") &&
+    !!lesson.content?.assignment?.brief;
+
   return (
     <Card>
       <CardHeader>
@@ -288,7 +292,13 @@ function LessonView({
           <VideoPlayer path={lesson.content?.path} url={lesson.content?.url} />
         )}
         {lesson.type === "pdf" && <PdfViewer path={lesson.content?.path} />}
-        {lesson.type === "quiz" && <QuizRunner content={lesson.content} onPass={onComplete} done={done} />}
+        {lesson.type === "quiz" && (
+          <QuizRunner
+            content={lesson.content}
+            onPass={hasAssignment ? () => {} : onComplete}
+            done={done}
+          />
+        )}
         {lesson.type === "practical" && (
           <PracticalSubmit
             lessonId={lesson.id}
@@ -301,7 +311,19 @@ function LessonView({
           />
         )}
 
-        {(lesson.type === "video" || lesson.type === "pdf") && (
+        {hasAssignment && (
+          <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">Assignment required to complete this lesson</p>
+            <PracticalSubmit
+              lessonId={lesson.id}
+              brief={lesson.content.assignment.brief}
+              userId={userId}
+              onSubmitted={onSubmissionSaved}
+            />
+          </div>
+        )}
+
+        {(lesson.type === "video" || lesson.type === "pdf") && !hasAssignment && (
           <div className="flex justify-end">
             <Button onClick={onComplete} disabled={done} size="sm">
               {done ? "Completed" : "Mark as completed"}
