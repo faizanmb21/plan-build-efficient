@@ -150,7 +150,7 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
   }, []);
 
   const start = React.useCallback(
-    async (askScreen: boolean) => {
+    async () => {
       if (!userId) {
         toast.error("Sign in first");
         return;
@@ -164,29 +164,32 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
           video: { width: 640, height: 480 },
           audio: false,
         });
-      } catch {
-        toast.error("Webcam permission denied — required to clock in.");
+      } catch (e) {
+        console.error("webcam failed", e);
+        toast.error("Webcam access required. Allow camera in your browser, then try again.");
         return;
       }
       webcamStream.current = cam;
 
-      // 2. Optional screen
+      // 2. Screen share (also mandatory)
       let scr: MediaStream | null = null;
-      if (askScreen) {
-        try {
-          scr = await (navigator.mediaDevices as MediaDevices & {
-            getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
-          }).getDisplayMedia({ video: true, audio: false });
-          screenStream.current = scr;
-          // If user stops the share via the browser banner, just clear it
-          scr.getVideoTracks()[0]?.addEventListener("ended", () => {
-            screenStream.current = null;
-            setState((s) => ({ ...s, screenReady: false }));
-          });
-        } catch {
-          // Screen share is optional — silently continue
-        }
+      try {
+        scr = await (navigator.mediaDevices as MediaDevices & {
+          getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
+        }).getDisplayMedia({ video: true, audio: false });
+      } catch (e) {
+        console.error("screen share failed", e);
+        cam.getTracks().forEach((t) => t.stop());
+        webcamStream.current = null;
+        toast.error("Screen share required. Pick your entire screen when prompted, then try again.");
+        return;
       }
+      screenStream.current = scr;
+      scr.getVideoTracks()[0]?.addEventListener("ended", () => {
+        // If user stops sharing mid-session, auto clock out
+        toast("Screen share ended — clocking out.");
+        stop();
+      });
 
       // 3. Create session row
       const { data: sess, error } = await supabase
