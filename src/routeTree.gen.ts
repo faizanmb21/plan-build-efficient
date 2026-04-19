@@ -28,6 +28,7 @@ import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
 import { Route as CeoAttendanceRouteImport } from './routes/ceo.attendance'
 import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
+import { Route as CeoFranchisesIndexRouteImport } from './routes/ceo.franchises.index'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
 import { Route as MemberCoursesIdRouteImport } from './routes/member.courses.$id'
 import { Route as CeoFranchisesIdRouteImport } from './routes/ceo.franchises.$id'
@@ -128,6 +129,11 @@ const CeoAssignRoute = CeoAssignRouteImport.update({
   path: '/assign',
   getParentRoute: () => CeoRoute,
 } as any)
+const CeoFranchisesIndexRoute = CeoFranchisesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CeoFranchisesRoute,
+} as any)
 const CeoCoursesIndexRoute = CeoCoursesIndexRouteImport.update({
   id: '/courses/',
   path: '/courses/',
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
+  '/ceo/franchises/': typeof CeoFranchisesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRoutesByTo {
@@ -181,7 +188,6 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
-  '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -194,6 +200,7 @@ export interface FileRoutesByTo {
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses': typeof CeoCoursesIndexRoute
+  '/ceo/franchises': typeof CeoFranchisesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRoutesById {
@@ -220,6 +227,7 @@ export interface FileRoutesById {
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
+  '/ceo/franchises/': typeof CeoFranchisesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
 }
 export interface FileRouteTypes {
@@ -247,6 +255,7 @@ export interface FileRouteTypes {
     | '/ceo/franchises/$id'
     | '/member/courses/$id'
     | '/ceo/courses/'
+    | '/ceo/franchises/'
     | '/ceo/courses/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -256,7 +265,6 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/attendance'
-    | '/ceo/franchises'
     | '/ceo/seed'
     | '/incharge/attendance'
     | '/incharge/members'
@@ -269,6 +277,7 @@ export interface FileRouteTypes {
     | '/ceo/franchises/$id'
     | '/member/courses/$id'
     | '/ceo/courses'
+    | '/ceo/franchises'
     | '/ceo/courses/$id/edit'
   id:
     | '__root__'
@@ -294,6 +303,7 @@ export interface FileRouteTypes {
     | '/ceo/franchises/$id'
     | '/member/courses/$id'
     | '/ceo/courses/'
+    | '/ceo/franchises/'
     | '/ceo/courses/$id/edit'
   fileRoutesById: FileRoutesById
 }
@@ -443,6 +453,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoAssignRouteImport
       parentRoute: typeof CeoRoute
     }
+    '/ceo/franchises/': {
+      id: '/ceo/franchises/'
+      path: '/'
+      fullPath: '/ceo/franchises/'
+      preLoaderRoute: typeof CeoFranchisesIndexRouteImport
+      parentRoute: typeof CeoFranchisesRoute
+    }
     '/ceo/courses/': {
       id: '/ceo/courses/'
       path: '/courses'
@@ -476,10 +493,12 @@ declare module '@tanstack/react-router' {
 
 interface CeoFranchisesRouteChildren {
   CeoFranchisesIdRoute: typeof CeoFranchisesIdRoute
+  CeoFranchisesIndexRoute: typeof CeoFranchisesIndexRoute
 }
 
 const CeoFranchisesRouteChildren: CeoFranchisesRouteChildren = {
   CeoFranchisesIdRoute: CeoFranchisesIdRoute,
+  CeoFranchisesIndexRoute: CeoFranchisesIndexRoute,
 }
 
 const CeoFranchisesRouteWithChildren = CeoFranchisesRoute._addFileChildren(
