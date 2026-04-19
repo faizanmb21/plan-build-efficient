@@ -561,25 +561,51 @@ function CourseEditor() {
               No sections yet. Add your first section to start building lessons.
             </p>
           )}
-          {sections.map((section, idx) => (
-            <SectionCard
-              key={section.id}
-              section={section}
-              isFirst={idx === 0}
-              isLast={idx === sections.length - 1}
-              onMoveUp={() => moveSection(idx, -1)}
-              onMoveDown={() => moveSection(idx, 1)}
-              onRename={(t) => renameSection(section.id, t)}
-              onDelete={() => deleteSection(section.id)}
-              onAddLesson={(type, title, content, duration) =>
-                addLesson(section.id, type, title, content, duration)
-              }
-              onUpdateLesson={updateLesson}
-              onDeleteLesson={deleteLesson}
-              onMoveLesson={(i, dir) => moveLesson(section.id, i, dir)}
-              courseId={courseId}
-            />
-          ))}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+          >
+            <SortableContext
+              items={sections.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-3">
+                {sections.map((section) => (
+                  <SectionCard
+                    key={section.id}
+                    section={section}
+                    onRename={(t) => renameSection(section.id, t)}
+                    onDelete={() => deleteSection(section.id)}
+                    onAddLesson={(type, title, content, duration) =>
+                      addLesson(section.id, type, title, content, duration)
+                    }
+                    onUpdateLesson={updateLesson}
+                    onDeleteLesson={deleteLesson}
+                    courseId={courseId}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+            <DragOverlay>
+              {activeDrag?.kind === "section" && (
+                <div className="rounded-lg border bg-background p-3 shadow-lg">
+                  <span className="font-medium">{activeDrag.title}</span>
+                </div>
+              )}
+              {activeDrag?.kind === "lesson" &&
+                (() => {
+                  const Icon = LESSON_ICONS[activeDrag.type];
+                  return (
+                    <div className="flex items-center gap-2 rounded-md border bg-background p-2 shadow-lg">
+                      <Icon className="h-4 w-4 text-accent" />
+                      <span className="text-sm">{activeDrag.title}</span>
+                    </div>
+                  );
+                })()}
+            </DragOverlay>
+          </DndContext>
         </CardContent>
       </Card>
 
