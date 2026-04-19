@@ -283,7 +283,9 @@ function LessonView({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {lesson.type === "video" && <VideoPlayer path={lesson.content?.path} />}
+        {lesson.type === "video" && (
+          <VideoPlayer path={lesson.content?.path} url={lesson.content?.url} />
+        )}
         {lesson.type === "pdf" && <PdfViewer path={lesson.content?.path} />}
         {lesson.type === "quiz" && <QuizRunner content={lesson.content} onPass={onComplete} done={done} />}
         {lesson.type === "practical" && (
