@@ -36,11 +36,12 @@ import {
   formatDuration,
   type PlaylistVideo,
 } from "@/lib/youtube-playlist";
-import { ListVideo, Loader2, GripVertical } from "lucide-react";
 import {
+  ListVideo,
+  Loader2,
+  GripVertical,
   ArrowLeft,
   ChevronDown,
-  ChevronUp,
   Plus,
   Trash2,
   Upload,
@@ -49,7 +50,16 @@ import {
   HelpCircle,
   ClipboardCheck,
   Save,
+  MoreVertical,
+  Check,
+  Pencil,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
 import {
