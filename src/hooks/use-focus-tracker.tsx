@@ -157,41 +157,24 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
       }
       if (sessionRef.current) return;
 
-      // 1. Webcam (mandatory)
-      let cam: MediaStream | null = null;
-      try {
-        cam = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480 },
-          audio: false,
-        });
-      } catch (e) {
-        console.error("webcam failed", e);
-        toast.error("Webcam access required. Allow camera in your browser, then try again.");
-        return;
-      }
-      webcamStream.current = cam;
-
-      // 2. Screen share (also mandatory)
-      let scr: MediaStream | null = null;
+      // Screen share (mandatory) — must be called directly from the click handler
+      let scr: MediaStream;
       try {
         scr = await (navigator.mediaDevices as MediaDevices & {
           getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
         }).getDisplayMedia({ video: true, audio: false });
       } catch (e) {
         console.error("screen share failed", e);
-        cam.getTracks().forEach((t) => t.stop());
-        webcamStream.current = null;
-        toast.error("Screen share required. Pick your entire screen when prompted, then try again.");
+        toast.error("Screen share required. Pick a screen/window when prompted, then try again.");
         return;
       }
       screenStream.current = scr;
       scr.getVideoTracks()[0]?.addEventListener("ended", () => {
-        // If user stops sharing mid-session, auto clock out
         toast("Screen share ended — clocking out.");
         stop();
       });
 
-      // 3. Create session row
+      // Create session row
       const { data: sess, error } = await supabase
         .from("study_sessions")
         .insert({
@@ -200,15 +183,15 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
           lesson_id: lessonId,
           client_info: {
             ua: navigator.userAgent,
-            screen_share: !!scr,
+            screen_share: true,
           },
         })
         .select("id")
         .single();
       if (error || !sess) {
         toast.error("Could not start session: " + (error?.message ?? ""));
-        cam.getTracks().forEach((t) => t.stop());
-        scr?.getTracks().forEach((t) => t.stop());
+        scr.getTracks().forEach((t) => t.stop());
+        screenStream.current = null;
         return;
       }
       sessionRef.current = sess.id;
@@ -221,11 +204,11 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
         idleSeconds: 0,
         blurCount: 0,
         lastSnapshotAt: null,
-        webcamReady: true,
-        screenReady: !!scr,
+        webcamReady: false,
+        screenReady: true,
       });
 
-      // 4. Heartbeat
+      // Heartbeat
       hbInterval.current = window.setInterval(async () => {
         const visible = document.visibilityState === "visible";
         const idle = Date.now() - lastActivity.current > IDLE_THRESHOLD_MS;
@@ -240,7 +223,6 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
 
         const sid = sessionRef.current;
         if (!sid) return;
-        // Read current counters from a fresh state snapshot
         try {
           await supabase.rpc("close_stale_sessions");
         } catch {
@@ -262,24 +244,17 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
           })
           .eq("id", sid);
 
-        // Auto clock-out after 10 min idle
         if (Date.now() - lastActivity.current > 10 * 60 * 1000) {
           toast("Auto clocked out — 10 min inactivity");
           stop();
         }
       }, HEARTBEAT_MS);
 
-      // 5. Snapshot intervals
-      if (webcamIntervalSec > 0 && cam) {
-        // first snapshot after 30s, then on interval
-        window.setTimeout(() => captureFromStream(cam!, "webcam"), 30_000);
-        camInterval.current = window.setInterval(
-          () => captureFromStream(cam!, "webcam"),
-          webcamIntervalSec * 1000,
-        );
-      }
-      if (screenIntervalSec > 0 && scr) {
-        window.setTimeout(() => captureFromStream(scr!, "screen"), 30_000);
+      // Screen snapshot interval
+      if (screenIntervalSec > 0) {
+        window.setTimeout(() => {
+          if (screenStream.current) captureFromStream(screenStream.current, "screen");
+        }, 30_000);
         scrInterval.current = window.setInterval(
           () => screenStream.current && captureFromStream(screenStream.current, "screen"),
           screenIntervalSec * 1000,
