@@ -53,7 +53,6 @@ function InchargeGradesHub() {
   const [profiles, setProfiles] = React.useState<Profile[]>([]);
   const [franchise, setFranchise] = React.useState<Franchise | null>(null);
   const [lessonMap, setLessonMap] = React.useState<Map<string, LessonShape>>(new Map());
-  const [memberRoleIds, setMemberRoleIds] = React.useState<Set<string>>(new Set());
 
   const [search, setSearch] = React.useState("");
   const [drillMember, setDrillMember] = React.useState<Profile | null>(null);
@@ -72,13 +71,12 @@ function InchargeGradesHub() {
         return;
       }
 
-      const [{ data: fr }, { data: profs }, { data: roles }] = await Promise.all([
+      const [{ data: fr }, { data: profs }] = await Promise.all([
         supabase.from("franchises").select("id,name").eq("id", franchiseId).maybeSingle(),
         supabase
           .from("profiles")
           .select("id,full_name,franchise_id")
           .eq("franchise_id", franchiseId),
-        supabase.from("user_roles").select("user_id,role").eq("role", "member"),
       ]);
 
       const profIds = (profs ?? []).map((p) => p.id);
@@ -107,7 +105,6 @@ function InchargeGradesHub() {
       setProfiles((profs ?? []) as Profile[]);
       setSubmissions((subs ?? []) as GradedRow[]);
       setLessonMap(lm);
-      setMemberRoleIds(new Set((roles ?? []).map((r) => r.user_id)));
       setLoading(false);
     })();
   }, [user]);
@@ -123,7 +120,9 @@ function InchargeGradesHub() {
   }, [submissions]);
 
   const memberRows = React.useMemo(() => {
-    const members = profiles.filter((p) => memberRoleIds.has(p.id));
+    // Treat every profile in the franchise (other than the incharge themselves) as a member.
+    // We can't filter by user_roles here because RLS only lets the incharge read their OWN role.
+    const members = profiles.filter((p) => p.id !== user?.id);
     return members
       .map((p) => {
         const subs = byUser.get(p.id) ?? [];
@@ -138,7 +137,7 @@ function InchargeGradesHub() {
         return true;
       })
       .sort((a, b) => b.agg.averagePercent - a.agg.averagePercent);
-  }, [profiles, memberRoleIds, byUser, search]);
+  }, [profiles, user?.id, byUser, search]);
 
   const courseRows = React.useMemo(() => {
     const map = new Map<
@@ -167,9 +166,9 @@ function InchargeGradesHub() {
 
   const totals = React.useMemo(() => {
     const overall = aggregateGrades(submissions);
-    const totalMembers = profiles.filter((p) => memberRoleIds.has(p.id)).length;
+    const totalMembers = profiles.filter((p) => p.id !== user?.id).length;
     return { ...overall, totalMembers };
-  }, [submissions, profiles, memberRoleIds]);
+  }, [submissions, profiles, user?.id]);
 
   function exportMembersCsv() {
     const csv = toCsv(

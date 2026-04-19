@@ -547,6 +547,13 @@ export type Database = {
       archive_franchise: { Args: { _franchise_id: string }; Returns: Json }
       claim_first_ceo: { Args: never; Returns: boolean }
       close_stale_sessions: { Args: never; Returns: number }
+      get_franchise_member_emails: {
+        Args: { _franchise_id: string }
+        Returns: {
+          email: string
+          user_id: string
+        }[]
+      }
       get_user_franchise: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {

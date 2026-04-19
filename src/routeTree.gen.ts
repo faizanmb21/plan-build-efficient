@@ -26,6 +26,7 @@ import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
 import { Route as InchargeMembersRouteImport } from './routes/incharge.members'
 import { Route as InchargeGradesRouteImport } from './routes/incharge.grades'
 import { Route as InchargeAttendanceRouteImport } from './routes/incharge.attendance'
+import { Route as InchargeAssignRouteImport } from './routes/incharge.assign'
 import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
 import { Route as CeoGradesRouteImport } from './routes/ceo.grades'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
@@ -123,6 +124,11 @@ const InchargeAttendanceRoute = InchargeAttendanceRouteImport.update({
   path: '/attendance',
   getParentRoute: () => InchargeRoute,
 } as any)
+const InchargeAssignRoute = InchargeAssignRouteImport.update({
+  id: '/assign',
+  path: '/assign',
+  getParentRoute: () => InchargeRoute,
+} as any)
 const CeoSeedRoute = CeoSeedRouteImport.update({
   id: '/seed',
   path: '/seed',
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
   '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
+  '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -218,6 +225,7 @@ export interface FileRoutesByTo {
   '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
+  '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
   '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
+  '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/ceo/franchises'
     | '/ceo/grades'
     | '/ceo/seed'
+    | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
     | '/incharge/members'
@@ -307,6 +317,7 @@ export interface FileRouteTypes {
     | '/ceo/attendance'
     | '/ceo/grades'
     | '/ceo/seed'
+    | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
     | '/incharge/members'
@@ -337,6 +348,7 @@ export interface FileRouteTypes {
     | '/ceo/franchises'
     | '/ceo/grades'
     | '/ceo/seed'
+    | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
     | '/incharge/members'
@@ -487,6 +499,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InchargeAttendanceRouteImport
       parentRoute: typeof InchargeRoute
     }
+    '/incharge/assign': {
+      id: '/incharge/assign'
+      path: '/assign'
+      fullPath: '/incharge/assign'
+      preLoaderRoute: typeof InchargeAssignRouteImport
+      parentRoute: typeof InchargeRoute
+    }
     '/ceo/seed': {
       id: '/ceo/seed'
       path: '/seed'
@@ -618,6 +637,7 @@ const CeoRouteChildren: CeoRouteChildren = {
 const CeoRouteWithChildren = CeoRoute._addFileChildren(CeoRouteChildren)
 
 interface InchargeRouteChildren {
+  InchargeAssignRoute: typeof InchargeAssignRoute
   InchargeAttendanceRoute: typeof InchargeAttendanceRoute
   InchargeGradesRoute: typeof InchargeGradesRoute
   InchargeMembersRoute: typeof InchargeMembersRoute
@@ -626,6 +646,7 @@ interface InchargeRouteChildren {
 }
 
 const InchargeRouteChildren: InchargeRouteChildren = {
+  InchargeAssignRoute: InchargeAssignRoute,
   InchargeAttendanceRoute: InchargeAttendanceRoute,
   InchargeGradesRoute: InchargeGradesRoute,
   InchargeMembersRoute: InchargeMembersRoute,
