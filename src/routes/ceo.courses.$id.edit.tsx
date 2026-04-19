@@ -679,6 +679,7 @@ function SectionCard({
   onUpdateLesson,
   onDeleteLesson,
   courseId,
+  onAutoThumbnail,
 }: {
   section: Section;
   onRename: (t: string) => void;
@@ -692,6 +693,7 @@ function SectionCard({
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
   courseId: string;
+  onAutoThumbnail?: (url: string | null | undefined) => void | Promise<void>;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [title, setTitle] = React.useState(section.title);
