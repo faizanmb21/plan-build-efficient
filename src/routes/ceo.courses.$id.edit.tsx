@@ -531,7 +531,7 @@ function SectionCard({
     title: string,
     content?: any,
     duration?: number | null,
-  ) => void;
+  ) => Promise<void> | void;
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
   onMoveLesson: (idx: number, dir: -1 | 1) => void;
@@ -620,7 +620,7 @@ function AddLessonDialog({
     title: string,
     content?: any,
     duration?: number | null,
-  ) => void;
+  ) => Promise<void> | void;
   courseId: string;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -628,7 +628,7 @@ function AddLessonDialog({
   const [title, setTitle] = React.useState("");
   const [videoUrl, setVideoUrl] = React.useState("");
   const [videoPath, setVideoPath] = React.useState<string | null>(null);
-  const [videoSource, setVideoSource] = React.useState<"link" | "upload">("link");
+  const [videoSource, setVideoSource] = React.useState<"link" | "upload" | "playlist">("link");
   const [duration, setDuration] = React.useState<number | null>(null);
   const [pdfUrl, setPdfUrl] = React.useState("");
   const [pdfPath, setPdfPath] = React.useState<string | null>(null);
