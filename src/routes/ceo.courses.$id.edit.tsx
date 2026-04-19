@@ -579,17 +579,27 @@ function CourseEditor() {
           </Link>
         </Button>
         <div className="flex items-center gap-3">
-          <Badge variant={course.status === "published" ? "default" : "secondary"}>
-            {course.status}
-          </Badge>
-          <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5">
-            <span className="text-xs text-muted-foreground">Draft</span>
+          {statusSavedFlash && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Check className="h-3.5 w-3.5 text-accent" /> Saved
+            </span>
+          )}
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 backdrop-blur-md">
+            <span
+              className={`text-xs ${course.status === "draft" ? "font-medium text-foreground" : "text-muted-foreground"}`}
+            >
+              Draft
+            </span>
             <Switch
               checked={course.status === "published"}
               onCheckedChange={(v) => toggleStatus(v ? "published" : "draft")}
               aria-label="Toggle published status"
             />
-            <span className="text-xs text-muted-foreground">Published</span>
+            <span
+              className={`text-xs ${course.status === "published" ? "font-medium text-foreground" : "text-muted-foreground"}`}
+            >
+              Published
+            </span>
           </div>
         </div>
       </div>
