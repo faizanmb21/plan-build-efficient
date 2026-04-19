@@ -38,6 +38,7 @@ interface SubmissionRow {
   status: SubmissionStatus;
   file_url: string;
   grade: number | null;
+  letter_grade: string | null;
   feedback: string | null;
   created_at: string;
   reviewed_at: string | null;
@@ -47,6 +48,14 @@ interface SubmissionRow {
   course_title: string;
   member_name: string;
 }
+
+type LetterGrade = "A+" | "A" | "B" | "C";
+const LETTER_GRADE_MAP: Record<LetterGrade, { numeric: number; status: SubmissionStatus; label: string }> = {
+  "A+": { numeric: 100, status: "approved", label: "A+ — Exceptional (100%)" },
+  A: { numeric: 80, status: "approved", label: "A — Pass (80%)" },
+  B: { numeric: 60, status: "approved", label: "B — Pass (60%)" },
+  C: { numeric: 0, status: "revision", label: "C — Redo required" },
+};
 
 const STATUS_META: Record<
   SubmissionStatus,
@@ -68,7 +77,7 @@ function ReviewsPage() {
     setLoading(true);
     const { data: subs, error } = await supabase
       .from("submissions")
-      .select("id,status,file_url,grade,feedback,created_at,reviewed_at,user_id,lesson_id")
+      .select("id,status,file_url,grade,letter_grade,feedback,created_at,reviewed_at,user_id,lesson_id")
       .order("created_at", { ascending: false });
 
     if (error) {
