@@ -598,7 +598,7 @@ function SectionCard({
             courseId={courseId}
           />
         ))}
-        <AddLessonDialog onAdd={onAddLesson} />
+        <AddLessonDialog onAdd={onAddLesson} courseId={courseId} />
       </CollapsibleContent>
     </Collapsible>
   );
@@ -606,6 +606,7 @@ function SectionCard({
 
 function AddLessonDialog({
   onAdd,
+  courseId,
 }: {
   onAdd: (
     type: LessonType,
@@ -613,35 +614,83 @@ function AddLessonDialog({
     content?: any,
     duration?: number | null,
   ) => void;
+  courseId: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState<LessonType>("video");
   const [title, setTitle] = React.useState("");
   const [videoUrl, setVideoUrl] = React.useState("");
+  const [videoPath, setVideoPath] = React.useState<string | null>(null);
+  const [videoSource, setVideoSource] = React.useState<"link" | "upload">("link");
   const [duration, setDuration] = React.useState<number | null>(null);
   const [pdfUrl, setPdfUrl] = React.useState("");
+  const [pdfPath, setPdfPath] = React.useState<string | null>(null);
+  const [pdfSource, setPdfSource] = React.useState<"link" | "upload">("link");
   const [practicalBrief, setPracticalBrief] = React.useState("");
   const [assignmentEnabled, setAssignmentEnabled] = React.useState(false);
   const [assignmentBrief, setAssignmentBrief] = React.useState("");
+  const [assignmentAttachmentPath, setAssignmentAttachmentPath] = React.useState<string | null>(null);
+  const [assignmentAttachmentName, setAssignmentAttachmentName] = React.useState<string | null>(null);
+  const [uploading, setUploading] = React.useState<null | "video" | "pdf" | "assignment">(null);
 
   function reset() {
     setType("video");
     setTitle("");
     setVideoUrl("");
+    setVideoPath(null);
+    setVideoSource("link");
     setDuration(null);
     setPdfUrl("");
+    setPdfPath(null);
+    setPdfSource("link");
     setPracticalBrief("");
     setAssignmentEnabled(false);
     setAssignmentBrief("");
+    setAssignmentAttachmentPath(null);
+    setAssignmentAttachmentName(null);
+  }
+
+  async function uploadToBucket(file: File, prefix: string, kind: "video" | "pdf" | "assignment") {
+    setUploading(kind);
+    const ext = file.name.split(".").pop() ?? "bin";
+    const path = `${prefix}/${courseId}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage
+      .from("course-content")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    setUploading(null);
+    if (error) {
+      toast.error(error.message);
+      return null;
+    }
+    toast.success("Uploaded");
+    return path;
   }
 
   function buildContent(): any {
     const assignment =
       assignmentEnabled && assignmentBrief.trim()
-        ? { assignment: { brief: assignmentBrief.trim() } }
+        ? {
+            assignment: {
+              brief: assignmentBrief.trim(),
+              ...(assignmentAttachmentPath
+                ? {
+                    attachment_path: assignmentAttachmentPath,
+                    attachment_name: assignmentAttachmentName,
+                  }
+                : {}),
+            },
+          }
         : {};
-    if (type === "video") return { url: videoUrl.trim(), source: "link", ...assignment };
-    if (type === "pdf") return { url: pdfUrl.trim(), ...assignment };
+    if (type === "video") {
+      return videoSource === "upload" && videoPath
+        ? { path: videoPath, source: "upload", ...assignment }
+        : { url: videoUrl.trim(), source: "link", ...assignment };
+    }
+    if (type === "pdf") {
+      return pdfSource === "upload" && pdfPath
+        ? { path: pdfPath, source: "upload", ...assignment }
+        : { url: pdfUrl.trim(), source: "link", ...assignment };
+    }
     if (type === "quiz")
       return { questions: [], passing_score: 70, max_attempts: 3, ...assignment };
     return { brief: practicalBrief.trim() };
@@ -700,19 +749,47 @@ function AddLessonDialog({
           {type === "video" && (
             <>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Video URL</label>
-                <UrlAutoFillInput
-                  value={videoUrl}
-                  onChange={setVideoUrl}
-                  onMetadata={(meta) => {
-                    if (meta.title && !title.trim()) setTitle(meta.title);
-                    if (meta.durationSeconds && !duration)
-                      setDuration(Math.round(meta.durationSeconds));
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  YouTube, Vimeo, Loom, Drive, or .mp4. You can also upload a file later by editing the lesson.
-                </p>
+                <label className="text-sm font-medium">Video source</label>
+                <Tabs value={videoSource} onValueChange={(v) => setVideoSource(v as "link" | "upload")}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="link">Paste link</TabsTrigger>
+                    <TabsTrigger value="upload">Upload file</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="link" className="space-y-2 pt-3">
+                    <UrlAutoFillInput
+                      value={videoUrl}
+                      onChange={setVideoUrl}
+                      onMetadata={(meta) => {
+                        if (meta.title && !title.trim()) setTitle(meta.title);
+                        if (meta.durationSeconds && !duration)
+                          setDuration(Math.round(meta.durationSeconds));
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      YouTube, Vimeo, Loom, Drive, or a direct .mp4 link. Click <strong>Auto-fill</strong> to pull title + duration.
+                    </p>
+                  </TabsContent>
+                  <TabsContent value="upload" className="space-y-2 pt-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
+                      <Upload className="h-4 w-4" />
+                      {uploading === "video" ? "Uploading…" : videoPath ? "Replace file" : "Choose video file"}
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const p = await uploadToBucket(f, "videos", "video");
+                          if (p) setVideoPath(p);
+                        }}
+                      />
+                    </label>
+                    {videoPath && (
+                      <p className="break-all text-xs text-muted-foreground">Stored: {videoPath}</p>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Duration (seconds, optional)</label>
@@ -727,12 +804,40 @@ function AddLessonDialog({
 
           {type === "pdf" && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">PDF URL (optional)</label>
-              <Input
-                value={pdfUrl}
-                onChange={(e) => setPdfUrl(e.target.value)}
-                placeholder="Paste a public PDF URL — or upload after creating"
-              />
+              <label className="text-sm font-medium">PDF source</label>
+              <Tabs value={pdfSource} onValueChange={(v) => setPdfSource(v as "link" | "upload")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="link">Paste link</TabsTrigger>
+                  <TabsTrigger value="upload">Upload file</TabsTrigger>
+                </TabsList>
+                <TabsContent value="link" className="space-y-2 pt-3">
+                  <Input
+                    value={pdfUrl}
+                    onChange={(e) => setPdfUrl(e.target.value)}
+                    placeholder="https://… public PDF URL"
+                  />
+                </TabsContent>
+                <TabsContent value="upload" className="space-y-2 pt-3">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
+                    <Upload className="h-4 w-4" />
+                    {uploading === "pdf" ? "Uploading…" : pdfPath ? "Replace file" : "Choose PDF file"}
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        const p = await uploadToBucket(f, "pdfs", "pdf");
+                        if (p) setPdfPath(p);
+                      }}
+                    />
+                  </label>
+                  {pdfPath && (
+                    <p className="break-all text-xs text-muted-foreground">Stored: {pdfPath}</p>
+                  )}
+                </TabsContent>
+              </Tabs>
             </div>
           )}
 
@@ -770,13 +875,59 @@ function AddLessonDialog({
                 />
               </div>
               {assignmentEnabled && (
-                <Textarea
-                  rows={4}
-                  value={assignmentBrief}
-                  onChange={(e) => setAssignmentBrief(e.target.value)}
-                  placeholder="Describe the tech test or project the member must complete and submit."
-                  required
-                />
+                <div className="space-y-2">
+                  <Textarea
+                    rows={4}
+                    value={assignmentBrief}
+                    onChange={(e) => setAssignmentBrief(e.target.value)}
+                    placeholder="Describe the tech test or project the member must complete and submit."
+                    required
+                  />
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Brief attachment (optional)</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
+                        <Upload className="h-4 w-4" />
+                        {uploading === "assignment"
+                          ? "Uploading…"
+                          : assignmentAttachmentPath
+                            ? "Replace file"
+                            : "Attach file (PDF, audio, video, doc…)"}
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            const p = await uploadToBucket(f, "assignments", "assignment");
+                            if (p) {
+                              setAssignmentAttachmentPath(p);
+                              setAssignmentAttachmentName(f.name);
+                            }
+                          }}
+                        />
+                      </label>
+                      {assignmentAttachmentName && (
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <FileText className="h-3.5 w-3.5" />
+                          {assignmentAttachmentName}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => {
+                              setAssignmentAttachmentPath(null);
+                              setAssignmentAttachmentName(null);
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1102,20 +1253,90 @@ function LessonEditorDialog({
                 />
               </div>
               {draft.content?.assignment && (
-                <Textarea
-                  rows={4}
-                  value={draft.content.assignment.brief ?? ""}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      content: {
-                        ...d.content,
-                        assignment: { ...d.content.assignment, brief: e.target.value },
-                      },
-                    }))
-                  }
-                  placeholder="Describe the tech test or project the member must complete and submit."
-                />
+                <div className="space-y-2">
+                  <Textarea
+                    rows={4}
+                    value={draft.content.assignment.brief ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        content: {
+                          ...d.content,
+                          assignment: { ...d.content.assignment, brief: e.target.value },
+                        },
+                      }))
+                    }
+                    placeholder="Describe the tech test or project the member must complete and submit."
+                  />
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Brief attachment (optional)</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
+                        <Upload className="h-4 w-4" />
+                        {uploading
+                          ? "Uploading…"
+                          : draft.content.assignment.attachment_path
+                            ? "Replace file"
+                            : "Attach file (PDF, audio, video, doc…)"}
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            setUploading(true);
+                            const ext = f.name.split(".").pop() ?? "bin";
+                            const path = `assignments/${courseId}/${crypto.randomUUID()}.${ext}`;
+                            const { error } = await supabase.storage
+                              .from("course-content")
+                              .upload(path, f, { upsert: true, contentType: f.type });
+                            setUploading(false);
+                            if (error) {
+                              toast.error(error.message);
+                              return;
+                            }
+                            setDraft((d) => ({
+                              ...d,
+                              content: {
+                                ...d.content,
+                                assignment: {
+                                  ...d.content.assignment,
+                                  attachment_path: path,
+                                  attachment_name: f.name,
+                                },
+                              },
+                            }));
+                            toast.success("Attached — remember to Save");
+                          }}
+                        />
+                      </label>
+                      {draft.content.assignment.attachment_name && (
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <FileText className="h-3.5 w-3.5" />
+                          {draft.content.assignment.attachment_name}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() =>
+                              setDraft((d) => {
+                                const { attachment_path, attachment_name, ...rest } =
+                                  d.content.assignment;
+                                return {
+                                  ...d,
+                                  content: { ...d.content, assignment: rest },
+                                };
+                              })
+                            }
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}
