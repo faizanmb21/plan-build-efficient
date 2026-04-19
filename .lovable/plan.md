@@ -1,57 +1,67 @@
 
-The user wants me to clean up the **course edit page** (`src/routes/ceo.courses.$id.edit.tsx`) UI to feel like Udemy's course editor. They specifically called out:
 
-1. Status is duplicated — there's a "published" badge, a "Draft / Published" toggle, AND a "Published" select dropdown. Three controls for one piece of state.
-2. No clear "Save" affordance for the curriculum/lesson changes (only "Save details" exists for course details).
-3. Wants improvements scoped to the **header + course details + curriculum** area only — not changing the lesson dialogs.
+## Plan: Fix the Incharge portal (4 issues)
 
-Let me check the file structure to plan precisely.
+### Issue 1 — Members page shows no real details
 
-Looking at the screenshot: header has "All courses" + "published" pill + "Draft/Published" toggle. Below, "Course details" card has its own Status dropdown. That's 3 status controls.
+**Cause**: `incharge.members.tsx` only renders `full_name` + `phone`. Email, join date, course progress, and grade summary are missing, so the page feels empty.
 
-For curriculum: sections/lessons currently auto-save on every action (rename, drag, add). That's actually fine — the issue is users *don't know* it auto-saves. Udemy shows subtle "Saved" indicators.
+**Fix**: Enrich the active members card. For each member, show:
+- Avatar + full name + email (from `auth.users` via a small RPC, since we can't read auth directly with RLS)
+- Phone (if present)
+- Join date (`profiles.created_at`)
+- Quick stats: courses assigned, lessons completed, last seen (from `study_sessions.last_heartbeat_at`)
+- "View report" button → opens the existing `MemberGradeReport` dialog (same one used on grades page)
 
-## Plan
+Add a new `SECURITY DEFINER` RPC `get_franchise_member_emails(_franchise_id uuid)` that returns `(user_id, email)` pairs after verifying the caller is the incharge of that franchise (or a CEO). This avoids exposing auth.users broadly.
 
-### 1. Consolidate status into ONE control (header)
-- Remove the "published" badge pill in the header.
-- Remove the "Status" dropdown from the Course details card.
-- Keep ONE control in the header: a clean Draft ↔ Published segmented toggle with a small "Saved" indicator next to it that flashes when status changes.
-- Status changes save instantly (already do) — show toast + inline checkmark.
+### Issue 2 — Grades "By member" tab shows 0 members
 
-### 2. Course details card — clearer save state
-- Remove Status field from the grid; let Title take full width (cleaner, like Udemy).
-- Track a `dirty` flag: enable "Save details" only when Title or Description changed.
-- After save, button becomes "Saved ✓" for 2s, then disabled until next edit.
-- If user navigates away with unsaved changes, show a confirm prompt (`beforeunload`).
+**Root cause** (this is the real bug): `incharge.grades.tsx` builds `memberRoleIds` by querying `user_roles` for `role='member'`. But the RLS policy on `user_roles` is `users read own roles` — an incharge can only read their OWN role. So `memberRoleIds` is always empty for an incharge → `memberRows` filters everyone out → table shows "No members in your franchise yet" and the **Members** summary tile reads **0**.
 
-### 3. Curriculum — Udemy-style polish
-- Add a subtle header next to "Curriculum": auto-save indicator ("All changes saved" with a check, or "Saving…" while a mutation is in flight) — driven by a small mutation counter.
-- Section header improvements:
-  - Click anywhere on the section row (not just the chevron) to expand/collapse.
-  - Lesson count badge stays.
-  - Three-dot menu replacing the standalone trash icon: Rename / Delete (matches Udemy's overflow pattern).
-- Lesson row improvements:
-  - Show duration on the right (e.g. `8:42`) for video lessons — we already store `duration_seconds`.
-  - Three-dot menu: Edit / Delete (replaces inline trash).
-  - Smaller, lighter type icon chip ("Video" / "Quiz" / "Practical") with color coding.
-- Empty section state: "No lessons yet — add your first lesson" with a centered button instead of a bare "Add lesson" button.
-- Sticky "Add section" button at the bottom of the curriculum card so it's always reachable in long courses.
+**Fix**: Two options, picking the simple+correct one:
 
-### 4. Visual polish
-- Tighten card padding, use consistent 1rem gaps.
-- Drag handles fade in only on row hover (less noisy at rest).
-- Section headers get a subtle background tint when expanded so the boundary is clearer.
+- Drop the `user_roles` lookup entirely in `incharge.grades.tsx`. The `profiles` query is already filtered to `franchise_id = caller's franchise` (and incharge RLS only lets them see their franchise's profiles anyway). Treat every profile in their franchise *except themselves* as a member. Update `memberRows` and the `totals.totalMembers` calc accordingly.
 
-### Files touched
-- `src/routes/ceo.courses.$id.edit.tsx` — header restructure, remove Status dropdown, dirty-state tracking, save-state indicator, section/lesson row redesign with overflow menus, sticky add-section button.
+This also fixes the by-pillar "Members graded" column being correct while the by-member tab was empty.
 
-### Out of scope (user said "only the curriculum section" + the header issues they pointed at)
-- AddLessonDialog, LessonEditorDialog, drag-and-drop logic, playlist import flow — all unchanged.
-- Member-side course player — unchanged.
+### Issue 3 — Attendance is completely empty
 
-### Verification
-- Open any course → header shows ONE status toggle, no duplicate badges/dropdowns.
-- Edit title → "Save details" lights up; click → shows "Saved ✓".
-- Add/rename/delete a lesson → "All changes saved" indicator confirms it without a manual save button.
-- Each lesson row shows its duration and an overflow menu with Edit/Delete.
+**Cause**: The demo seeder (`seed_demo_content`) does not insert any `study_sessions` or `attendance_snapshots`. Real members would generate them by clocking in on Focus, but seeded members never have.
+
+**Fix**: Extend `seed_demo_content` to insert ~7 days of synthetic `study_sessions` per member (2-3 sessions/day, varied active/idle seconds, some with `ended_at = null` to simulate "live"), plus a handful of `attendance_snapshots` rows pointing at a placeholder image path. Now the Incharge attendance page and CEO rollup will show realistic numbers immediately after re-running the seeder.
+
+### Issue 4 — Incharge can't assign courses
+
+**Cause**: The `/ceo/assign` page exists but is CEO-only via `RoleGuard`. There's no incharge equivalent.
+
+**Fix**: Add `src/routes/incharge.assign.tsx` — a scoped clone of the CEO assign page that:
+- Lists all **published** courses (read-only, can't create/delete courses)
+- Lets the incharge assign to **a single member of their franchise** or **the entire franchise** (no "Everyone" option)
+- Shows recent assignments scoped to their franchise members only
+- Allows deleting an assignment they made (or any assignment to one of their members)
+
+Add nav entry in `src/routes/incharge.tsx`:
+```
+{ to: "/incharge/assign", label: "Assign courses", icon: Send }
+```
+
+RLS check: The current `assignments` table policies only allow `ceo all assignments` and `users read own assignments`. We need to add:
+- `incharge insert assignments for franchise members` (INSERT WITH CHECK that the target user_id belongs to the incharge's franchise)
+- `incharge read franchise assignments` (already exists ✓)
+- `incharge delete franchise assignments` (DELETE USING franchise membership)
+
+### Files to change
+- `src/routes/incharge.members.tsx` — enriched member cards + report dialog
+- `src/routes/incharge.grades.tsx` — drop the broken `user_roles` filter
+- `src/routes/incharge.tsx` — add "Assign courses" nav item
+- `src/routes/incharge.assign.tsx` — **new** scoped assignment page
+- DB migration — new RPC `get_franchise_member_emails`, two new RLS policies on `assignments`, extended `seed_demo_content` with study sessions
+
+### Verification after build
+1. Log in as `incharge.lahore@irmacademy.test` / `Academy@123`
+2. **Members**: see 7 enriched member cards with email + stats + "View report" working
+3. **Grades**: "By member" tab shows the 7 Lahore members with their grade distributions
+4. **Assign courses** (new sidebar item): pick a course → "Whole franchise" → Assign → see new rows in Recent
+5. Re-run seeder once at `/ceo/seed` (CEO), then **Attendance** shows hours per Lahore member
+
