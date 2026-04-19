@@ -519,7 +519,12 @@ function SectionCard({
   onMoveDown: () => void;
   onRename: (t: string) => void;
   onDelete: () => void;
-  onAddLesson: (type: LessonType, title: string) => void;
+  onAddLesson: (
+    type: LessonType,
+    title: string,
+    content?: any,
+    duration?: number | null,
+  ) => void;
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
   onMoveLesson: (idx: number, dir: -1 | 1) => void;
