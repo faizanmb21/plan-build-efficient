@@ -227,7 +227,13 @@ function CourseEditor() {
     ]);
   }
 
-  async function addLesson(sectionId: string, type: LessonType, title: string) {
+  async function addLesson(
+    sectionId: string,
+    type: LessonType,
+    title: string,
+    content?: any,
+    duration_seconds?: number | null,
+  ) {
     const sec = sections.find((s) => s.id === sectionId);
     if (!sec) return;
     const position = sec.lessons.length;
@@ -244,7 +250,8 @@ function CourseEditor() {
         title,
         type,
         position,
-        content: defaultContent[type] as Json,
+        duration_seconds: duration_seconds ?? null,
+        content: (content ?? defaultContent[type]) as Json,
       })
       .select("id,section_id,title,type,position,duration_seconds,content")
       .single();
