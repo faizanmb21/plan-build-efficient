@@ -1,50 +1,66 @@
 
 
-User wants 3 fixes to the AddLessonDialog (and LessonEditorDialog):
-1. Restore "upload file" option alongside the URL field (was removed in unified dialog)
-2. Wire up the "Auto-fill" button to actually fetch title/description from video URL
-3. Add a file attachment to the optional assignment brief (any file type)
-
-Let me check the current state of the editor and the existing oembed function.
-
-There's already a `video-oembed` edge function returning `{title, durationSeconds, provider}`. I'll use that for auto-fill (title + duration). Description isn't returned by oEmbed for YouTube — I'll fall back to title-only and note it.
-
-Storage buckets: `course-content` (for video/PDF uploads, already used) and we'll reuse it for assignment attachments too (or use a new path prefix).
+User wants the existing grading system populated with realistic seed data so they can see it working end-to-end across all three roles (member, incharge, CEO) without manually clicking through grading flows. Combined with the previous plan, this becomes: build the CEO grades hub AND seed enough graded submissions to make every view non-empty.
 
 ## Plan
 
-### 1. Restore upload-or-link in `AddLessonDialog` (and keep in `LessonEditorDialog`)
-File: `src/routes/ceo.courses.$id.edit.tsx`
-- For `video` and `pdf` lesson types, show BOTH:
-  - URL input (paste link) — already there
-  - File upload button — re-add (uploads to `course-content` bucket, stores path in `content.path`)
-- The lesson stores whichever was provided; player already prefers `url` over `path`.
-- Show a subtle "or" divider between them.
+### Part A — Seed graded submission data
 
-### 2. Wire up "Auto-fill" button
-File: `src/routes/ceo.courses.$id.edit.tsx`
-- The button exists but does nothing. Hook it to call the existing `video-oembed` edge function with the pasted URL.
-- On success: populate `title` (if empty) and `duration_seconds` (if empty). Toast success.
-- On failure: toast a friendly "Couldn't auto-fill — paste manually" message.
-- Disable the button when URL field is empty; show a small spinner while fetching.
+Extend `seed_demo_content()` (the existing SQL seeder, runnable from `/ceo/seed`) to populate **letter-graded submissions across every member, every pillar course**, so member/incharge/CEO views all light up immediately.
 
-### 3. Add file attachment to assignment brief
-File: `src/routes/ceo.courses.$id.edit.tsx` (both AddLessonDialog and LessonEditorDialog)
-- Inside the "Attach a tech-test / project" section (when toggle is ON), add an **optional file attachment** alongside the brief textarea — accepts any file type (PDF, audio, video, doc, etc.).
-- Stored under `content.assignment.attachment_path` in `course-content` bucket (path: `assignments/{courseId}/{uuid}.{ext}`).
-- Show filename + remove button after upload.
+What gets seeded (idempotent — only inserts where rows don't already exist):
+- For **each of the 21 members**, across **all 12 pillar courses**, insert ~3 practical submissions per member (covering different lessons), with a realistic mix:
+  - ~40% **A** (80%, approved)
+  - ~25% **A+** (100%, approved)
+  - ~20% **B** (60%, approved)
+  - ~10% **C** (revision / redo)
+  - ~5% **pending** (awaiting incharge review)
+- Each graded row gets: `letter_grade`, numeric `grade`, realistic `feedback` text (rotating from a small bank of ~8 phrases per outcome), `reviewed_by` set to the member's franchise incharge, `reviewed_at` randomized across the last 30 days.
+- For every approved submission, also upsert `lesson_progress` (`completed: true`, `progress_percent: 100`) so the member's course progress bars advance.
+- For every C/revision submission, leave `lesson_progress.completed = false` so the redo flow is visible.
 
-Member side — `src/routes/member.courses.$id.tsx`:
-- In the `PracticalSubmit` brief block, if `assignment.attachment_path` exists, fetch a signed URL and render a "Download brief attachment" button under the brief text.
+Result after running the seeder once: ~750 graded submissions with realistic distributions, spread across 3 franchises and 12 pillars.
+
+### Part B — CEO grading overview hub `/ceo/grades`
+
+New file `src/routes/ceo.grades.tsx` with three tabs:
+- **By member** — every member's name, franchise, total graded, A+/A/B/C counts, average %, redo count, last graded. Sortable + searchable + franchise filter. Click row → per-member drill-down dialog.
+- **By franchise** — per-franchise totals: members, submissions graded, average %, mini grade-distribution bar.
+- **By course (pillar)** — per-pillar totals: graded, average %, pass rate, redo rate.
+
+Each row: "View details" → drawer showing per-course breakdown + full submission timeline.
+Each table: "Download CSV" button (built client-side, no new dependency).
+
+### Part C — Per-member grade drill-down (shared component)
+
+`src/components/MemberGradeReport.tsx` — used by `/ceo/grades` and from the existing `/ceo/franchises/$id` member cards (add a small "View grades" button there).
+- Header: name, franchise, average %, total graded.
+- Per-pillar breakdown grid (12 pillars, avg %, count, latest letter).
+- Submission timeline with letter, %, feedback, reviewer, date.
+- "Open printable report" → new tab to `/ceo/grades/report?member=...` for browser print-to-PDF.
+
+### Part D — Printable report route
+
+`src/routes/ceo.grades.report.tsx` — minimal print-styled layout, supports `?scope=member|franchise|course&id=...`. Calls `window.print()` on mount. No native PDF library (avoids Worker runtime issues).
+
+### Part E — Sidebar link
+
+`src/components/AppShell.tsx` — add "Grades" entry under the CEO nav pointing to `/ceo/grades`.
 
 ### Files touched
-- `src/routes/ceo.courses.$id.edit.tsx` — restore file upload field, wire Auto-fill, add assignment attachment uploader (in both Add + Edit dialogs).
-- `src/routes/member.courses.$id.tsx` — render assignment attachment download link in `PracticalSubmit`.
 
-No DB migration needed — everything stored in the existing `lessons.content` JSONB and the `course-content` storage bucket.
+- `supabase/migrations/<new>.sql` — replace `seed_demo_content()` body with the extended version that populates letter-graded submissions + lesson_progress.
+- `src/routes/ceo.grades.tsx` — new hub.
+- `src/routes/ceo.grades.report.tsx` — new printable view.
+- `src/components/MemberGradeReport.tsx` — new shared drill-down.
+- `src/routes/ceo.franchises.$id.tsx` — add "View grades" button per member card.
+- `src/components/AppShell.tsx` — add Grades nav link.
+- `src/lib/grade-utils.ts` — letter→numeric, aggregation helpers, CSV builder.
 
-### Verification
-- Add a video lesson by URL → Auto-fill populates title and duration.
-- Add a video lesson by upload → file uploads, lesson plays it.
-- Add an assignment with a PDF brief attachment → member sees the brief text + download button.
+### Verification flow (after approving + running seeder once from `/ceo/seed`)
+
+1. Log in as `member01@irmacademy.test` → `/member/grades` shows ~36 graded items with letter grades, feedback, mix of pass/redo. Course progress bars are partially full.
+2. Log in as `incharge.sargodha@irmacademy.test` → `/incharge/reviews` shows the small set of pending submissions plus a history of already-graded ones.
+3. Log in as `ceo@irmacademy.test` → `/ceo/grades` shows all three tabs populated with real distributions; click any member → drill-down with full per-pillar breakdown; CSV download works; printable report opens.
+4. `/ceo/franchises/{id}` → each member card has a "View grades" button opening the same drill-down.
 
