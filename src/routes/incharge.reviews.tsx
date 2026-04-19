@@ -245,8 +245,7 @@ function ReviewDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [status, setStatus] = React.useState<SubmissionStatus>("approved");
-  const [grade, setGrade] = React.useState<string>("");
+  const [letter, setLetter] = React.useState<LetterGrade | null>(null);
   const [feedback, setFeedback] = React.useState<string>("");
   const [signedUrl, setSignedUrl] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -260,8 +259,7 @@ function ReviewDialog({
 
   React.useEffect(() => {
     if (!row) return;
-    setStatus((row.status === "pending" ? "approved" : row.status) as SubmissionStatus);
-    setGrade(row.grade?.toString() ?? "");
+    setLetter((row.letter_grade as LetterGrade | null) ?? null);
     setFeedback(row.feedback ?? "");
     setSignedUrl(null);
     setAiReview(null);
@@ -314,28 +312,64 @@ function ReviewDialog({
 
   async function save() {
     if (!row) return;
-    const gradeNum = grade.trim() === "" ? null : Number(grade);
-    if (gradeNum !== null && (Number.isNaN(gradeNum) || gradeNum < 0 || gradeNum > 100)) {
-      toast.error("Grade must be between 0 and 100");
+    if (!letter) {
+      toast.error("Pick a letter grade first");
       return;
     }
+    const meta = LETTER_GRADE_MAP[letter];
     setSaving(true);
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("submissions")
       .update({
-        status,
-        grade: gradeNum,
+        status: meta.status,
+        grade: meta.numeric,
+        letter_grade: letter,
         feedback: feedback.trim() || null,
         reviewed_by: reviewerId,
         reviewed_at: new Date().toISOString(),
       })
       .eq("id", row.id);
-    setSaving(false);
     if (error) {
+      setSaving(false);
       toast.error(error.message);
       return;
     }
-    toast.success("Review saved");
+    // On pass: mark lesson complete. On redo: mark lesson incomplete so member resubmits.
+    if (meta.status === "approved") {
+      const { error: progErr } = await supabase
+        .from("lesson_progress")
+        .upsert(
+          {
+            user_id: row.user_id,
+            lesson_id: row.lesson_id,
+            completed: true,
+            progress_percent: 100,
+            completed_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,lesson_id" },
+        );
+      if (progErr) console.warn("lesson_progress upsert failed:", progErr.message);
+    } else if (meta.status === "revision") {
+      const { error: progErr } = await supabase
+        .from("lesson_progress")
+        .upsert(
+          {
+            user_id: row.user_id,
+            lesson_id: row.lesson_id,
+            completed: false,
+            progress_percent: 0,
+            completed_at: null,
+          },
+          { onConflict: "user_id,lesson_id" },
+        );
+      if (progErr) console.warn("lesson_progress upsert failed:", progErr.message);
+    }
+    setSaving(false);
+    toast.success(
+      meta.status === "approved"
+        ? `Graded ${letter} — lesson marked complete`
+        : `Graded ${letter} — member must redo`,
+    );
     onSaved();
   }
 
