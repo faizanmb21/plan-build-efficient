@@ -406,31 +406,40 @@ function ReviewDialog({
                 )}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Decision</label>
-                  <Select value={status} onValueChange={(v) => setStatus(v as SubmissionStatus)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="approved">Approve</SelectItem>
-                      <SelectItem value="revision">Request revision</SelectItem>
-                      <SelectItem value="pending">Keep pending</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Grade this submission</label>
+                <p className="text-xs text-muted-foreground">
+                  A+ / A / B = pass (lesson marked complete). C = redo (member must resubmit).
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {(Object.keys(LETTER_GRADE_MAP) as LetterGrade[]).map((g) => {
+                    const meta = LETTER_GRADE_MAP[g];
+                    const selected = letter === g;
+                    const isRedo = meta.status === "revision";
+                    return (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setLetter(g)}
+                        className={`rounded-md border p-3 text-center transition-colors ${
+                          selected
+                            ? isRedo
+                              ? "border-destructive bg-destructive/10 text-destructive"
+                              : "border-primary bg-primary/10 text-primary"
+                            : "hover:bg-accent"
+                        }`}
+                      >
+                        <div className="text-lg font-bold">{g}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {isRedo ? "Redo" : `${meta.numeric}%`}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Grade (0–100, optional)</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    placeholder="e.g. 85"
-                    value={grade}
-                    onChange={(e) => setGrade(e.target.value)}
-                  />
-                </div>
+                {letter && (
+                  <p className="text-xs text-muted-foreground">{LETTER_GRADE_MAP[letter].label}</p>
+                )}
               </div>
 
               <div className="space-y-1.5">
