@@ -398,6 +398,42 @@ function ReviewDialog({
                   onChange={(e) => setFeedback(e.target.value)}
                 />
               </div>
+
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" /> AI review (advisory)
+                  </p>
+                  <Button size="sm" variant="outline" onClick={runAi} disabled={aiLoading}>
+                    {aiLoading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                    {aiReview ? "Re-run" : "Run AI review"}
+                  </Button>
+                </div>
+                {aiReview ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-primary/20 text-primary">Score {aiReview.score}/100</Badge>
+                      <span className="text-xs text-muted-foreground">{aiReview.model}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto h-6 text-xs"
+                        onClick={() => {
+                          setGrade(aiReview.score.toString());
+                          setFeedback(aiReview.comments);
+                        }}
+                      >
+                        Use as my review
+                      </Button>
+                    </div>
+                    <p className="text-sm">{aiReview.comments}</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Click to get an AI-suggested score and feedback you can edit.
+                  </p>
+                )}
+              </div>
             </div>
 
             <DialogFooter>
