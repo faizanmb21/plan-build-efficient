@@ -926,6 +926,11 @@ function AddLessonDialog({
         added += 1;
         setBulkProgress({ done: added, total: chosen.length });
       }
+      // Auto-set course thumbnail from the first selected video's thumbnail (playlist cover proxy)
+      const firstThumb = chosen[0]?.thumbnailUrl ?? null;
+      if (firstThumb && onAutoThumbnail) {
+        await onAutoThumbnail(firstThumb);
+      }
       toast.success(`Added ${added} lesson${added === 1 ? "" : "s"} from playlist`);
       reset();
       setOpen(false);
