@@ -317,6 +317,8 @@ function LessonView({
             <PracticalSubmit
               lessonId={lesson.id}
               brief={lesson.content.assignment.brief}
+              attachmentPath={lesson.content.assignment.attachment_path ?? null}
+              attachmentName={lesson.content.assignment.attachment_name ?? null}
               userId={userId}
               onSubmitted={onSubmissionSaved}
             />
