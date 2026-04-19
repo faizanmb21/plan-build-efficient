@@ -27,6 +27,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { fetchVideoMetadata } from "@/lib/video-metadata";
 import {
@@ -144,7 +145,23 @@ function CourseEditor() {
       .eq("id", courseId);
     setSavingMeta(false);
     if (error) toast.error(error.message);
-    else toast.success("Saved");
+    else toast.success("Course details saved");
+  }
+
+  async function toggleStatus(next: "draft" | "published") {
+    if (!course) return;
+    const prev = course.status;
+    setCourse({ ...course, status: next });
+    const { error } = await supabase
+      .from("courses")
+      .update({ status: next })
+      .eq("id", courseId);
+    if (error) {
+      setCourse((c) => (c ? { ...c, status: prev } : c));
+      toast.error(error.message);
+    } else {
+      toast.success(next === "published" ? "Course published" : "Course set to draft");
+    }
   }
 
   async function uploadThumbnail(file: File) {
@@ -304,9 +321,20 @@ function CourseEditor() {
             <ArrowLeft className="h-4 w-4" /> All courses
           </Link>
         </Button>
-        <Badge variant={course.status === "published" ? "default" : "secondary"}>
-          {course.status}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Badge variant={course.status === "published" ? "default" : "secondary"}>
+            {course.status}
+          </Badge>
+          <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5">
+            <span className="text-xs text-muted-foreground">Draft</span>
+            <Switch
+              checked={course.status === "published"}
+              onCheckedChange={(v) => toggleStatus(v ? "published" : "draft")}
+              aria-label="Toggle published status"
+            />
+            <span className="text-xs text-muted-foreground">Published</span>
+          </div>
+        </div>
       </div>
 
       {/* Course meta */}

@@ -568,14 +568,15 @@ function PracticalSubmit({
     file_url: string;
     feedback: string | null;
     grade: number | null;
+    letter_grade: string | null;
   } | null>(null);
   const [note, setNote] = React.useState("");
 
   React.useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("submissions")
-        .select("id,status,file_url,feedback,grade")
+        .select("id,status,file_url,feedback,grade,letter_grade")
         .eq("lesson_id", lessonId)
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
@@ -599,7 +600,7 @@ function PracticalSubmit({
       toast.error(upErr.message);
       return;
     }
-    const { data: ins, error: insErr } = await supabase
+    const { data: ins, error: insErr } = await (supabase as any)
       .from("submissions")
       .insert({
         lesson_id: lessonId,
@@ -608,7 +609,7 @@ function PracticalSubmit({
         feedback: note || null,
         status: "pending",
       })
-      .select("id,status,file_url,feedback,grade")
+      .select("id,status,file_url,feedback,grade,letter_grade")
       .single();
     setUploading(false);
     if (insErr) {
@@ -633,22 +634,33 @@ function PracticalSubmit({
 
       {submission ? (
         <div className="space-y-2 rounded-md border p-3 text-sm">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="font-medium">Last submission</span>
-            <Badge
-              variant={
-                submission.status === "approved"
-                  ? "default"
-                  : submission.status === "revision"
-                    ? "destructive"
-                    : "secondary"
-              }
-            >
-              {submission.status}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {submission.letter_grade && (
+                <Badge variant="outline" className="font-mono">
+                  {submission.letter_grade}
+                </Badge>
+              )}
+              <Badge
+                variant={
+                  submission.status === "approved"
+                    ? "default"
+                    : submission.status === "revision"
+                      ? "destructive"
+                      : "secondary"
+                }
+              >
+                {submission.status === "revision" ? "Redo required" : submission.status}
+              </Badge>
+            </div>
           </div>
-          {submission.grade !== null && (
-            <p className="text-xs text-muted-foreground">Grade: {submission.grade}</p>
+          {submission.letter_grade && (
+            <p className="text-xs text-muted-foreground">
+              {submission.status === "revision"
+                ? "Your reviewer asked for a redo — upload a new submission below."
+                : `Passed with grade ${submission.letter_grade}${submission.grade !== null ? ` (${submission.grade}%)` : ""}.`}
+            </p>
           )}
           {submission.feedback && (
             <p className="text-xs text-muted-foreground">Feedback: {submission.feedback}</p>
