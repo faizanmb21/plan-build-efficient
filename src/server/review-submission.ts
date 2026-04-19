@@ -157,18 +157,19 @@ If you cannot access the video, score conservatively (50-65) and note this in co
 
     if (!result) return { ok: false, error: "AI returned no structured output" };
 
+    const insertPayload = {
+      submission_id: submissionId,
+      provider,
+      model,
+      score: Math.round(result.score),
+      rubric: result.rubric as Record<string, number>,
+      comments: result.comments,
+      frames_analyzed: 0,
+      raw_response: raw as Record<string, unknown>,
+    };
     const { error: insErr, data: inserted } = await supabaseAdmin
       .from("ai_reviews")
-      .insert({
-        submission_id: submissionId,
-        provider,
-        model,
-        score: Math.round(result.score),
-        rubric: result.rubric,
-        comments: result.comments,
-        frames_analyzed: 0,
-        raw_response: raw as object,
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
 
