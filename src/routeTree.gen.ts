@@ -19,10 +19,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as MemberIndexRouteImport } from './routes/member.index'
 import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
+import { Route as MemberFocusRouteImport } from './routes/member.focus'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
+import { Route as InchargeAttendanceRouteImport } from './routes/incharge.attendance'
 import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
+import { Route as CeoAttendanceRouteImport } from './routes/ceo.attendance'
 import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
 import { Route as MemberCoursesIdRouteImport } from './routes/member.courses.$id'
@@ -78,6 +81,11 @@ const CeoIndexRoute = CeoIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CeoRoute,
 } as any)
+const MemberFocusRoute = MemberFocusRouteImport.update({
+  id: '/focus',
+  path: '/focus',
+  getParentRoute: () => MemberRoute,
+} as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
@@ -88,6 +96,11 @@ const InchargeReviewsRoute = InchargeReviewsRouteImport.update({
   path: '/reviews',
   getParentRoute: () => InchargeRoute,
 } as any)
+const InchargeAttendanceRoute = InchargeAttendanceRouteImport.update({
+  id: '/attendance',
+  path: '/attendance',
+  getParentRoute: () => InchargeRoute,
+} as any)
 const CeoSeedRoute = CeoSeedRouteImport.update({
   id: '/seed',
   path: '/seed',
@@ -96,6 +109,11 @@ const CeoSeedRoute = CeoSeedRouteImport.update({
 const CeoFranchisesRoute = CeoFranchisesRouteImport.update({
   id: '/franchises',
   path: '/franchises',
+  getParentRoute: () => CeoRoute,
+} as any)
+const CeoAttendanceRoute = CeoAttendanceRouteImport.update({
+  id: '/attendance',
+  path: '/attendance',
   getParentRoute: () => CeoRoute,
 } as any)
 const CeoAssignRoute = CeoAssignRouteImport.update({
@@ -128,10 +146,13 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
+  '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/ceo/seed': typeof CeoSeedRoute
+  '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/member/focus': typeof MemberFocusRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
@@ -145,10 +166,13 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
+  '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/ceo/seed': typeof CeoSeedRoute
+  '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/member/focus': typeof MemberFocusRoute
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
@@ -166,10 +190,13 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
+  '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/franchises': typeof CeoFranchisesRoute
   '/ceo/seed': typeof CeoSeedRoute
+  '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/member/focus': typeof MemberFocusRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
@@ -188,10 +215,13 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/ceo/assign'
+    | '/ceo/attendance'
     | '/ceo/franchises'
     | '/ceo/seed'
+    | '/incharge/attendance'
     | '/incharge/reviews'
     | '/invite/$token'
+    | '/member/focus'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
@@ -205,10 +235,13 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/ceo/assign'
+    | '/ceo/attendance'
     | '/ceo/franchises'
     | '/ceo/seed'
+    | '/incharge/attendance'
     | '/incharge/reviews'
     | '/invite/$token'
+    | '/member/focus'
     | '/ceo'
     | '/incharge'
     | '/member'
@@ -225,10 +258,13 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reset-password'
     | '/ceo/assign'
+    | '/ceo/attendance'
     | '/ceo/franchises'
     | '/ceo/seed'
+    | '/incharge/attendance'
     | '/incharge/reviews'
     | '/invite/$token'
+    | '/member/focus'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
@@ -320,6 +356,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoIndexRouteImport
       parentRoute: typeof CeoRoute
     }
+    '/member/focus': {
+      id: '/member/focus'
+      path: '/focus'
+      fullPath: '/member/focus'
+      preLoaderRoute: typeof MemberFocusRouteImport
+      parentRoute: typeof MemberRoute
+    }
     '/invite/$token': {
       id: '/invite/$token'
       path: '/invite/$token'
@@ -334,6 +377,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InchargeReviewsRouteImport
       parentRoute: typeof InchargeRoute
     }
+    '/incharge/attendance': {
+      id: '/incharge/attendance'
+      path: '/attendance'
+      fullPath: '/incharge/attendance'
+      preLoaderRoute: typeof InchargeAttendanceRouteImport
+      parentRoute: typeof InchargeRoute
+    }
     '/ceo/seed': {
       id: '/ceo/seed'
       path: '/seed'
@@ -346,6 +396,13 @@ declare module '@tanstack/react-router' {
       path: '/franchises'
       fullPath: '/ceo/franchises'
       preLoaderRoute: typeof CeoFranchisesRouteImport
+      parentRoute: typeof CeoRoute
+    }
+    '/ceo/attendance': {
+      id: '/ceo/attendance'
+      path: '/attendance'
+      fullPath: '/ceo/attendance'
+      preLoaderRoute: typeof CeoAttendanceRouteImport
       parentRoute: typeof CeoRoute
     }
     '/ceo/assign': {
@@ -381,6 +438,7 @@ declare module '@tanstack/react-router' {
 
 interface CeoRouteChildren {
   CeoAssignRoute: typeof CeoAssignRoute
+  CeoAttendanceRoute: typeof CeoAttendanceRoute
   CeoFranchisesRoute: typeof CeoFranchisesRoute
   CeoSeedRoute: typeof CeoSeedRoute
   CeoIndexRoute: typeof CeoIndexRoute
@@ -390,6 +448,7 @@ interface CeoRouteChildren {
 
 const CeoRouteChildren: CeoRouteChildren = {
   CeoAssignRoute: CeoAssignRoute,
+  CeoAttendanceRoute: CeoAttendanceRoute,
   CeoFranchisesRoute: CeoFranchisesRoute,
   CeoSeedRoute: CeoSeedRoute,
   CeoIndexRoute: CeoIndexRoute,
@@ -400,11 +459,13 @@ const CeoRouteChildren: CeoRouteChildren = {
 const CeoRouteWithChildren = CeoRoute._addFileChildren(CeoRouteChildren)
 
 interface InchargeRouteChildren {
+  InchargeAttendanceRoute: typeof InchargeAttendanceRoute
   InchargeReviewsRoute: typeof InchargeReviewsRoute
   InchargeIndexRoute: typeof InchargeIndexRoute
 }
 
 const InchargeRouteChildren: InchargeRouteChildren = {
+  InchargeAttendanceRoute: InchargeAttendanceRoute,
   InchargeReviewsRoute: InchargeReviewsRoute,
   InchargeIndexRoute: InchargeIndexRoute,
 }
@@ -414,11 +475,13 @@ const InchargeRouteWithChildren = InchargeRoute._addFileChildren(
 )
 
 interface MemberRouteChildren {
+  MemberFocusRoute: typeof MemberFocusRoute
   MemberIndexRoute: typeof MemberIndexRoute
   MemberCoursesIdRoute: typeof MemberCoursesIdRoute
 }
 
 const MemberRouteChildren: MemberRouteChildren = {
+  MemberFocusRoute: MemberFocusRoute,
   MemberIndexRoute: MemberIndexRoute,
   MemberCoursesIdRoute: MemberCoursesIdRoute,
 }

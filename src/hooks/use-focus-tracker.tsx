@@ -238,7 +238,11 @@ export function useFocusTracker(opts: UseFocusTrackerOpts) {
         const sid = sessionRef.current;
         if (!sid) return;
         // Read current counters from a fresh state snapshot
-        await supabase.rpc("close_stale_sessions").catch(() => {});
+        try {
+          await supabase.rpc("close_stale_sessions");
+        } catch {
+          /* ignore */
+        }
         const { data: cur } = await supabase
           .from("study_sessions")
           .select("active_seconds, idle_seconds, blur_count")
