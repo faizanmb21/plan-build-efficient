@@ -4,11 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Building2, Users, Mail, Phone, Trash2, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  Users,
+  Phone,
+  Trash2,
+  ShieldCheck,
+  BookOpen,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PillarFlower } from "@/components/PillarFlower";
-import { getPillarScoresForUsers } from "@/lib/pillar-data";
-import type { PillarScores } from "@/lib/pillars";
+import { PILLARS, type PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/ceo/franchises/$id")({
   component: FranchiseDetailPage,
@@ -23,25 +32,35 @@ interface Franchise {
   archived_at: string | null;
 }
 
+interface MemberStats {
+  coursesStarted: number;
+  coursesCompleted: number;
+  lastActive: string | null;
+}
+
 interface MemberDetail {
   id: string;
   full_name: string | null;
   phone: string | null;
   role: "ceo" | "incharge" | "member" | undefined;
-  email?: string | null;
-  scores?: PillarScores;
+  scores: PillarScores;
+  stats: MemberStats;
 }
+
+const EMPTY_SCORES: PillarScores = PILLARS.map(() => 0) as PillarScores;
 
 function FranchiseDetailPage() {
   const { id } = Route.useParams();
   const [franchise, setFranchise] = React.useState<Franchise | null>(null);
   const [manager, setManager] = React.useState<MemberDetail | null>(null);
   const [members, setMembers] = React.useState<MemberDetail[]>([]);
-  const [orgScores, setOrgScores] = React.useState<PillarScores | null>(null);
+  const [orgScores, setOrgScores] = React.useState<PillarScores>(EMPTY_SCORES);
   const [loading, setLoading] = React.useState(true);
 
   const load = React.useCallback(async () => {
     setLoading(true);
+
+    // 1. Franchise + people in one parallel batch
     const [{ data: f }, { data: profs }, { data: roles }] = await Promise.all([
       supabase.from("franchises").select("*").eq("id", id).maybeSingle(),
       supabase.from("profiles").select("id, full_name, phone, franchise_id").eq("franchise_id", id),
@@ -55,35 +74,121 @@ function FranchiseDetailPage() {
       roleMap.set(r.user_id, r.role),
     );
 
-    const allUserIds = ((profs as { id: string }[]) ?? []).map((p) => p.id);
-    const memberOnlyIds = allUserIds.filter((uid) => roleMap.get(uid) === "member");
-
-    // Per-member pillar scores (members only)
-    const perMemberScores = await Promise.all(
-      memberOnlyIds.map(async (uid) => [uid, await getPillarScoresForUsers([uid])] as const),
-    );
-    const scoreMap = new Map(perMemberScores);
-
     const profileRows =
       (profs as { id: string; full_name: string | null; phone: string | null }[] | null) ?? [];
+    const memberIds = profileRows.filter((p) => roleMap.get(p.id) === "member").map((p) => p.id);
+
+    // 2. Resolve the 12 pillar courses + their lessons in one query each
+    const titles = PILLARS.map((p) => p.title);
+    const { data: coursesData } = await supabase
+      .from("courses")
+      .select("id, title")
+      .in("title", titles);
+    const courseList = (coursesData as { id: string; title: string }[] | null) ?? [];
+    const courseIdByPillar = PILLARS.map(
+      (p) => courseList.find((c) => c.title === p.title)?.id,
+    );
+    const courseIds = courseIdByPillar.filter((x): x is string => Boolean(x));
+
+    let lessonsByCourse = new Map<string, string[]>();
+    let allLessonIds: string[] = [];
+    if (courseIds.length > 0) {
+      const { data: lessons } = await supabase
+        .from("lessons")
+        .select("id, sections!inner(course_id)")
+        .in("sections.course_id", courseIds);
+      ((lessons as unknown as { id: string; sections: { course_id: string } | null }[] | null) ??
+        []).forEach((l) => {
+        const cid = l.sections?.course_id;
+        if (!cid) return;
+        const arr = lessonsByCourse.get(cid) ?? [];
+        arr.push(l.id);
+        lessonsByCourse.set(cid, arr);
+      });
+      allLessonIds = Array.from(lessonsByCourse.values()).flat();
+    }
+
+    // 3. ONE query for all completed lesson_progress across all members in this franchise
+    const completedByUser = new Map<string, Set<string>>();
+    const lastActiveByUser = new Map<string, string>();
+    if (memberIds.length > 0 && allLessonIds.length > 0) {
+      const { data: progress } = await supabase
+        .from("lesson_progress")
+        .select("user_id, lesson_id, completed, completed_at, updated_at")
+        .in("user_id", memberIds)
+        .in("lesson_id", allLessonIds);
+
+      (progress ?? []).forEach((p) => {
+        // Track last activity from any progress row (completed or not)
+        const ts = p.completed_at ?? p.updated_at;
+        if (ts) {
+          const prev = lastActiveByUser.get(p.user_id);
+          if (!prev || new Date(ts) > new Date(prev)) lastActiveByUser.set(p.user_id, ts);
+        }
+        if (!p.completed) return;
+        const set = completedByUser.get(p.user_id) ?? new Set<string>();
+        set.add(p.lesson_id);
+        completedByUser.set(p.user_id, set);
+      });
+    }
+
+    // 4. Compute per-member scores + activity stats in-memory
+    function scoresForUser(uid: string): PillarScores {
+      const done = completedByUser.get(uid) ?? new Set<string>();
+      return PILLARS.map((_, idx) => {
+        const cid = courseIdByPillar[idx];
+        if (!cid) return 0;
+        const lids = lessonsByCourse.get(cid) ?? [];
+        if (lids.length === 0) return 0;
+        const completed = lids.filter((lid) => done.has(lid)).length;
+        return completed / lids.length;
+      }) as PillarScores;
+    }
+    function statsForUser(uid: string): MemberStats {
+      const done = completedByUser.get(uid) ?? new Set<string>();
+      let started = 0;
+      let completed = 0;
+      courseIds.forEach((cid) => {
+        const lids = lessonsByCourse.get(cid) ?? [];
+        if (lids.length === 0) return;
+        const doneCount = lids.filter((lid) => done.has(lid)).length;
+        if (doneCount > 0) started += 1;
+        if (doneCount === lids.length) completed += 1;
+      });
+      return {
+        coursesStarted: started,
+        coursesCompleted: completed,
+        lastActive: lastActiveByUser.get(uid) ?? null,
+      };
+    }
+
     const mList: MemberDetail[] = profileRows.map((p) => ({
       id: p.id,
       full_name: p.full_name,
       phone: p.phone,
       role: roleMap.get(p.id),
-      scores: scoreMap.get(p.id),
+      scores: scoresForUser(p.id),
+      stats: statsForUser(p.id),
     }));
 
-    // Manager (incharge) — taken from franchises.manager_id, but also show
-    // any incharge in this franchise even if manager_id is unset.
     const inchargeId =
       (f as Franchise | null)?.manager_id ??
       mList.find((m) => m.role === "incharge")?.id ??
       null;
     setManager(mList.find((m) => m.id === inchargeId) ?? null);
-    setMembers(mList.filter((m) => m.role === "member"));
+    const onlyMembers = mList.filter((m) => m.role === "member");
+    setMembers(onlyMembers);
 
-    setOrgScores(await getPillarScoresForUsers(memberOnlyIds));
+    // Org-level pillar scores: average across members
+    if (onlyMembers.length === 0) {
+      setOrgScores(EMPTY_SCORES);
+    } else {
+      const summed = PILLARS.map((_, idx) => {
+        const sum = onlyMembers.reduce((acc, m) => acc + (m.scores[idx] ?? 0), 0);
+        return sum / onlyMembers.length;
+      }) as PillarScores;
+      setOrgScores(summed);
+    }
     setLoading(false);
   }, [id]);
 
@@ -151,7 +256,6 @@ function FranchiseDetailPage() {
         </div>
       </header>
 
-      {/* Franchise mastery */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Franchise mastery</CardTitle>
@@ -160,15 +264,10 @@ function FranchiseDetailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
-          {orgScores ? (
-            <PillarFlower scores={orgScores} size={320} showLegend />
-          ) : (
-            <div className="text-sm text-muted-foreground">No data yet.</div>
-          )}
+          <PillarFlower scores={orgScores} size={320} showLegend />
         </CardContent>
       </Card>
 
-      {/* Members */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Members ({members.length})
@@ -198,12 +297,33 @@ function FranchiseDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-center">
-                    {m.scores ? (
-                      <PillarFlower scores={m.scores} size={150} showLabels={false} />
-                    ) : (
-                      <div className="h-[150px]" />
-                    )}
+                    <PillarFlower scores={m.scores} size={150} showLabels={false} />
                   </div>
+
+                  {/* Activity stats */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-md bg-muted/40 p-2">
+                      <div className="flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <BookOpen className="h-3 w-3" /> Started
+                      </div>
+                      <div className="mt-0.5 text-sm font-semibold">{m.stats.coursesStarted}</div>
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-2">
+                      <div className="flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <CheckCircle2 className="h-3 w-3" /> Done
+                      </div>
+                      <div className="mt-0.5 text-sm font-semibold">{m.stats.coursesCompleted}</div>
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-2">
+                      <div className="flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <Clock className="h-3 w-3" /> Active
+                      </div>
+                      <div className="mt-0.5 text-xs font-semibold">
+                        {formatRelative(m.stats.lastActive)}
+                      </div>
+                    </div>
+                  </div>
+
                   <Button
                     size="sm"
                     variant="ghost"
@@ -220,4 +340,21 @@ function FranchiseDetailPage() {
       </section>
     </div>
   );
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return "Never";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) {
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (hours <= 0) return "Just now";
+    return `${hours}h ago`;
+  }
+  if (days === 1) return "1d ago";
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months === 1) return "1mo ago";
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
 }
