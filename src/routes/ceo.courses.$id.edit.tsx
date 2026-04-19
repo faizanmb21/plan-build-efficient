@@ -699,16 +699,27 @@ function LessonEditorDialog({
 
                 <TabsContent value="link" className="space-y-2 pt-3">
                   <label className="text-sm font-medium">Video URL</label>
-                  <Input
-                    type="url"
-                    placeholder="https://www.youtube.com/watch?v=… (YouTube, Vimeo, Loom, Drive, or .mp4)"
+                  <UrlAutoFillInput
                     value={draft.content?.url ?? ""}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        content: { ...draft.content, url: e.target.value, source: "link" },
-                      })
+                    onChange={(url) =>
+                      setDraft((d) => ({
+                        ...d,
+                        content: { ...d.content, url, source: "link" },
+                      }))
                     }
+                    onMetadata={(meta) => {
+                      setDraft((d) => {
+                        const next: Lesson = { ...d };
+                        // Only fill title if empty or still placeholder-ish
+                        if (meta.title && (!d.title || d.title.trim() === "" || d.title === "New video lesson")) {
+                          next.title = meta.title;
+                        }
+                        if (meta.durationSeconds && !d.duration_seconds) {
+                          next.duration_seconds = Math.round(meta.durationSeconds);
+                        }
+                        return next;
+                      });
+                    }}
                   />
                   {(() => {
                     const u = (draft.content?.url ?? "").trim();
@@ -727,11 +738,17 @@ function LessonEditorDialog({
                         </p>
                       );
                     }
+                    const canBlockScrub = parsed.provider === "direct";
                     return (
                       <>
                         <p className="text-xs text-muted-foreground">
                           Detected: <span className="font-medium capitalize">{parsed.provider}</span> — preview below.
                         </p>
+                        {!canBlockScrub && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            Note: fast-forward blocking only works on uploaded files and direct .mp4 links — {parsed.provider} embeds use their own player.
+                          </p>
+                        )}
                         <div className="aspect-video w-full overflow-hidden rounded-md border bg-black">
                           {parsed.provider === "direct" ? (
                             <video src={parsed.embedUrl} controls className="h-full w-full" />
