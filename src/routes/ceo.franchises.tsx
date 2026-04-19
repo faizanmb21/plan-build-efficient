@@ -73,6 +73,7 @@ function FranchisesPage() {
   const [loading, setLoading] = React.useState(true);
   const [showArchived, setShowArchived] = React.useState(false);
   const [scoresByFranchise, setScoresByFranchise] = React.useState<Record<string, PillarScores>>({});
+  const [inviteOpen, setInviteOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
     const [f, i, p, r] = await Promise.all([
@@ -152,7 +153,12 @@ function FranchisesPage() {
             {showArchived ? "Show active" : `Show archived (${franchises.filter((f) => f.archived_at).length})`}
           </Button>
           <NewFranchiseDialog onCreated={load} />
-          <NewInviteDialog franchises={franchises.filter((f) => !f.archived_at)} onCreated={load} />
+          <NewInviteDialog
+            franchises={franchises.filter((f) => !f.archived_at)}
+            onCreated={load}
+            open={inviteOpen}
+            onOpenChange={setInviteOpen}
+          />
         </div>
       </header>
 
@@ -268,7 +274,15 @@ function FranchisesPage() {
         {invites.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              No invites yet. Click <strong>New invite</strong> above to send one.
+              No invites yet. Click{" "}
+              <button
+                type="button"
+                onClick={() => setInviteOpen(true)}
+                className="font-semibold text-accent underline-offset-4 hover:underline"
+              >
+                New invite
+              </button>{" "}
+              to send one.
             </CardContent>
           </Card>
         ) : (
@@ -358,11 +372,17 @@ function NewFranchiseDialog({ onCreated }: { onCreated: () => void }) {
 function NewInviteDialog({
   franchises,
   onCreated,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   franchises: Franchise[];
   onCreated: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState<"incharge" | "member">("member");
   const [franchiseId, setFranchiseId] = React.useState<string>("");
