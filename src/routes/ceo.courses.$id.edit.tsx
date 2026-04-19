@@ -30,6 +30,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { fetchVideoMetadata } from "@/lib/video-metadata";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  fetchYoutubePlaylist,
+  formatDuration,
+  type PlaylistVideo,
+} from "@/lib/youtube-playlist";
+import { ListVideo, Loader2 } from "lucide-react";
 import {
   ArrowLeft,
   ChevronDown,
