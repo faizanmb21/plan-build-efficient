@@ -610,31 +610,12 @@ function CourseEditor() {
           <CardTitle>Course details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Title</label>
-              <Input
-                value={course.title}
-                onChange={(e) => setCourse({ ...course, title: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select
-                value={course.status}
-                onValueChange={(v: "draft" | "published") =>
-                  setCourse({ ...course, status: v })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="published">Published</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Title</label>
+            <Input
+              value={course.title}
+              onChange={(e) => setCourse({ ...course, title: e.target.value })}
+            />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Description</label>
