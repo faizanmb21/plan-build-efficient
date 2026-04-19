@@ -236,19 +236,44 @@ function CourseEditor() {
     else setSections((s) => s.filter((sec) => sec.id !== id));
   }
 
-  async function moveSection(idx: number, dir: -1 | 1) {
-    const target = idx + dir;
-    if (target < 0 || target >= sections.length) return;
-    const a = sections[idx];
-    const b = sections[target];
-    const next = [...sections];
-    next[idx] = { ...b, position: idx };
-    next[target] = { ...a, position: target };
-    setSections(next);
-    await Promise.all([
-      supabase.from("sections").update({ position: idx }).eq("id", b.id),
-      supabase.from("sections").update({ position: target }).eq("id", a.id),
-    ]);
+  async function persistSectionOrder(next: Section[]) {
+    const prevPosById = new Map(sections.map((s) => [s.id, s.position]));
+    const updates = next
+      .map((s, i) => ({ id: s.id, position: i }))
+      .filter((u) => prevPosById.get(u.id) !== u.position);
+    setSections(next.map((s, i) => ({ ...s, position: i })));
+    await Promise.all(
+      updates.map((u) => supabase.from("sections").update({ position: u.position }).eq("id", u.id)),
+    );
+  }
+
+  async function persistLessonChanges(next: Section[], affected: Set<string>) {
+    const prevLessonsById = new Map<string, Lesson>();
+    for (const sec of sections) for (const l of sec.lessons) prevLessonsById.set(l.id, l);
+    const updates: { id: string; position: number; section_id: string }[] = [];
+    for (const sec of next) {
+      if (!affected.has(sec.id)) continue;
+      sec.lessons.forEach((l, i) => {
+        const prev = prevLessonsById.get(l.id);
+        if (!prev || prev.position !== i || prev.section_id !== sec.id) {
+          updates.push({ id: l.id, position: i, section_id: sec.id });
+        }
+      });
+    }
+    setSections(
+      next.map((sec) => ({
+        ...sec,
+        lessons: sec.lessons.map((l, i) => ({ ...l, position: i, section_id: sec.id })),
+      })),
+    );
+    await Promise.all(
+      updates.map((u) =>
+        supabase
+          .from("lessons")
+          .update({ position: u.position, section_id: u.section_id })
+          .eq("id", u.id),
+      ),
+    );
   }
 
   async function addLesson(
