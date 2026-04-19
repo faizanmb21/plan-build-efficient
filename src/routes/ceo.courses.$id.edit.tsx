@@ -745,7 +745,7 @@ function LessonEditorDialog({
                           Detected: <span className="font-medium capitalize">{parsed.provider}</span> — preview below.
                         </p>
                         {!canBlockScrub && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                          <p className="text-xs text-muted-foreground italic">
                             Note: fast-forward blocking only works on uploaded files and direct .mp4 links — {parsed.provider} embeds use their own player.
                           </p>
                         )}
