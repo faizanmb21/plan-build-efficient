@@ -464,6 +464,7 @@ export type Database = {
           grade: number | null
           id: string
           lesson_id: string
+          letter_grade: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: Database["public"]["Enums"]["submission_status"]
@@ -476,6 +477,7 @@ export type Database = {
           grade?: number | null
           id?: string
           lesson_id: string
+          letter_grade?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["submission_status"]
@@ -488,6 +490,7 @@ export type Database = {
           grade?: number | null
           id?: string
           lesson_id?: string
+          letter_grade?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["submission_status"]
