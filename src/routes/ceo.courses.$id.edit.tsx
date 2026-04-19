@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { parseVideoUrl } from "@/lib/video-embed";
+import { parseVideoUrl, getYouTubeThumbnail } from "@/lib/video-embed";
 import { fetchVideoMetadata } from "@/lib/video-metadata";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -204,6 +204,24 @@ function CourseEditor() {
     const { data } = supabase.storage.from("thumbnails").getPublicUrl(path);
     setCourse((c) => (c ? { ...c, thumbnail_url: data.publicUrl } : c));
     toast.success("Thumbnail uploaded — remember to Save");
+  }
+
+  // Auto-set the course thumbnail from a YouTube video/playlist thumbnail URL,
+  // but ONLY if the course doesn't already have one. Never overwrites a manually-set image.
+  async function maybeAutoSetThumbnail(thumbnailUrl: string | null | undefined) {
+    if (!thumbnailUrl) return;
+    if (!course) return;
+    if (course.thumbnail_url) return; // respect existing thumbnail
+    const { error } = await supabase
+      .from("courses")
+      .update({ thumbnail_url: thumbnailUrl })
+      .eq("id", courseId);
+    if (error) {
+      // silent — this is a nice-to-have, don't interrupt the lesson-add flow
+      return;
+    }
+    setCourse((c) => (c && !c.thumbnail_url ? { ...c, thumbnail_url: thumbnailUrl } : c));
+    toast.success("Course thumbnail set from video");
   }
 
   async function addSectionWithTitle(rawTitle: string) {
@@ -585,6 +603,7 @@ function CourseEditor() {
                     onUpdateLesson={updateLesson}
                     onDeleteLesson={deleteLesson}
                     courseId={courseId}
+                    onAutoThumbnail={maybeAutoSetThumbnail}
                   />
                 ))}
               </div>
@@ -660,6 +679,7 @@ function SectionCard({
   onUpdateLesson,
   onDeleteLesson,
   courseId,
+  onAutoThumbnail,
 }: {
   section: Section;
   onRename: (t: string) => void;
@@ -673,6 +693,7 @@ function SectionCard({
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
   courseId: string;
+  onAutoThumbnail?: (url: string | null | undefined) => void | Promise<void>;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [title, setTitle] = React.useState(section.title);
@@ -764,7 +785,11 @@ function SectionCard({
               ))}
             </SortableContext>
           </SectionLessonsDroppable>
-          <AddLessonDialog onAdd={onAddLesson} courseId={courseId} />
+          <AddLessonDialog
+            onAdd={onAddLesson}
+            courseId={courseId}
+            onAutoThumbnail={onAutoThumbnail}
+          />
         </CollapsibleContent>
       </Collapsible>
     </div>
@@ -795,6 +820,7 @@ function SectionLessonsDroppable({
 function AddLessonDialog({
   onAdd,
   courseId,
+  onAutoThumbnail,
 }: {
   onAdd: (
     type: LessonType,
@@ -803,6 +829,7 @@ function AddLessonDialog({
     duration?: number | null,
   ) => Promise<void> | void;
   courseId: string;
+  onAutoThumbnail?: (url: string | null | undefined) => void | Promise<void>;
 }) {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState<LessonType>("video");
@@ -899,6 +926,11 @@ function AddLessonDialog({
         added += 1;
         setBulkProgress({ done: added, total: chosen.length });
       }
+      // Auto-set course thumbnail from the first selected video's thumbnail (playlist cover proxy)
+      const firstThumb = chosen[0]?.thumbnailUrl ?? null;
+      if (firstThumb && onAutoThumbnail) {
+        await onAutoThumbnail(firstThumb);
+      }
       toast.success(`Added ${added} lesson${added === 1 ? "" : "s"} from playlist`);
       reset();
       setOpen(false);
@@ -957,10 +989,15 @@ function AddLessonDialog({
     return { brief: practicalBrief.trim() };
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd(type, title.trim(), buildContent(), duration);
+    await onAdd(type, title.trim(), buildContent(), duration);
+    // Auto-set course thumbnail from a YouTube link lesson
+    if (type === "video" && videoSource === "link" && onAutoThumbnail) {
+      const thumb = getYouTubeThumbnail(videoUrl);
+      if (thumb) await onAutoThumbnail(thumb);
+    }
     reset();
     setOpen(false);
   }

@@ -104,3 +104,28 @@ export function parseVideoUrl(raw: string): ParsedEmbed | null {
 function isValidYtId(id: string | null | undefined): id is string {
   return !!id && /^[a-zA-Z0-9_-]{6,}$/.test(id);
 }
+
+// Returns a high-quality YouTube thumbnail URL for any YouTube watch/share/embed/shorts URL,
+// or null if the URL isn't a recognised YouTube link.
+export function getYouTubeThumbnail(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  let u: URL;
+  try {
+    u = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.toLowerCase();
+  let id: string | null = null;
+  if (host === "youtu.be") {
+    id = u.pathname.replace(/^\//, "").split("/")[0] || null;
+  } else if (YT_HOSTS.has(host)) {
+    if (u.pathname === "/watch") id = u.searchParams.get("v");
+    else if (u.pathname.startsWith("/embed/")) id = u.pathname.split("/")[2] ?? null;
+    else if (u.pathname.startsWith("/shorts/")) id = u.pathname.split("/")[2] ?? null;
+    else if (u.pathname.startsWith("/live/")) id = u.pathname.split("/")[2] ?? null;
+  }
+  if (!isValidYtId(id)) return null;
+  return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+}
