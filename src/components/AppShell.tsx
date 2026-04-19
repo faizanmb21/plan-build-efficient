@@ -87,9 +87,9 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
           <div className="flex items-center gap-2">
             <Link
               to="/profile"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+              className="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm border border-white/10 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-colors"
             >
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/10 text-accent">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/20 text-accent border border-white/10">
                 <UserIcon className="h-4 w-4" />
               </div>
               <span className="hidden max-w-[140px] truncate sm:inline">
