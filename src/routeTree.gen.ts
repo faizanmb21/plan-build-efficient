@@ -30,6 +30,7 @@ import { Route as CeoAttendanceRouteImport } from './routes/ceo.attendance'
 import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
 import { Route as MemberCoursesIdRouteImport } from './routes/member.courses.$id'
+import { Route as CeoFranchisesIdRouteImport } from './routes/ceo.franchises.$id'
 import { Route as CeoCoursesIdEditRouteImport } from './routes/ceo.courses.$id.edit'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -137,6 +138,11 @@ const MemberCoursesIdRoute = MemberCoursesIdRouteImport.update({
   path: '/courses/$id',
   getParentRoute: () => MemberRoute,
 } as any)
+const CeoFranchisesIdRoute = CeoFranchisesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => CeoFranchisesRoute,
+} as any)
 const CeoCoursesIdEditRoute = CeoCoursesIdEditRouteImport.update({
   id: '/courses/$id/edit',
   path: '/courses/$id/edit',
@@ -153,7 +159,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
-  '/ceo/franchises': typeof CeoFranchisesRoute
+  '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -163,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
@@ -174,7 +181,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
-  '/ceo/franchises': typeof CeoFranchisesRoute
+  '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -184,6 +191,7 @@ export interface FileRoutesByTo {
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
+  '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
@@ -199,7 +207,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
-  '/ceo/franchises': typeof CeoFranchisesRoute
+  '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -209,6 +217,7 @@ export interface FileRoutesById {
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
@@ -235,6 +244,7 @@ export interface FileRouteTypes {
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/ceo/franchises/$id'
     | '/member/courses/$id'
     | '/ceo/courses/'
     | '/ceo/courses/$id/edit'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/ceo'
     | '/incharge'
     | '/member'
+    | '/ceo/franchises/$id'
     | '/member/courses/$id'
     | '/ceo/courses'
     | '/ceo/courses/$id/edit'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/ceo/franchises/$id'
     | '/member/courses/$id'
     | '/ceo/courses/'
     | '/ceo/courses/$id/edit'
@@ -445,6 +457,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemberCoursesIdRouteImport
       parentRoute: typeof MemberRoute
     }
+    '/ceo/franchises/$id': {
+      id: '/ceo/franchises/$id'
+      path: '/$id'
+      fullPath: '/ceo/franchises/$id'
+      preLoaderRoute: typeof CeoFranchisesIdRouteImport
+      parentRoute: typeof CeoFranchisesRoute
+    }
     '/ceo/courses/$id/edit': {
       id: '/ceo/courses/$id/edit'
       path: '/courses/$id/edit'
@@ -455,10 +474,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface CeoFranchisesRouteChildren {
+  CeoFranchisesIdRoute: typeof CeoFranchisesIdRoute
+}
+
+const CeoFranchisesRouteChildren: CeoFranchisesRouteChildren = {
+  CeoFranchisesIdRoute: CeoFranchisesIdRoute,
+}
+
+const CeoFranchisesRouteWithChildren = CeoFranchisesRoute._addFileChildren(
+  CeoFranchisesRouteChildren,
+)
+
 interface CeoRouteChildren {
   CeoAssignRoute: typeof CeoAssignRoute
   CeoAttendanceRoute: typeof CeoAttendanceRoute
-  CeoFranchisesRoute: typeof CeoFranchisesRoute
+  CeoFranchisesRoute: typeof CeoFranchisesRouteWithChildren
   CeoSeedRoute: typeof CeoSeedRoute
   CeoIndexRoute: typeof CeoIndexRoute
   CeoCoursesIndexRoute: typeof CeoCoursesIndexRoute
@@ -468,7 +499,7 @@ interface CeoRouteChildren {
 const CeoRouteChildren: CeoRouteChildren = {
   CeoAssignRoute: CeoAssignRoute,
   CeoAttendanceRoute: CeoAttendanceRoute,
-  CeoFranchisesRoute: CeoFranchisesRoute,
+  CeoFranchisesRoute: CeoFranchisesRouteWithChildren,
   CeoSeedRoute: CeoSeedRoute,
   CeoIndexRoute: CeoIndexRoute,
   CeoCoursesIndexRoute: CeoCoursesIndexRoute,
@@ -523,3 +554,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
