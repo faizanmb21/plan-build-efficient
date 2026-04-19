@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_reviews: {
+        Row: {
+          comments: string | null
+          created_at: string
+          frames_analyzed: number
+          id: string
+          model: string
+          provider: string
+          raw_response: Json | null
+          rubric: Json
+          score: number | null
+          submission_id: string
+        }
+        Insert: {
+          comments?: string | null
+          created_at?: string
+          frames_analyzed?: number
+          id?: string
+          model: string
+          provider: string
+          raw_response?: Json | null
+          rubric?: Json
+          score?: number | null
+          submission_id: string
+        }
+        Update: {
+          comments?: string | null
+          created_at?: string
+          frames_analyzed?: number
+          id?: string
+          model?: string
+          provider?: string
+          raw_response?: Json | null
+          rubric?: Json
+          score?: number | null
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_reviews_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assignments: {
         Row: {
           assigned_by: string | null
@@ -48,6 +95,41 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_snapshots: {
+        Row: {
+          captured_at: string
+          id: string
+          kind: string
+          session_id: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          captured_at?: string
+          id?: string
+          kind: string
+          session_id: string
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          captured_at?: string
+          id?: string
+          kind?: string
+          session_id?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_snapshots_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "study_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -314,6 +396,66 @@ export type Database = {
           },
         ]
       }
+      study_sessions: {
+        Row: {
+          active_seconds: number
+          blur_count: number
+          client_info: Json
+          course_id: string | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          idle_seconds: number
+          last_heartbeat_at: string
+          lesson_id: string | null
+          started_at: string
+          user_id: string
+        }
+        Insert: {
+          active_seconds?: number
+          blur_count?: number
+          client_info?: Json
+          course_id?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          idle_seconds?: number
+          last_heartbeat_at?: string
+          lesson_id?: string | null
+          started_at?: string
+          user_id: string
+        }
+        Update: {
+          active_seconds?: number
+          blur_count?: number
+          client_info?: Json
+          course_id?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          idle_seconds?: number
+          last_heartbeat_at?: string
+          lesson_id?: string | null
+          started_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_sessions_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "study_sessions_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       submissions: {
         Row: {
           created_at: string
@@ -401,6 +543,7 @@ export type Database = {
       accept_invite: { Args: { _token: string }; Returns: Json }
       archive_franchise: { Args: { _franchise_id: string }; Returns: Json }
       claim_first_ceo: { Args: never; Returns: boolean }
+      close_stale_sessions: { Args: never; Returns: number }
       get_user_franchise: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {

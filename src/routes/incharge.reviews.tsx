@@ -24,7 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { CheckCircle2, Clock, RefreshCcw, FileText, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, RefreshCcw, FileText, ExternalLink, Loader2, Sparkles } from "lucide-react";
+import { reviewSubmission } from "@/server/review-submission";
 
 export const Route = createFileRoute("/incharge/reviews")({
   component: ReviewsPage,
@@ -239,6 +240,13 @@ function ReviewDialog({
   const [feedback, setFeedback] = React.useState<string>("");
   const [signedUrl, setSignedUrl] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiReview, setAiReview] = React.useState<{
+    score: number;
+    comments: string;
+    rubric: Record<string, number>;
+    model: string;
+  } | null>(null);
 
   React.useEffect(() => {
     if (!row) return;
@@ -246,13 +254,53 @@ function ReviewDialog({
     setGrade(row.grade?.toString() ?? "");
     setFeedback(row.feedback ?? "");
     setSignedUrl(null);
+    setAiReview(null);
     (async () => {
       const { data } = await supabase.storage
         .from("submissions")
         .createSignedUrl(row.file_url, 60 * 30);
       setSignedUrl(data?.signedUrl ?? null);
+      // Load latest existing AI review
+      const { data: existing } = await supabase
+        .from("ai_reviews")
+        .select("score, comments, rubric, model")
+        .eq("submission_id", row.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existing && existing.score !== null) {
+        setAiReview({
+          score: existing.score,
+          comments: existing.comments ?? "",
+          rubric: (existing.rubric ?? {}) as Record<string, number>,
+          model: existing.model,
+        });
+      }
     })();
   }, [row]);
+
+  async function runAi() {
+    if (!row) return;
+    setAiLoading(true);
+    try {
+      const res = await reviewSubmission({ data: { submissionId: row.id } });
+      if (!res.ok) {
+        toast.error(res.error ?? "AI review failed");
+      } else {
+        setAiReview({
+          score: res.score,
+          comments: res.comments,
+          rubric: res.rubric,
+          model: res.model,
+        });
+        toast.success("AI review ready");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "AI review failed");
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   async function save() {
     if (!row) return;
@@ -349,6 +397,42 @@ function ReviewDialog({
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
                 />
+              </div>
+
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" /> AI review (advisory)
+                  </p>
+                  <Button size="sm" variant="outline" onClick={runAi} disabled={aiLoading}>
+                    {aiLoading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                    {aiReview ? "Re-run" : "Run AI review"}
+                  </Button>
+                </div>
+                {aiReview ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-primary/20 text-primary">Score {aiReview.score}/100</Badge>
+                      <span className="text-xs text-muted-foreground">{aiReview.model}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto h-6 text-xs"
+                        onClick={() => {
+                          setGrade(aiReview.score.toString());
+                          setFeedback(aiReview.comments);
+                        }}
+                      >
+                        Use as my review
+                      </Button>
+                    </div>
+                    <p className="text-sm">{aiReview.comments}</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Click to get an AI-suggested score and feedback you can edit.
+                  </p>
+                )}
               </div>
             </div>
 

@@ -1,10 +1,11 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell, type NavItem } from "@/components/AppShell";
-import { LayoutDashboard, ClipboardList } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Activity } from "lucide-react";
 
 const nav: NavItem[] = [
   { to: "/incharge", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/incharge/attendance", label: "Attendance", icon: Activity },
   { to: "/incharge/reviews", label: "Reviews", icon: ClipboardList },
 ];
 
