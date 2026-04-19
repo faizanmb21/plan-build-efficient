@@ -26,12 +26,14 @@ import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
 import { Route as InchargeMembersRouteImport } from './routes/incharge.members'
 import { Route as InchargeAttendanceRouteImport } from './routes/incharge.attendance'
 import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
+import { Route as CeoGradesRouteImport } from './routes/ceo.grades'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
 import { Route as CeoAttendanceRouteImport } from './routes/ceo.attendance'
 import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
 import { Route as CeoFranchisesIndexRouteImport } from './routes/ceo.franchises.index'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
 import { Route as MemberCoursesIdRouteImport } from './routes/member.courses.$id'
+import { Route as CeoGradesReportRouteImport } from './routes/ceo.grades.report'
 import { Route as CeoFranchisesIdRouteImport } from './routes/ceo.franchises.$id'
 import { Route as CeoCoursesIdEditRouteImport } from './routes/ceo.courses.$id.edit'
 
@@ -120,6 +122,11 @@ const CeoSeedRoute = CeoSeedRouteImport.update({
   path: '/seed',
   getParentRoute: () => CeoRoute,
 } as any)
+const CeoGradesRoute = CeoGradesRouteImport.update({
+  id: '/grades',
+  path: '/grades',
+  getParentRoute: () => CeoRoute,
+} as any)
 const CeoFranchisesRoute = CeoFranchisesRouteImport.update({
   id: '/franchises',
   path: '/franchises',
@@ -150,6 +157,11 @@ const MemberCoursesIdRoute = MemberCoursesIdRouteImport.update({
   path: '/courses/$id',
   getParentRoute: () => MemberRoute,
 } as any)
+const CeoGradesReportRoute = CeoGradesReportRouteImport.update({
+  id: '/report',
+  path: '/report',
+  getParentRoute: () => CeoGradesRoute,
+} as any)
 const CeoFranchisesIdRoute = CeoFranchisesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -172,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
+  '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -183,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
+  '/ceo/grades/report': typeof CeoGradesReportRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/franchises/': typeof CeoFranchisesIndexRoute
@@ -195,6 +209,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
+  '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -206,6 +221,7 @@ export interface FileRoutesByTo {
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
+  '/ceo/grades/report': typeof CeoGradesReportRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses': typeof CeoCoursesIndexRoute
   '/ceo/franchises': typeof CeoFranchisesIndexRoute
@@ -223,6 +239,7 @@ export interface FileRoutesById {
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
+  '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/members': typeof InchargeMembersRoute
@@ -234,6 +251,7 @@ export interface FileRoutesById {
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
+  '/ceo/grades/report': typeof CeoGradesReportRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/franchises/': typeof CeoFranchisesIndexRoute
@@ -252,6 +270,7 @@ export interface FileRouteTypes {
     | '/ceo/assign'
     | '/ceo/attendance'
     | '/ceo/franchises'
+    | '/ceo/grades'
     | '/ceo/seed'
     | '/incharge/attendance'
     | '/incharge/members'
@@ -263,6 +282,7 @@ export interface FileRouteTypes {
     | '/incharge/'
     | '/member/'
     | '/ceo/franchises/$id'
+    | '/ceo/grades/report'
     | '/member/courses/$id'
     | '/ceo/courses/'
     | '/ceo/franchises/'
@@ -275,6 +295,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/attendance'
+    | '/ceo/grades'
     | '/ceo/seed'
     | '/incharge/attendance'
     | '/incharge/members'
@@ -286,6 +307,7 @@ export interface FileRouteTypes {
     | '/incharge'
     | '/member'
     | '/ceo/franchises/$id'
+    | '/ceo/grades/report'
     | '/member/courses/$id'
     | '/ceo/courses'
     | '/ceo/franchises'
@@ -302,6 +324,7 @@ export interface FileRouteTypes {
     | '/ceo/assign'
     | '/ceo/attendance'
     | '/ceo/franchises'
+    | '/ceo/grades'
     | '/ceo/seed'
     | '/incharge/attendance'
     | '/incharge/members'
@@ -313,6 +336,7 @@ export interface FileRouteTypes {
     | '/incharge/'
     | '/member/'
     | '/ceo/franchises/$id'
+    | '/ceo/grades/report'
     | '/member/courses/$id'
     | '/ceo/courses/'
     | '/ceo/franchises/'
@@ -451,6 +475,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoSeedRouteImport
       parentRoute: typeof CeoRoute
     }
+    '/ceo/grades': {
+      id: '/ceo/grades'
+      path: '/grades'
+      fullPath: '/ceo/grades'
+      preLoaderRoute: typeof CeoGradesRouteImport
+      parentRoute: typeof CeoRoute
+    }
     '/ceo/franchises': {
       id: '/ceo/franchises'
       path: '/franchises'
@@ -493,6 +524,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemberCoursesIdRouteImport
       parentRoute: typeof MemberRoute
     }
+    '/ceo/grades/report': {
+      id: '/ceo/grades/report'
+      path: '/report'
+      fullPath: '/ceo/grades/report'
+      preLoaderRoute: typeof CeoGradesReportRouteImport
+      parentRoute: typeof CeoGradesRoute
+    }
     '/ceo/franchises/$id': {
       id: '/ceo/franchises/$id'
       path: '/$id'
@@ -524,10 +562,23 @@ const CeoFranchisesRouteWithChildren = CeoFranchisesRoute._addFileChildren(
   CeoFranchisesRouteChildren,
 )
 
+interface CeoGradesRouteChildren {
+  CeoGradesReportRoute: typeof CeoGradesReportRoute
+}
+
+const CeoGradesRouteChildren: CeoGradesRouteChildren = {
+  CeoGradesReportRoute: CeoGradesReportRoute,
+}
+
+const CeoGradesRouteWithChildren = CeoGradesRoute._addFileChildren(
+  CeoGradesRouteChildren,
+)
+
 interface CeoRouteChildren {
   CeoAssignRoute: typeof CeoAssignRoute
   CeoAttendanceRoute: typeof CeoAttendanceRoute
   CeoFranchisesRoute: typeof CeoFranchisesRouteWithChildren
+  CeoGradesRoute: typeof CeoGradesRouteWithChildren
   CeoSeedRoute: typeof CeoSeedRoute
   CeoIndexRoute: typeof CeoIndexRoute
   CeoCoursesIndexRoute: typeof CeoCoursesIndexRoute
@@ -538,6 +589,7 @@ const CeoRouteChildren: CeoRouteChildren = {
   CeoAssignRoute: CeoAssignRoute,
   CeoAttendanceRoute: CeoAttendanceRoute,
   CeoFranchisesRoute: CeoFranchisesRouteWithChildren,
+  CeoGradesRoute: CeoGradesRouteWithChildren,
   CeoSeedRoute: CeoSeedRoute,
   CeoIndexRoute: CeoIndexRoute,
   CeoCoursesIndexRoute: CeoCoursesIndexRoute,
