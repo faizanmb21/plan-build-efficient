@@ -35,9 +35,9 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen">
       {/* Sidebar — desktop */}
-      <aside className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
+      <aside className="hidden w-64 shrink-0 flex-col bg-sidebar/80 text-sidebar-foreground backdrop-blur-2xl border-r border-white/10 lg:flex">
         <SidebarInner nav={nav} roleLabel={roleLabel} />
       </aside>
 
@@ -45,13 +45,13 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setOpen(false)}
             aria-label="Close menu"
           />
-          <aside className="relative flex h-full w-64 flex-col bg-sidebar text-sidebar-foreground animate-slide-in-right">
+          <aside className="relative flex h-full w-64 flex-col bg-sidebar/85 text-sidebar-foreground backdrop-blur-2xl border-r border-white/10 animate-slide-in-right">
             <button
-              className="absolute right-3 top-3 rounded p-1 text-sidebar-foreground/70 hover:bg-sidebar-accent"
+              className="absolute right-3 top-3 rounded-full p-1 text-sidebar-foreground/70 hover:bg-white/10"
               onClick={() => setOpen(false)}
             >
               <X className="h-5 w-5" />
@@ -63,7 +63,7 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="flex h-14 items-center justify-between border-b bg-card px-4 lg:px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-white/10 bg-background/40 backdrop-blur-2xl px-4 lg:px-6">
           <div className="flex items-center gap-3">
             <button
               className="rounded p-1.5 hover:bg-muted lg:hidden"
@@ -87,9 +87,9 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
           <div className="flex items-center gap-2">
             <Link
               to="/profile"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+              className="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm border border-white/10 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-colors"
             >
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/10 text-accent">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/20 text-accent border border-white/10">
                 <UserIcon className="h-4 w-4" />
               </div>
               <span className="hidden max-w-[140px] truncate sm:inline">
@@ -151,15 +151,12 @@ function SidebarInner({
               to={item.to}
               onClick={onNavigate}
               className={cn(
-                "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200",
+                "group relative flex items-center gap-3 rounded-full px-3 py-2 text-sm font-medium transition-all duration-200",
                 active
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-0.5",
+                  ? "bg-primary/80 text-primary-foreground shadow-[0_4px_16px_-4px_oklch(0.62_0.24_268/0.5),inset_0_1px_0_0_oklch(1_0_0/0.2)] border border-white/15 backdrop-blur-md"
+                  : "text-sidebar-foreground/75 hover:bg-white/5 hover:text-sidebar-accent-foreground hover:translate-x-0.5 border border-transparent hover:border-white/10",
               )}
             >
-              {active && (
-                <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-sidebar-primary-foreground/80" />
-              )}
               <Icon className={cn("h-4 w-4 transition-transform", active ? "scale-110" : "group-hover:scale-110")} />
               {item.label}
             </Link>
