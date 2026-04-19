@@ -568,14 +568,15 @@ function PracticalSubmit({
     file_url: string;
     feedback: string | null;
     grade: number | null;
+    letter_grade: string | null;
   } | null>(null);
   const [note, setNote] = React.useState("");
 
   React.useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("submissions")
-        .select("id,status,file_url,feedback,grade")
+        .select("id,status,file_url,feedback,grade,letter_grade")
         .eq("lesson_id", lessonId)
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
