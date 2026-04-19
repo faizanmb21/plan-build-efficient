@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Send, Copy, Trash2, Users, Archive, RotateCcw, AlertTriangle } from "lucide-react";
+import { Building2, Plus, Send, Copy, Trash2, Users, Archive, RotateCcw, AlertTriangle, ArrowRight, ShieldCheck, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { PillarFlower } from "@/components/PillarFlower";
 import { getPillarScoresForUsers } from "@/lib/pillar-data";
@@ -42,6 +42,7 @@ interface Franchise {
   id: string;
   name: string;
   location: string | null;
+  manager_id: string | null;
   created_at: string;
   archived_at: string | null;
   auto_delete_at: string | null;
@@ -169,13 +170,18 @@ function FranchisesPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map((f) => {
               const team = members.filter((m) => m.franchise_id === f.id);
+              const memberCount = team.filter((m) => m.role === "member").length;
+              const incharge =
+                team.find((m) => m.id === f.manager_id) ??
+                team.find((m) => m.role === "incharge");
               const scores = scoresByFranchise[f.id];
               const isArchived = !!f.archived_at;
               const purgeReady =
                 isArchived && f.archived_at &&
                 new Date(f.archived_at).getTime() < Date.now() - 30 * 24 * 60 * 60 * 1000;
-              return (
-                <Card key={f.id} className={isArchived ? "opacity-70" : "hover-lift"}>
+
+              const cardInner = (
+                <Card className={isArchived ? "opacity-70" : "hover-lift h-full transition-colors group-hover:border-accent/50"}>
                   <CardHeader>
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="flex items-center gap-2 text-base">
@@ -183,7 +189,11 @@ function FranchisesPage() {
                       </CardTitle>
                       {isArchived && <Badge variant="destructive">Archived</Badge>}
                     </div>
-                    {f.location && <CardDescription>{f.location}</CardDescription>}
+                    {f.location && (
+                      <CardDescription className="flex items-center gap-1.5">
+                        <MapPin className="h-3 w-3" /> {f.location}
+                      </CardDescription>
+                    )}
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm">
                     {!isArchived && scores && (
@@ -191,16 +201,24 @@ function FranchisesPage() {
                         <PillarFlower scores={scores} size={180} showLabels={false} />
                       </div>
                     )}
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                      <Users className="h-3.5 w-3.5" /> {team.length} member{team.length === 1 ? "" : "s"}
-                    </div>
-                    {team.slice(0, 3).map((m) => (
-                      <div key={m.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
-                        <span className="truncate">{m.full_name ?? "Unnamed"}</span>
-                        {m.role && <Badge variant="outline" className="capitalize">{m.role}</Badge>}
+                    <div className="space-y-1.5 text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <span className="truncate">
+                          {incharge ? incharge.full_name ?? "Unnamed incharge" : "No incharge yet"}
+                        </span>
                       </div>
-                    ))}
-                    <div className="flex flex-wrap gap-2 pt-2">
+                      <div className="flex items-center gap-1.5">
+                        <Users className="h-3.5 w-3.5" /> {memberCount} member{memberCount === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    {!isArchived && (
+                      <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs font-medium text-accent">
+                        <span>Click for more details</span>
+                        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                       {!isArchived ? (
                         <Button size="sm" variant="outline" onClick={() => archive(f.id, f.name)}>
                           <Archive className="h-3.5 w-3.5" /> Archive
@@ -229,6 +247,14 @@ function FranchisesPage() {
                     )}
                   </CardContent>
                 </Card>
+              );
+
+              return isArchived ? (
+                <div key={f.id}>{cardInner}</div>
+              ) : (
+                <Link key={f.id} to="/ceo/franchises/$id" params={{ id: f.id }} className="group block">
+                  {cardInner}
+                </Link>
               );
             })}
           </div>
