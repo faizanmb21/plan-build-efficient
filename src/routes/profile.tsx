@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ArrowLeft, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { downscaleImage } from "@/lib/image-downscale";
 
 export const Route = createFileRoute("/profile")({
   component: ProfilePage,
@@ -52,14 +53,16 @@ function ProfilePage() {
   }
 
   async function onAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !session) return;
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image must be under 5MB");
+    const original = e.target.files?.[0];
+    if (!original || !session) return;
+    if (original.size > 10 * 1024 * 1024) {
+      toast.error("Image must be under 10MB");
       return;
     }
     setUploading(true);
     try {
+      // Avatars only need to be small — downscale aggressively.
+      const file = await downscaleImage(original, { maxDimension: 512, quality: 0.85 });
       const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
       const path = `${session.user.id}/avatar.${ext}`;
       const { error: upErr } = await supabase.storage
