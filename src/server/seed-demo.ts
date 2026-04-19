@@ -1,9 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+type DemoAccount = { email: string; full_name: string };
+
 const PASSWORD = "Academy@123";
 
-const ACCOUNTS: { email: string; full_name: string }[] = [
+const ACCOUNTS: DemoAccount[] = [
   { email: "ceo@irmacademy.test", full_name: "Imran Iqbal (CEO)" },
   { email: "incharge.sargodha@irmacademy.test", full_name: "Sargodha Incharge" },
   { email: "incharge.lahore@irmacademy.test", full_name: "Lahore Incharge" },
@@ -15,54 +17,97 @@ const ACCOUNTS: { email: string; full_name: string }[] = [
   }),
 ];
 
+async function findUserIdByEmail(email: string): Promise<string | null> {
+  let page = 1;
+
+  while (true) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+
+    const users = data?.users ?? [];
+    const match = users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
+    if (match?.id) return match.id;
+    if (users.length < 200) return null;
+
+    page += 1;
+  }
+}
+
+async function ensureDemoAccount(acc: DemoAccount) {
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email: acc.email,
+    password: PASSWORD,
+    email_confirm: true,
+    user_metadata: { full_name: acc.full_name },
+  });
+
+  if (!error && data?.user) {
+    return { status: "created" as const };
+  }
+
+  const msg = error?.message || "";
+  const alreadyExists =
+    msg.toLowerCase().includes("already") ||
+    msg.toLowerCase().includes("registered") ||
+    msg.toLowerCase().includes("exists");
+
+  if (!alreadyExists) {
+    throw new Error(msg || "Unknown account creation error");
+  }
+
+  const userId = await findUserIdByEmail(acc.email);
+  if (!userId) {
+    throw new Error("Account exists but could not be looked up for password reset");
+  }
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    password: PASSWORD,
+    email_confirm: true,
+    user_metadata: { full_name: acc.full_name },
+  });
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  return { status: "reset" as const };
+}
+
 export const seedDemo = createServerFn({ method: "POST" }).handler(async () => {
   const created: string[] = [];
-  const skipped: string[] = [];
+  const reset: string[] = [];
   const failed: { email: string; error: string }[] = [];
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return {
       ok: false as const,
       created,
-      skipped,
+      reset,
       failed,
       error:
         "Seeder is unavailable in this preview because the backend admin secret is not exposed here yet. Open the published app and run the seeder there.",
     };
   }
 
-  // 1. Create auth users (idempotent: skip if exists)
   for (const acc of ACCOUNTS) {
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email: acc.email,
-      password: PASSWORD,
-      email_confirm: true,
-      user_metadata: { full_name: acc.full_name },
-    });
-
-    if (error) {
-      const msg = error.message || "";
-      if (
-        msg.toLowerCase().includes("already") ||
-        msg.toLowerCase().includes("registered") ||
-        msg.toLowerCase().includes("exists")
-      ) {
-        skipped.push(acc.email);
-      } else {
-        failed.push({ email: acc.email, error: msg });
-      }
-    } else if (data?.user) {
-      created.push(acc.email);
+    try {
+      const result = await ensureDemoAccount(acc);
+      if (result.status === "created") created.push(acc.email);
+      else reset.push(acc.email);
+    } catch (error) {
+      failed.push({
+        email: acc.email,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
-  // 2. Run the SQL seeder (franchises, courses, lessons, assignments, progress, submissions)
   const { data: seedResult, error: seedErr } = await supabaseAdmin.rpc("seed_demo_content");
   if (seedErr) {
     return {
       ok: false as const,
       created,
-      skipped,
+      reset,
       failed,
       error: `Content seed failed: ${seedErr.message}`,
     };
@@ -71,7 +116,7 @@ export const seedDemo = createServerFn({ method: "POST" }).handler(async () => {
   return {
     ok: true as const,
     created,
-    skipped,
+    reset,
     failed,
     seedResult,
     accounts: ACCOUNTS.map((a) => ({ email: a.email, password: PASSWORD })),
