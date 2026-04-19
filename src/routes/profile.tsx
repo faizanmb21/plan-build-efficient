@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ArrowLeft, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/profile")({
@@ -19,6 +20,8 @@ function ProfilePage() {
   const [fullName, setFullName] = React.useState("");
   const [phone, setPhone] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (!loading && !session) navigate({ to: "/login" });
@@ -48,6 +51,40 @@ function ProfilePage() {
     await refresh();
   }
 
+  async function onAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !session) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${session.user.id}/avatar.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+      // Cache-bust so the new image shows immediately
+      const url = `${pub.publicUrl}?v=${Date.now()}`;
+      const { error: dbErr } = await supabase
+        .from("profiles")
+        .update({ avatar_url: url })
+        .eq("id", session.user.id);
+      if (dbErr) throw dbErr;
+      toast.success("Avatar updated");
+      await refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   if (loading || !session) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground">
@@ -71,7 +108,37 @@ function ProfilePage() {
             <CardTitle>Your profile</CardTitle>
             <CardDescription>{session.user.email}</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-20 w-20">
+                {profile?.avatar_url && (
+                  <AvatarImage src={profile.avatar_url} alt={profile?.full_name ?? ""} />
+                )}
+                <AvatarFallback className="text-xl">
+                  {(profile?.full_name ?? session.user.email ?? "?").slice(0, 1).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="space-y-1.5">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={onAvatarChange}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                >
+                  <Upload className="h-4 w-4" /> {uploading ? "Uploading…" : "Change photo"}
+                </Button>
+                <p className="text-xs text-muted-foreground">PNG or JPG, up to 5MB.</p>
+              </div>
+            </div>
+
             <form onSubmit={save} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="full_name">Full name</Label>
