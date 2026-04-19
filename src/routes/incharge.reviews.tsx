@@ -113,9 +113,10 @@ function ReviewsPage() {
       profileMap.set(p.id, p.full_name ?? "Member");
     });
 
-    const enriched: SubmissionRow[] = (subs ?? []).map((s) => ({
+    const enriched: SubmissionRow[] = (subs ?? []).map((s: any) => ({
       ...s,
       status: s.status as SubmissionStatus,
+      letter_grade: (s.letter_grade as string | null) ?? null,
       lesson_title: lessonMap.get(s.lesson_id)?.title ?? "Lesson",
       course_title: lessonMap.get(s.lesson_id)?.courseTitle ?? "Course",
       member_name: profileMap.get(s.user_id) ?? "Member",
