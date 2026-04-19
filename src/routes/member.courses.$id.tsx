@@ -577,11 +577,15 @@ function QuizRunner({
 function PracticalSubmit({
   lessonId,
   brief,
+  attachmentPath,
+  attachmentName,
   userId,
   onSubmitted,
 }: {
   lessonId: string;
   brief?: string;
+  attachmentPath?: string | null;
+  attachmentName?: string | null;
   userId: string;
   onSubmitted: () => void;
 }) {
@@ -595,6 +599,7 @@ function PracticalSubmit({
     letter_grade: string | null;
   } | null>(null);
   const [note, setNote] = React.useState("");
+  const [attachmentUrl, setAttachmentUrl] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     (async () => {
@@ -609,6 +614,19 @@ function PracticalSubmit({
       setSubmission(data ?? null);
     })();
   }, [lessonId, userId]);
+
+  React.useEffect(() => {
+    if (!attachmentPath) {
+      setAttachmentUrl(null);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase.storage
+        .from("course-content")
+        .createSignedUrl(attachmentPath, 3600);
+      setAttachmentUrl(data?.signedUrl ?? null);
+    })();
+  }, [attachmentPath]);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -654,6 +672,22 @@ function PracticalSubmit({
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">No brief provided.</p>
+      )}
+
+      {attachmentPath && (
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm" variant="outline">
+            <a
+              href={attachmentUrl ?? "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              download={attachmentName ?? undefined}
+            >
+              <FileText className="h-4 w-4" />
+              Download brief attachment{attachmentName ? ` — ${attachmentName}` : ""}
+            </a>
+          </Button>
+        </div>
       )}
 
       {submission ? (
