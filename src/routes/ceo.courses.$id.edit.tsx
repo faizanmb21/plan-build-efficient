@@ -86,6 +86,8 @@ function CourseEditor() {
   } | null>(null);
   const [sections, setSections] = React.useState<Section[]>([]);
   const [savingMeta, setSavingMeta] = React.useState(false);
+  const [sectionDialogOpen, setSectionDialogOpen] = React.useState(false);
+  const [newSectionTitle, setNewSectionTitle] = React.useState("");
 
   async function load() {
     setLoading(true);
