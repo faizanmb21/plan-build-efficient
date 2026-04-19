@@ -274,35 +274,57 @@ function CourseEditor() {
   }
 
   async function uploadThumbnail(file: File) {
-    const ext = file.name.split(".").pop();
+    // Validate type + size up front (Udemy-style standards)
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file (JPG, PNG, or WebP).");
+      return;
+    }
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+      toast.error("Image must be 5MB or smaller.");
+      return;
+    }
+    const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
     const path = `${courseId}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from("thumbnails").upload(path, file, {
+    const { error: upErr } = await supabase.storage.from("thumbnails").upload(path, file, {
       upsert: true,
+      contentType: file.type,
     });
-    if (error) {
-      toast.error(error.message);
+    if (upErr) {
+      toast.error(upErr.message);
       return;
     }
     const { data } = supabase.storage.from("thumbnails").getPublicUrl(path);
-    setCourse((c) => (c ? { ...c, thumbnail_url: data.publicUrl } : c));
-    toast.success("Thumbnail uploaded — remember to Save");
+    const url = `${data.publicUrl}?v=${Date.now()}`;
+    // Persist immediately — no need to click Save details
+    const { error: dbErr } = await supabase
+      .from("courses")
+      .update({ thumbnail_url: url })
+      .eq("id", courseId);
+    if (dbErr) {
+      toast.error(dbErr.message);
+      return;
+    }
+    setCourse((c) => (c ? { ...c, thumbnail_url: url } : c));
+    toast.success("Thumbnail updated");
   }
 
-  // Auto-set the course thumbnail from a YouTube video/playlist thumbnail URL,
-  // but ONLY if the course doesn't already have one. Never overwrites a manually-set image.
-  async function maybeAutoSetThumbnail(thumbnailUrl: string | null | undefined) {
+  // Auto-set the course thumbnail from a YouTube video/playlist thumbnail URL.
+  // `force=true` (used by playlist import) overwrites any existing thumbnail;
+  // otherwise we respect a manually-set image.
+  async function maybeAutoSetThumbnail(
+    thumbnailUrl: string | null | undefined,
+    opts: { force?: boolean } = {},
+  ) {
     if (!thumbnailUrl) return;
     if (!course) return;
-    if (course.thumbnail_url) return; // respect existing thumbnail
+    if (!opts.force && course.thumbnail_url) return;
     const { error } = await supabase
       .from("courses")
       .update({ thumbnail_url: thumbnailUrl })
       .eq("id", courseId);
-    if (error) {
-      // silent — this is a nice-to-have, don't interrupt the lesson-add flow
-      return;
-    }
-    setCourse((c) => (c && !c.thumbnail_url ? { ...c, thumbnail_url: thumbnailUrl } : c));
+    if (error) return;
+    setCourse((c) => (c ? { ...c, thumbnail_url: thumbnailUrl } : c));
     toast.success("Course thumbnail set from video");
   }
 
