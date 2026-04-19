@@ -30,6 +30,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { fetchVideoMetadata } from "@/lib/video-metadata";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  fetchYoutubePlaylist,
+  formatDuration,
+  type PlaylistVideo,
+} from "@/lib/youtube-playlist";
+import { ListVideo, Loader2 } from "lucide-react";
 import {
   ArrowLeft,
   ChevronDown,
@@ -524,7 +531,7 @@ function SectionCard({
     title: string,
     content?: any,
     duration?: number | null,
-  ) => void;
+  ) => Promise<void> | void;
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
   onMoveLesson: (idx: number, dir: -1 | 1) => void;
@@ -613,7 +620,7 @@ function AddLessonDialog({
     title: string,
     content?: any,
     duration?: number | null,
-  ) => void;
+  ) => Promise<void> | void;
   courseId: string;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -621,7 +628,7 @@ function AddLessonDialog({
   const [title, setTitle] = React.useState("");
   const [videoUrl, setVideoUrl] = React.useState("");
   const [videoPath, setVideoPath] = React.useState<string | null>(null);
-  const [videoSource, setVideoSource] = React.useState<"link" | "upload">("link");
+  const [videoSource, setVideoSource] = React.useState<"link" | "upload" | "playlist">("link");
   const [duration, setDuration] = React.useState<number | null>(null);
   const [pdfUrl, setPdfUrl] = React.useState("");
   const [pdfPath, setPdfPath] = React.useState<string | null>(null);
@@ -632,6 +639,16 @@ function AddLessonDialog({
   const [assignmentAttachmentPath, setAssignmentAttachmentPath] = React.useState<string | null>(null);
   const [assignmentAttachmentName, setAssignmentAttachmentName] = React.useState<string | null>(null);
   const [uploading, setUploading] = React.useState<null | "video" | "pdf" | "assignment">(null);
+
+  // Playlist import state (only for video lessons)
+  const [playlistUrl, setPlaylistUrl] = React.useState("");
+  const [playlistLoading, setPlaylistLoading] = React.useState(false);
+  const [playlistItems, setPlaylistItems] = React.useState<PlaylistVideo[]>([]);
+  const [playlistTitle, setPlaylistTitle] = React.useState<string | null>(null);
+  const [playlistSelected, setPlaylistSelected] = React.useState<Record<string, boolean>>({});
+  const [playlistTitles, setPlaylistTitles] = React.useState<Record<string, string>>({});
+  const [bulkAdding, setBulkAdding] = React.useState(false);
+  const [bulkProgress, setBulkProgress] = React.useState<{ done: number; total: number } | null>(null);
 
   function reset() {
     setType("video");
@@ -648,6 +665,69 @@ function AddLessonDialog({
     setAssignmentBrief("");
     setAssignmentAttachmentPath(null);
     setAssignmentAttachmentName(null);
+    setPlaylistUrl("");
+    setPlaylistItems([]);
+    setPlaylistTitle(null);
+    setPlaylistSelected({});
+    setPlaylistTitles({});
+    setBulkProgress(null);
+  }
+
+  async function loadPlaylist() {
+    if (!playlistUrl.trim()) return;
+    setPlaylistLoading(true);
+    setPlaylistItems([]);
+    try {
+      const res = await fetchYoutubePlaylist(playlistUrl.trim());
+      setPlaylistItems(res.items);
+      setPlaylistTitle(res.playlistTitle);
+      const sel: Record<string, boolean> = {};
+      const titles: Record<string, string> = {};
+      for (const it of res.items) {
+        sel[it.videoId] = true;
+        titles[it.videoId] = it.title;
+      }
+      setPlaylistSelected(sel);
+      setPlaylistTitles(titles);
+      toast.success(`Found ${res.items.length} video${res.items.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load playlist");
+    } finally {
+      setPlaylistLoading(false);
+    }
+  }
+
+  async function bulkAddPlaylist() {
+    const chosen = playlistItems.filter((it) => playlistSelected[it.videoId]);
+    if (chosen.length === 0) {
+      toast.error("Select at least one video.");
+      return;
+    }
+    setBulkAdding(true);
+    setBulkProgress({ done: 0, total: chosen.length });
+    let added = 0;
+    try {
+      for (const it of chosen) {
+        const lessonTitle = (playlistTitles[it.videoId] ?? it.title).trim() || it.title;
+        await onAdd(
+          "video",
+          lessonTitle,
+          { url: it.watchUrl, source: "link" },
+          it.durationSeconds ?? null,
+        );
+        added += 1;
+        setBulkProgress({ done: added, total: chosen.length });
+      }
+      toast.success(`Added ${added} lesson${added === 1 ? "" : "s"} from playlist`);
+      reset();
+      setOpen(false);
+    } catch (err) {
+      toast.error(
+        `Added ${added}/${chosen.length}. ${err instanceof Error ? err.message : "Bulk add failed."}`,
+      );
+    } finally {
+      setBulkAdding(false);
+    }
   }
 
   async function uploadToBucket(file: File, prefix: string, kind: "video" | "pdf" | "assignment") {
@@ -740,20 +820,28 @@ function AddLessonDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Title</label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
-            </div>
+            {!(type === "video" && videoSource === "playlist") && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Title</label>
+                <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
+              </div>
+            )}
           </div>
 
           {type === "video" && (
             <>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Video source</label>
-                <Tabs value={videoSource} onValueChange={(v) => setVideoSource(v as "link" | "upload")}>
-                  <TabsList className="grid w-full grid-cols-2">
+                <Tabs
+                  value={videoSource}
+                  onValueChange={(v) => setVideoSource(v as "link" | "upload" | "playlist")}
+                >
+                  <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="link">Paste link</TabsTrigger>
                     <TabsTrigger value="upload">Upload file</TabsTrigger>
+                    <TabsTrigger value="playlist">
+                      <ListVideo className="h-3.5 w-3.5" /> Playlist
+                    </TabsTrigger>
                   </TabsList>
                   <TabsContent value="link" className="space-y-2 pt-3">
                     <UrlAutoFillInput
@@ -789,16 +877,119 @@ function AddLessonDialog({
                       <p className="break-all text-xs text-muted-foreground">Stored: {videoPath}</p>
                     )}
                   </TabsContent>
+                  <TabsContent value="playlist" className="space-y-3 pt-3">
+                    <p className="text-xs text-muted-foreground">
+                      Paste a YouTube playlist link. We'll fetch every video and create one lesson per video in this section.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        value={playlistUrl}
+                        onChange={(e) => setPlaylistUrl(e.target.value)}
+                        placeholder="https://www.youtube.com/playlist?list=..."
+                        disabled={playlistLoading || bulkAdding}
+                      />
+                      <Button
+                        type="button"
+                        onClick={loadPlaylist}
+                        disabled={!playlistUrl.trim() || playlistLoading || bulkAdding}
+                      >
+                        {playlistLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Fetching…
+                          </>
+                        ) : (
+                          "Fetch videos"
+                        )}
+                      </Button>
+                    </div>
+
+                    {playlistItems.length > 0 && (
+                      <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                        {playlistTitle && (
+                          <p className="text-sm font-medium">{playlistTitle}</p>
+                        )}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>
+                            {Object.values(playlistSelected).filter(Boolean).length} of{" "}
+                            {playlistItems.length} selected
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="underline"
+                              onClick={() => {
+                                const all: Record<string, boolean> = {};
+                                playlistItems.forEach((it) => (all[it.videoId] = true));
+                                setPlaylistSelected(all);
+                              }}
+                            >
+                              Select all
+                            </button>
+                            <button
+                              type="button"
+                              className="underline"
+                              onClick={() => setPlaylistSelected({})}
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                          {playlistItems.map((it) => (
+                            <div
+                              key={it.videoId}
+                              className="flex items-center gap-2 rounded-md border bg-background p-2"
+                            >
+                              <Checkbox
+                                checked={!!playlistSelected[it.videoId]}
+                                onCheckedChange={(c) =>
+                                  setPlaylistSelected((s) => ({
+                                    ...s,
+                                    [it.videoId]: !!c,
+                                  }))
+                                }
+                                disabled={bulkAdding}
+                              />
+                              {it.thumbnailUrl && (
+                                <img
+                                  src={it.thumbnailUrl}
+                                  alt=""
+                                  className="h-10 w-16 rounded object-cover"
+                                  loading="lazy"
+                                />
+                              )}
+                              <Input
+                                value={playlistTitles[it.videoId] ?? it.title}
+                                onChange={(e) =>
+                                  setPlaylistTitles((t) => ({
+                                    ...t,
+                                    [it.videoId]: e.target.value,
+                                  }))
+                                }
+                                disabled={bulkAdding}
+                                className="h-8 flex-1"
+                              />
+                              <Badge variant="outline" className="text-xs">
+                                {formatDuration(it.durationSeconds)}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
                 </Tabs>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Duration (seconds, optional)</label>
-                <Input
-                  type="number"
-                  value={duration ?? ""}
-                  onChange={(e) => setDuration(e.target.value ? Number(e.target.value) : null)}
-                />
-              </div>
+              {videoSource !== "playlist" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Duration (seconds, optional)</label>
+                  <Input
+                    type="number"
+                    value={duration ?? ""}
+                    onChange={(e) => setDuration(e.target.value ? Number(e.target.value) : null)}
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -859,7 +1050,7 @@ function AddLessonDialog({
             </p>
           )}
 
-          {supportsAssignment && (
+          {supportsAssignment && !(type === "video" && videoSource === "playlist") && (
             <div className="space-y-2 rounded-md border bg-muted/30 p-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -933,10 +1124,33 @@ function AddLessonDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={bulkAdding}
+            >
               Cancel
             </Button>
-            <Button type="submit">Add lesson</Button>
+            {type === "video" && videoSource === "playlist" ? (
+              <Button
+                type="button"
+                onClick={bulkAddPlaylist}
+                disabled={
+                  bulkAdding ||
+                  playlistItems.length === 0 ||
+                  Object.values(playlistSelected).filter(Boolean).length === 0
+                }
+              >
+                {bulkAdding && bulkProgress
+                  ? `Adding ${bulkProgress.done}/${bulkProgress.total}…`
+                  : `Add ${Object.values(playlistSelected).filter(Boolean).length} lesson${
+                      Object.values(playlistSelected).filter(Boolean).length === 1 ? "" : "s"
+                    }`}
+              </Button>
+            ) : (
+              <Button type="submit">Add lesson</Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
