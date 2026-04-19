@@ -1,52 +1,54 @@
 
 
-User wants two things:
-1. **Test end-to-end** — they're explicitly asking me to verify the CEO/member/incharge flows in the browser. This is a sanctioned browser-test request.
-2. **Build `/incharge/grades`** — a franchise-scoped version of the CEO grades hub.
+User wants a "Add from YouTube playlist" option in the lesson creation flow that auto-fetches every video in the playlist and creates one lesson per video — without disturbing the existing single-video URL/upload tabs.
 
-Let me check what exists for the incharge side and what data shape the franchise-scoped query needs.
-<br>
-The CEO grades hub at `src/routes/ceo.grades.tsx` already has 3 tabs (By member / By franchise / By course) with CSV export and a per-member drill-down via `MemberGradeReport`. For incharge, the "By franchise" tab is irrelevant (they only see one franchise). So the incharge version becomes 2 tabs: **By member** and **By course**, scoped to their franchise via `get_user_franchise(auth.uid())` (RLS already enforces this — incharges can only SELECT submissions/profiles for their own franchise, so the same queries naturally return franchise-scoped data).
+Let me check what already exists for video metadata fetching and the AddLessonDialog structure.
 
-`MemberGradeReport` already exists and works for any member id — RLS lets incharges read their own franchise members' submissions, so reusing it as-is is fine.
+We already have:
+- `video-oembed` edge function returning title + duration for a single YouTube/Vimeo URL.
+- `parseVideoUrl` in `src/lib/video-embed.ts` for YouTube link parsing.
+- `addLesson(sectionId, type, title, content, duration)` already used in `AddLessonDialog`.
+
+YouTube playlist video listing requires the **YouTube Data API v3** (`playlistItems.list`) — oEmbed doesn't list playlist contents. This needs a `YOUTUBE_API_KEY` secret. The free quota (10,000 units/day) easily covers daily playlist imports (1 unit per `playlistItems` page of 50 videos).
 
 ## Plan
 
-### Step 1 — Create `/incharge/grades` route
+### Step 1 — New edge function `youtube-playlist`
+- Accepts `{ playlistUrl }`, extracts `list=` ID, calls `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=...&key=$YOUTUBE_API_KEY`.
+- Paginates through `nextPageToken` until done (handles playlists >50 videos).
+- For each item also pulls `videos.list?part=contentDetails` in batches of 50 to get ISO 8601 duration → seconds.
+- Returns `{ playlistTitle, items: [{ videoId, title, description, durationSeconds, thumbnailUrl, watchUrl }] }`.
+- Skips deleted/private videos gracefully.
+- Public CORS, no auth required (it's just public metadata).
 
-New file: `src/routes/incharge.grades.tsx`
-- Protected by `RoleGuard allow={["incharge"]}` (the parent `incharge.tsx` layout already does this).
-- 2 tabs: **By member**, **By pillar**.
-- **By member** table: name, total graded, A+/A/B/C counts, average %, redo count, last graded. Searchable. Click row → opens `MemberGradeReport` dialog (already exists).
-- **By pillar** table: pillar/course title, members graded, submissions graded, avg %, pass rate, redo rate.
-- "Download CSV" button on each tab.
-- Header tile strip: total members, total graded, franchise average %, pending reviews count → links to `/incharge/reviews`.
-- All queries naturally franchise-scoped by RLS — no extra `franchise_id` filter needed in the JS, but I'll add `.eq('franchise_id', myFranchise)` defensively for clarity and a tiny perf boost.
+### Step 2 — Request `YOUTUBE_API_KEY` secret
+Use `add_secret` so the user provides their YouTube Data API v3 key (they generate it in Google Cloud Console — free, takes ~3 min). Wait for the secret before deploying the function.
 
-### Step 2 — Add "Grades" link to incharge sidebar
+### Step 3 — Add "Playlist" tab to AddLessonDialog
+File: `src/routes/ceo.courses.$id.edit.tsx` (the `AddLessonDialog` component for `video` lessons only).
 
-Edit `src/routes/incharge.tsx` — add `{ to: "/incharge/grades", label: "Grades", icon: GraduationCap }` to the `nav` array between "Members" and "Attendance".
+Current tabs: `Paste link` | `Upload file`. Add a **third tab**: `Playlist`. The existing two tabs stay exactly as they are.
 
-### Step 3 — Browser test (after the file is created)
+Playlist tab UI:
+- Input: paste YouTube playlist URL.
+- "Fetch videos" button → calls `youtube-playlist` function → shows checklist of every video found, with title + duration + thumbnail, all checked by default.
+- User can uncheck any they don't want, optionally edit titles inline.
+- "Add N lessons" button → loops through selected items, calls `addLesson(sectionId, "video", title, { url, source: "link" }, durationSeconds)` for each, in order, one after another. Shows progress ("Adding 3/12…").
+- Closes dialog on success with a toast: "Added 12 lessons from playlist".
+- All videos go into the **same section** (the section the dialog was opened from).
+- The optional assignment toggle is hidden in playlist mode (assignments are per-lesson and would be confusing to apply in bulk).
 
-Sequence:
-1. Navigate to `/login` → log in as `ceo@irmacademy.test` / `Academy@123`.
-2. Click **Grades** in the sidebar → screenshot the 3 tabs populated.
-3. Click a member row → drill-down dialog → screenshot. Click "Download CSV" → confirm download fires (toast/network).
-4. Click "Open printable report" → confirm new tab opens `/ceo/grades/report?member=...`.
-5. Sign out → log in as `member01@irmacademy.test` / `Academy@123` → navigate to `/member/grades` → screenshot graded submissions list.
-6. Sign out → log in as `incharge.sargodha@irmacademy.test` / `Academy@123` → navigate to `/incharge/reviews` → screenshot queue. Then navigate to the new `/incharge/grades` → screenshot.
-
-Report which views were verified populated, which (if any) were empty (likely means the seeder hasn't been run yet — in that case, instruct the user to run `/ceo/seed` first).
+### Step 4 — Lightweight error handling
+- Invalid URL → "That doesn't look like a YouTube playlist link."
+- API quota exceeded / private playlist → friendly toast with the upstream message.
+- Empty playlist → "No videos found."
 
 ### Files touched
-
-- New: `src/routes/incharge.grades.tsx` — franchise-scoped grades hub (~250 lines, mirrors `ceo.grades.tsx` structure but trimmed to 2 tabs).
-- Edited: `src/routes/incharge.tsx` — add Grades nav item + GraduationCap icon import.
+- New: `supabase/functions/youtube-playlist/index.ts` — edge function (~80 lines).
+- Edited: `src/routes/ceo.courses.$id.edit.tsx` — add `Playlist` tab + bulk-add flow inside `AddLessonDialog` only (LessonEditorDialog stays unchanged — editing is per-lesson).
+- New (optional helper): `src/lib/youtube-playlist.ts` — client wrapper around the edge function + ISO 8601 duration parser if needed (most parsing happens server-side).
 
 ### Verification
-
-- Incharge sidebar shows "Grades" → table only lists members of their own franchise.
-- CSV downloads contain only their franchise's data (RLS enforces this; defensive `.eq()` reinforces).
-- Per-member drill-down opens `MemberGradeReport` and works identically to the CEO view.
+- Open a course → Add lesson → Video → Playlist tab → paste any public YouTube playlist URL → fetch → see list of videos → click "Add 12 lessons" → all 12 appear in the section in correct order with titles + durations.
+- Existing "Paste link" and "Upload file" flows are untouched.
 
