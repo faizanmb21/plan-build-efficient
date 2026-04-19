@@ -854,26 +854,41 @@ function SectionCard({
 
   return (
     <div ref={sortable.setNodeRef} style={style}>
-      <Collapsible open={open} onOpenChange={setOpen} className="rounded-lg border bg-background">
+      <Collapsible
+        open={open}
+        onOpenChange={setOpen}
+        className={`group/section rounded-lg border transition-colors ${open ? "bg-muted/20" : "bg-background"}`}
+      >
         <div className="flex items-center justify-between gap-2 p-3">
           <div className="flex flex-1 items-center gap-2">
             <button
               type="button"
               {...sortable.attributes}
               {...sortable.listeners}
-              className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+              className="cursor-grab touch-none rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
               aria-label="Drag section"
             >
               <GripVertical className="h-4 w-4" />
             </button>
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7">
+              <button
+                type="button"
+                className="flex flex-1 items-center gap-2 text-left"
+                aria-label={open ? "Collapse section" : "Expand section"}
+              >
                 <ChevronDown
-                  className={`h-4 w-4 transition-transform ${open ? "" : "-rotate-90"}`}
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
                 />
-              </Button>
+                {!editing && (
+                  <span className="font-medium">{section.title}</span>
+                )}
+                <Badge variant="secondary" className="ml-1">
+                  {section.lessons.length}{" "}
+                  {section.lessons.length === 1 ? "lesson" : "lessons"}
+                </Badge>
+              </button>
             </CollapsibleTrigger>
-            {editing ? (
+            {editing && (
               <Input
                 autoFocus
                 value={title}
@@ -885,37 +900,57 @@ function SectionCard({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                 }}
-                className="h-8"
+                className="h-8 max-w-sm"
               />
-            ) : (
-              <button
-                className="text-left font-medium hover:underline"
-                onClick={() => setEditing(true)}
-              >
-                {section.title}
-              </button>
             )}
-            <Badge variant="secondary" className="ml-1">
-              {section.lessons.length} {section.lessons.length === 1 ? "lesson" : "lessons"}
-            </Badge>
           </div>
-          <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" onClick={onDelete}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                aria-label="Section actions"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setTitle(section.title);
+                  setEditing(true);
+                  setOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" /> Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onDelete();
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" /> Delete section
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
-        <CollapsibleContent className="space-y-2 border-t bg-muted/30 p-3">
+        <CollapsibleContent className="space-y-2 border-t border-white/5 p-3">
           <SectionLessonsDroppable section={section}>
             <SortableContext
               items={section.lessons.map((l) => l.id)}
               strategy={verticalListSortingStrategy}
             >
               {section.lessons.length === 0 && (
-                <p className="rounded-md border border-dashed bg-background/50 p-3 text-center text-xs text-muted-foreground">
-                  Drop a lesson here or add a new one below.
-                </p>
+                <div className="rounded-md border border-dashed bg-background/40 p-6 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    No lessons yet — add your first lesson below.
+                  </p>
+                </div>
               )}
               {section.lessons.map((l) => (
                 <LessonRow
