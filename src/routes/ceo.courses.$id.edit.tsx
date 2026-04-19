@@ -603,6 +603,7 @@ function CourseEditor() {
                     onUpdateLesson={updateLesson}
                     onDeleteLesson={deleteLesson}
                     courseId={courseId}
+                    onAutoThumbnail={maybeAutoSetThumbnail}
                   />
                 ))}
               </div>
