@@ -598,7 +598,7 @@ function SectionCard({
             courseId={courseId}
           />
         ))}
-        <AddLessonDialog onAdd={onAddLesson} />
+        <AddLessonDialog onAdd={onAddLesson} courseId={courseId} />
       </CollapsibleContent>
     </Collapsible>
   );
