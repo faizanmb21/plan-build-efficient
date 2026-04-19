@@ -650,26 +650,34 @@ function CourseEditor() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Thumbnail</label>
             <div className="flex items-center gap-3">
-              {course.thumbnail_url && (
+              {course.thumbnail_url ? (
                 <img
                   src={course.thumbnail_url}
                   alt="Thumbnail"
-                  className="h-16 w-28 rounded object-cover"
+                  className="aspect-video h-20 w-36 rounded-md border border-white/10 object-cover"
                 />
+              ) : (
+                <div className="flex aspect-video h-20 w-36 items-center justify-center rounded-md border border-dashed border-white/15 text-xs text-muted-foreground">
+                  No image
+                </div>
               )}
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">
                 <Upload className="h-4 w-4" /> Upload image
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) uploadThumbnail(f);
+                    e.target.value = "";
                   }}
                 />
               </label>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Recommended 1280×720 (16:9). JPG, PNG or WebP, up to 5MB. Saves automatically.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Button onClick={saveMeta} disabled={savingMeta || !metaDirty}>
