@@ -100,20 +100,20 @@ function FocusPage() {
 
           <div className="flex gap-2">
             {!state.running ? (
-              <>
-                <Button onClick={() => start(false)} className="gap-2">
-                  <Play className="h-4 w-4" /> Clock in (webcam only)
-                </Button>
-                <Button onClick={() => start(true)} variant="outline" className="gap-2">
-                  <Monitor className="h-4 w-4" /> Clock in + share screen
-                </Button>
-              </>
+              <Button onClick={() => start()} className="gap-2">
+                <Play className="h-4 w-4" /> Clock in (webcam + screen share)
+              </Button>
             ) : (
               <Button onClick={stop} variant="destructive" className="gap-2">
                 <Square className="h-4 w-4" /> Clock out
               </Button>
             )}
           </div>
+          {!state.running && (
+            <p className="text-xs text-muted-foreground">
+              You'll be asked for camera access, then to pick a screen/window to share. Both are required — sessions stop if either is denied or the screen share ends.
+            </p>
+          )}
         </CardContent>
       </Card>
 
