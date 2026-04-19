@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { parseVideoUrl } from "@/lib/video-embed";
+import { parseVideoUrl, getYouTubeThumbnail } from "@/lib/video-embed";
 import { fetchVideoMetadata } from "@/lib/video-metadata";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
