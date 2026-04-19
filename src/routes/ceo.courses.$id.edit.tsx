@@ -150,6 +150,44 @@ function CourseEditor() {
   const [sectionDialogOpen, setSectionDialogOpen] = React.useState(false);
   const [newSectionTitle, setNewSectionTitle] = React.useState("");
 
+  // Baseline (last persisted) meta values for dirty-state tracking.
+  const [metaBaseline, setMetaBaseline] = React.useState<{
+    title: string;
+    description: string | null;
+  } | null>(null);
+  const [metaSavedFlash, setMetaSavedFlash] = React.useState(false);
+  const [statusSavedFlash, setStatusSavedFlash] = React.useState(false);
+
+  // Track in-flight curriculum mutations for the "Saving…" / "All changes saved" indicator.
+  const [mutationCount, setMutationCount] = React.useState(0);
+  const [curriculumSavedFlash, setCurriculumSavedFlash] = React.useState(false);
+  const beginMutation = React.useCallback(() => setMutationCount((n) => n + 1), []);
+  const endMutation = React.useCallback(() => {
+    setMutationCount((n) => Math.max(0, n - 1));
+    setCurriculumSavedFlash(true);
+  }, []);
+  React.useEffect(() => {
+    if (!curriculumSavedFlash) return;
+    const t = setTimeout(() => setCurriculumSavedFlash(false), 2500);
+    return () => clearTimeout(t);
+  }, [curriculumSavedFlash]);
+
+  const metaDirty =
+    !!course &&
+    !!metaBaseline &&
+    ((course.title ?? "") !== metaBaseline.title ||
+      (course.description ?? "") !== (metaBaseline.description ?? ""));
+
+  React.useEffect(() => {
+    if (!metaDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [metaDirty]);
+
   async function load() {
     setLoading(true);
     const [{ data: c, error: cErr }, { data: secs, error: sErr }, { data: lessons, error: lErr }] =
