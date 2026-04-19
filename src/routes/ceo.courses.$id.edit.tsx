@@ -989,10 +989,15 @@ function AddLessonDialog({
     return { brief: practicalBrief.trim() };
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd(type, title.trim(), buildContent(), duration);
+    await onAdd(type, title.trim(), buildContent(), duration);
+    // Auto-set course thumbnail from a YouTube link lesson
+    if (type === "video" && videoSource === "link" && onAutoThumbnail) {
+      const thumb = getYouTubeThumbnail(videoUrl);
+      if (thumb) await onAutoThumbnail(thumb);
+    }
     reset();
     setOpen(false);
   }
