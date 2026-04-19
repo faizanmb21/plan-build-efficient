@@ -68,10 +68,10 @@ function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/5 via-background to-accent/5 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center px-4 py-12">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/80 text-primary-foreground border border-white/15 backdrop-blur-md shadow-[0_8px_24px_-6px_oklch(0.62_0.24_268/0.6),inset_0_1px_0_0_oklch(1_0_0/0.25)]">
             <AnimatedCap size={36} />
           </div>
           <CardTitle className="text-2xl">IRM Academy</CardTitle>
