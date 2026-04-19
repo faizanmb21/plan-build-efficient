@@ -1,80 +1,85 @@
 
 
-## Plan — Udacity-style rebrand + animations + full demo seed
+User wants the full accountability + AI review system. Key constraints:
+- Screenshots are mandatory (browser-based, with consent)
+- Time tracking + attendance
+- LLM can be self-hosted (Mac Studio or cloud GPU) — not limited to Lovable AI
 
-### A. Visual rebrand to Udacity-style (theme + fonts)
-Update `src/styles.css` and `__root.tsx`:
-- Add **Sora** (display) + keep **Inter** (body) from Google Fonts. `--font-display: "Sora"`, `--font-sans: "Inter"`.
-- Palette shift: black sidebar/nav (`--sidebar` near-black `#0A0A0A`), white app background, electric-blue accent (`--accent` ≈ `#2015FF`), sharp foreground. Cards stay white with subtle border + soft shadow. Rounded `--radius: 0.5rem` (Udacity is squarer than current).
-- Typography rules in `@layer base`: headings use `font-display`, tighter tracking, heavier weight; body Inter 15–16px.
-- Apply `font-display` to all `h1/h2/h3` plus dashboard hero numbers (CEO stat values, course titles, lesson titles).
+Reality check on screenshots: A web app **cannot** capture the desktop. Browser `getDisplayMedia()` can capture a screen/window/tab but requires the user to click "Share" every time the browser starts a capture session — there is no silent background capture in a pure web app. The honest options:
 
-### B. Smooth animations everywhere
-- `src/styles.css`: add reusable utilities — `.animate-fade-in`, `.animate-scale-in`, `.hover-lift` (translate + shadow), `.press` (active:scale).
-- `AppShell.tsx`: animated active nav pill, sidebar item hover slide, mobile drawer slide-in.
-- `tabs.tsx`: animate content switch with `data-[state=active]:animate-fade-in`; animated underline on triggers.
-- `card.tsx`: optional `interactive` variant with `hover-lift transition-all`.
-- `button.tsx`: add `active:scale-[0.98] transition-transform` to base.
-- Page mount: wrap each route's main content in `animate-fade-in` (via AppShell `<main>`).
-- Progress bars: `transition-[width] duration-700 ease-out`.
+1. **Web-only**: webcam snapshots (silent after one consent) + screen-share recording during clock-in (user picks once per session, then we sample frames every N minutes). Acceptable for proof-of-work but not Hubstaff-grade.
+2. **Companion desktop app** (Electron or native): true silent screenshot capture every N minutes, app/window tracking, idle detection. This is the Hubstaff-equivalent. Lovable can build the Electron app in a separate project — same auth, same DB.
 
-### C. Full demo seed (the 12 pillars from your doc)
+I'll propose **both** in phases: ship web + webcam now, add Electron tracker after. For AI: route everything through one server function with a `provider` switch — Lovable AI by default, with `EXTERNAL_VISION_URL` env var to point at the Mac Studio (Ollama with `llava`/`qwen2-vl`) or any OpenAI-compatible endpoint (vLLM, LM Studio, Replicate). User decides per-deployment, no code change.
 
-**Franchises** (3): IRM Sargodha, IRM Lahore, IRM PDK.
+Plan structure: Phase 1 (time + attendance + webcam), Phase 2 (AI review with pluggable backend), Phase 3 (Electron tracker). Keep concise.
 
-**Auth accounts** (24, password `Academy@123`):
-- `ceo@irmacademy.test` — CEO
-- `incharge.sargodha@irmacademy.test`, `incharge.lahore@…`, `incharge.pdk@…` — Incharges
-- `member01..member20@irmacademy.test` — Members spread across 3 franchises
-- `you@irmacademy.test` — your personal demo member (Sargodha) with rich progress
+---
 
-**12 Courses** (your exact pillars, all `published`):
-1. Software Operation
-2. Comprehension
-3. Storyboarding & Pre-Production Thinking
-4. Pacing & Editorial Rhythm
-5. Typography & Text Design
-6. Color & Visual Consistency
-7. Caption & Text Accuracy
-8. Sound Design & Audio
-9. Format-Specific Editing
-10. Motion Graphics & Animation
-11. AI Tools & Workflow
-12. File & Export Management
+# Plan — Accountability + AI Video Review
 
-Each course: description from your doc + Unsplash thumbnail + **3 sections × ~5 lessons** = ~15 lessons. Lesson types mixed: video (placeholder mp4 URL like Google's sample BBB), PDF (placeholder URL), 1 quiz (3 MCQs derived from your benchmark text), 1 practical (brief = your "Benchmark" paragraph).
+## Phase 1 — Time, Attendance, Webcam Proof (web app, ship first)
 
-**Assignments**: All 12 courses → all 21 members. Mix of `mandatory` / `recommended`, ~half with deadlines.
+**New tables**
+- `study_sessions` — `user_id, started_at, ended_at, active_seconds, idle_seconds, blur_count, course_id?, lesson_id?`
+- `attendance_snapshots` — `session_id, user_id, kind ('webcam'|'screen'), storage_path, captured_at`
+- `attendance_days` — derived view: total focused minutes per user per day
 
-**Progress + submissions** (the visual richness):
-- Members 1–5: ~80% across 3–4 courses, several practicals approved with grades 75–95 + feedback.
-- Members 6–10: ~40%, 1–2 pending submissions waiting on Incharge queue.
-- Members 11–20: 0–25%, fresh learners.
-- **`you@irmacademy.test`**: 60% on 4 courses, 2 graded practicals (1 approved 88/100 with feedback, 1 revision-requested), 1 still pending review — so the Incharge queue, member dashboard, and franchise progress all light up immediately.
+**New storage bucket**: `attendance` (private, RLS: user can insert own, incharge can read franchise, CEO reads all).
 
-### Implementation pieces (technical)
-1. **CSS/font/theme** edit in `styles.css` + `__root.tsx`.
-2. **Animation utilities** added in `styles.css`; apply classes to AppShell, Tabs, Card, Button.
-3. **Server function** `src/server/seed-demo.ts` using `createServerFn` + `SUPABASE_SERVICE_ROLE_KEY` to:
-   - Create the 24 auth users via `supabaseAdmin.auth.admin.createUser({ email_confirm: true })` (idempotent: catch "already registered").
-   - Insert franchises, set incharge `manager_id`, update each profile's `franchise_id` + `full_name`, insert `user_roles`.
-4. **SQL data migration** for everything that doesn't need auth: 12 courses + 36 sections + ~180 lessons + ~250 assignments + ~600 progress rows + ~30 submissions. Uses subqueries against `auth.users` by email so it links to users created in step 3. Idempotent via `ON CONFLICT DO NOTHING` and existence checks.
-5. **One-shot seeder UI** at `/ceo/seed`: a single "Seed demo data" button (CEO-only). Calls the server function, then runs the data SQL via a second server function. Shows success + the credential list.
+**Behavior**
+- "Clock in" button on member dashboard → creates `study_sessions` row + asks once for webcam permission (and optional screen-share).
+- Heartbeat every 30s while tab is visible: increments `active_seconds`, tracks `document.visibilityState`, mouse/keyboard idle (>2 min idle → `idle_seconds`).
+- Webcam snapshot every 5 min (silent after consent) → uploaded to `attendance` bucket.
+- Optional screen-share: if user shared a screen at clock-in, capture a frame every 5 min from the same MediaStream (no re-prompt).
+- Auto clock-out after 10 min of inactivity or browser close (beforeunload + server-side stale-session cleanup).
 
-### Order of execution after approval
-1. Apply theme + fonts + animations (visible immediately, no data needed).
-2. Build seed server functions + `/ceo/seed` page.
-3. You log in as CEO → click "Seed demo data" → I hand you the full credential list in chat.
-4. You explore as CEO, as `incharge.sargodha`, and as `you@irmacademy.test`.
+**New routes**
+- `/member/focus` — clock in/out, live timer, today's focused minutes
+- `/incharge/attendance` — franchise members, hours per day, snapshot gallery, idle %
+- `/ceo/attendance` — all franchises rollup
 
-### Files to be created / edited
-- edit `src/styles.css` (theme, fonts, animation utilities)
-- edit `src/routes/__root.tsx` (Sora font link)
-- edit `src/components/AppShell.tsx` (animated nav, mobile drawer)
-- edit `src/components/ui/tabs.tsx`, `card.tsx`, `button.tsx` (animation polish)
-- edit `src/routes/ceo.index.tsx`, `member.index.tsx`, `incharge.index.tsx` (display font on headings/numbers)
-- new `src/server/seed-demo.ts` (server fn — auth users + franchises + roles)
-- new `supabase/migrations/<ts>_seed_demo_content.sql` (courses, sections, lessons, assignments, progress, submissions)
-- new `src/routes/ceo.seed.tsx` (one-shot seed button page)
-- edit `src/components/AppShell.tsx` nav to add "Seed demo" link (CEO only, hidden after seed)
+## Phase 2 — AI Video Review (pluggable backend)
+
+**New table**
+- `ai_reviews` — `submission_id, model, score, rubric_json, comments, frames_analyzed, created_at`
+
+**New server function**: `reviewSubmission(submissionId)`
+- Downloads submission video from `submissions` bucket
+- Extracts ~6 keyframes + transcript (Whisper via Lovable AI or local)
+- Sends frames+transcript+rubric to a vision model via a single `callVisionLLM()` helper
+
+**`callVisionLLM()` provider switch (env-driven, no code change to swap)**
+
+| `VISION_PROVIDER` | Endpoint | Notes |
+|---|---|---|
+| `lovable` (default) | Lovable AI Gateway, `google/gemini-2.5-pro` | No setup, ships day one |
+| `openai_compat` | `EXTERNAL_VISION_URL` + `EXTERNAL_VISION_KEY` | Works with **Ollama on your Mac Studio** (`http://your-mac:11434/v1`), vLLM, LM Studio, Together, Replicate proxy, Groq, OpenRouter |
+| `replicate` | Replicate API token | For LLaVA/Qwen2-VL hosted |
+
+You set `VISION_PROVIDER=openai_compat` + `EXTERNAL_VISION_URL=https://your-mac-studio.tailscale.net/v1` + `EXTERNAL_VISION_MODEL=qwen2-vl:7b` and it routes there. To expose your Mac Studio safely: Tailscale Funnel or Cloudflare Tunnel (no port-forwarding, free).
+
+**Rubric** — per pillar (12 of them), stored as JSON in `courses.ai_rubric`. Default rubric = your "Benchmark" paragraphs from the doc, scored 0–10 across: technical correctness, pacing, captions, audio, export, brief alignment.
+
+**UI**
+- Member submission: shows AI review under the human review (so AI is advisory, incharge still grades final)
+- Incharge: "AI suggested 78/100" pre-fills the grade field with one-click accept
+
+## Phase 3 — Hubstaff-equivalent Desktop Tracker (separate Lovable project, optional)
+
+When you're ready: I scaffold an **Electron app** in a sibling project that:
+- Logs in with the same Supabase auth
+- Captures silent desktop screenshots every 5 min → uploads to `attendance` bucket
+- Tracks active app/window title, idle time, keystroke counts (numbers only, not content)
+- Same `study_sessions` table → numbers show up in your existing CEO/incharge dashboards automatically
+
+Packaged as `.dmg` / `.exe` / `.AppImage`. Member installs once, signs in once.
+
+## Decisions I need from you
+
+1. **Phase 1 webcam consent UX** — once at clock-in (recommended) or every session?
+2. **Default AI provider for now** — start on Lovable AI (works today, costs credits) and you swap to Mac Studio later, or wait until your Mac Studio endpoint is reachable and start there?
+3. **Build Phase 3 desktop tracker now or after Phase 1+2 are validated?**
+
+After you answer those three, I implement Phase 1 + 2 in one go (DB migrations, storage bucket, server functions, pluggable AI helper, member focus page, incharge attendance page, AI review UI, env-var docs for pointing at your Mac Studio).
 
