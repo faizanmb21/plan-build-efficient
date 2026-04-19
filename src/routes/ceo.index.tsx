@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,37 +22,40 @@ interface Stats {
   pendingSubmissions: number;
 }
 
+async function fetchStats(): Promise<Stats> {
+  const [f, c, m, s] = await Promise.all([
+    supabase
+      .from("franchises")
+      .select("id", { count: "exact", head: true })
+      .is("archived_at", null),
+    supabase.from("courses").select("id", { count: "exact", head: true }),
+    supabase.from("profiles").select("id", { count: "exact", head: true }),
+    supabase
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+  ]);
+  return {
+    franchises: f.count ?? 0,
+    courses: c.count ?? 0,
+    members: m.count ?? 0,
+    pendingSubmissions: s.count ?? 0,
+  };
+}
+
+async function fetchOrgScores(): Promise<PillarScores> {
+  const { data: memberRoles } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "member");
+  const userIds = (memberRoles ?? []).map((r) => r.user_id);
+  return getPillarScoresForUsers(userIds);
+}
+
 function CeoDashboard() {
   const { profile } = useAuth();
-  const [stats, setStats] = React.useState<Stats | null>(null);
-  const [scores, setScores] = React.useState<PillarScores | null>(null);
-
-  React.useEffect(() => {
-    (async () => {
-      const [f, c, m, s, memberRoles] = await Promise.all([
-        supabase
-          .from("franchises")
-          .select("id", { count: "exact", head: true })
-          .is("archived_at", null),
-        supabase.from("courses").select("id", { count: "exact", head: true }),
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase
-          .from("submissions")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "pending"),
-        supabase.from("user_roles").select("user_id").eq("role", "member"),
-      ]);
-      setStats({
-        franchises: f.count ?? 0,
-        courses: c.count ?? 0,
-        members: m.count ?? 0,
-        pendingSubmissions: s.count ?? 0,
-      });
-      const userIds = (memberRoles.data ?? []).map((r) => r.user_id);
-      const ps = await getPillarScoresForUsers(userIds);
-      setScores(ps);
-    })();
-  }, []);
+  const { data: stats } = useQuery({ queryKey: ["ceo", "stats"], queryFn: fetchStats });
+  const { data: scores } = useQuery({ queryKey: ["ceo", "org-scores"], queryFn: fetchOrgScores });
 
   return (
     <div className="space-y-8">
