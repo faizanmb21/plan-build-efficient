@@ -110,6 +110,32 @@ const LESSON_ICONS: Record<LessonType, React.ComponentType<{ className?: string 
   practical: ClipboardCheck,
 };
 
+const LESSON_TYPE_LABEL: Record<LessonType, string> = {
+  video: "Video",
+  pdf: "PDF",
+  quiz: "Quiz",
+  practical: "Practical",
+};
+
+const LESSON_TYPE_CHIP: Record<LessonType, string> = {
+  video: "bg-accent/15 text-accent border-accent/30",
+  pdf: "bg-primary/15 text-primary border-primary/30",
+  quiz: "bg-secondary/40 text-secondary-foreground border-border",
+  practical: "bg-destructive/10 text-destructive border-destructive/30",
+};
+
+function formatLessonDuration(seconds: number | null | undefined): string | null {
+  if (!seconds || seconds <= 0) return null;
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return `${h}:${String(mm).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function CourseEditor() {
   const { id: courseId } = Route.useParams();
   const [loading, setLoading] = React.useState(true);
