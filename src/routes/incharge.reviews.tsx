@@ -212,10 +212,15 @@ function SubmissionCard({ row, onOpen }: { row: SubmissionRow; onOpen: () => voi
               <Icon className="mr-1 h-3 w-3" />
               {meta.label}
             </Badge>
+            {row.letter_grade && (
+              <Badge variant="outline" className="font-mono">
+                {row.letter_grade}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 truncate text-sm text-muted-foreground">
             {row.member_name} · {row.course_title} · {new Date(row.created_at).toLocaleDateString()}
-            {row.grade !== null && ` · Grade ${row.grade}`}
+            {row.grade !== null && ` · ${row.grade}%`}
           </p>
         </div>
         <Button size="sm" onClick={onOpen}>
