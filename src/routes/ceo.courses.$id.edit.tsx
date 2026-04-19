@@ -36,11 +36,12 @@ import {
   formatDuration,
   type PlaylistVideo,
 } from "@/lib/youtube-playlist";
-import { ListVideo, Loader2, GripVertical } from "lucide-react";
 import {
+  ListVideo,
+  Loader2,
+  GripVertical,
   ArrowLeft,
   ChevronDown,
-  ChevronUp,
   Plus,
   Trash2,
   Upload,
@@ -49,7 +50,16 @@ import {
   HelpCircle,
   ClipboardCheck,
   Save,
+  MoreVertical,
+  Check,
+  Pencil,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
 import {
@@ -100,6 +110,32 @@ const LESSON_ICONS: Record<LessonType, React.ComponentType<{ className?: string 
   practical: ClipboardCheck,
 };
 
+const LESSON_TYPE_LABEL: Record<LessonType, string> = {
+  video: "Video",
+  pdf: "PDF",
+  quiz: "Quiz",
+  practical: "Practical",
+};
+
+const LESSON_TYPE_CHIP: Record<LessonType, string> = {
+  video: "bg-accent/15 text-accent border-accent/30",
+  pdf: "bg-primary/15 text-primary border-primary/30",
+  quiz: "bg-secondary/40 text-secondary-foreground border-border",
+  practical: "bg-destructive/10 text-destructive border-destructive/30",
+};
+
+function formatLessonDuration(seconds: number | null | undefined): string | null {
+  if (!seconds || seconds <= 0) return null;
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return `${h}:${String(mm).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function CourseEditor() {
   const { id: courseId } = Route.useParams();
   const [loading, setLoading] = React.useState(true);
@@ -113,6 +149,44 @@ function CourseEditor() {
   const [savingMeta, setSavingMeta] = React.useState(false);
   const [sectionDialogOpen, setSectionDialogOpen] = React.useState(false);
   const [newSectionTitle, setNewSectionTitle] = React.useState("");
+
+  // Baseline (last persisted) meta values for dirty-state tracking.
+  const [metaBaseline, setMetaBaseline] = React.useState<{
+    title: string;
+    description: string | null;
+  } | null>(null);
+  const [metaSavedFlash, setMetaSavedFlash] = React.useState(false);
+  const [statusSavedFlash, setStatusSavedFlash] = React.useState(false);
+
+  // Track in-flight curriculum mutations for the "Saving…" / "All changes saved" indicator.
+  const [mutationCount, setMutationCount] = React.useState(0);
+  const [curriculumSavedFlash, setCurriculumSavedFlash] = React.useState(false);
+  const beginMutation = React.useCallback(() => setMutationCount((n) => n + 1), []);
+  const endMutation = React.useCallback(() => {
+    setMutationCount((n) => Math.max(0, n - 1));
+    setCurriculumSavedFlash(true);
+  }, []);
+  React.useEffect(() => {
+    if (!curriculumSavedFlash) return;
+    const t = setTimeout(() => setCurriculumSavedFlash(false), 2500);
+    return () => clearTimeout(t);
+  }, [curriculumSavedFlash]);
+
+  const metaDirty =
+    !!course &&
+    !!metaBaseline &&
+    ((course.title ?? "") !== metaBaseline.title ||
+      (course.description ?? "") !== (metaBaseline.description ?? ""));
+
+  React.useEffect(() => {
+    if (!metaDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [metaDirty]);
 
   async function load() {
     setLoading(true);
@@ -139,6 +213,7 @@ function CourseEditor() {
       return;
     }
     setCourse(c);
+    setMetaBaseline({ title: c.title, description: c.description });
     const lessonsBySection = new Map<string, Lesson[]>();
     for (const l of lessons ?? []) {
       const arr = lessonsBySection.get(l.section_id) ?? [];
@@ -166,13 +241,18 @@ function CourseEditor() {
       .update({
         title: course.title,
         description: course.description,
-        status: course.status,
         thumbnail_url: course.thumbnail_url,
       })
       .eq("id", courseId);
     setSavingMeta(false);
-    if (error) toast.error(error.message);
-    else toast.success("Course details saved");
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setMetaBaseline({ title: course.title, description: course.description });
+    setMetaSavedFlash(true);
+    setTimeout(() => setMetaSavedFlash(false), 2000);
+    toast.success("Course details saved");
   }
 
   async function toggleStatus(next: "draft" | "published") {
@@ -187,6 +267,8 @@ function CourseEditor() {
       setCourse((c) => (c ? { ...c, status: prev } : c));
       toast.error(error.message);
     } else {
+      setStatusSavedFlash(true);
+      setTimeout(() => setStatusSavedFlash(false), 2000);
       toast.success(next === "published" ? "Course published" : "Course set to draft");
     }
   }
@@ -228,11 +310,13 @@ function CourseEditor() {
     const title = rawTitle.trim();
     if (!title) return;
     const position = sections.length;
+    beginMutation();
     const { data, error } = await supabase
       .from("sections")
       .insert({ course_id: courseId, title, position })
       .select("id,title,position")
       .single();
+    endMutation();
     if (error) {
       toast.error(error.message);
       return;
@@ -243,14 +327,18 @@ function CourseEditor() {
   }
 
   async function renameSection(id: string, title: string) {
+    beginMutation();
     const { error } = await supabase.from("sections").update({ title }).eq("id", id);
+    endMutation();
     if (error) toast.error(error.message);
     else setSections((s) => s.map((sec) => (sec.id === id ? { ...sec, title } : sec)));
   }
 
   async function deleteSection(id: string) {
     if (!confirm("Delete this section and its lessons?")) return;
+    beginMutation();
     const { error } = await supabase.from("sections").delete().eq("id", id);
+    endMutation();
     if (error) toast.error(error.message);
     else setSections((s) => s.filter((sec) => sec.id !== id));
   }
@@ -261,9 +349,12 @@ function CourseEditor() {
       .map((s, i) => ({ id: s.id, position: i }))
       .filter((u) => prevPosById.get(u.id) !== u.position);
     setSections(next.map((s, i) => ({ ...s, position: i })));
+    if (updates.length === 0) return;
+    beginMutation();
     await Promise.all(
       updates.map((u) => supabase.from("sections").update({ position: u.position }).eq("id", u.id)),
     );
+    endMutation();
   }
 
   async function persistLessonChanges(next: Section[], affected: Set<string>) {
@@ -285,6 +376,8 @@ function CourseEditor() {
         lessons: sec.lessons.map((l, i) => ({ ...l, position: i, section_id: sec.id })),
       })),
     );
+    if (updates.length === 0) return;
+    beginMutation();
     await Promise.all(
       updates.map((u) =>
         supabase
@@ -293,6 +386,7 @@ function CourseEditor() {
           .eq("id", u.id),
       ),
     );
+    endMutation();
   }
 
   async function addLesson(
@@ -311,6 +405,7 @@ function CourseEditor() {
       quiz: { questions: [], passing_score: 70, max_attempts: 3 },
       practical: { brief: "" },
     };
+    beginMutation();
     const { data, error } = await supabase
       .from("lessons")
       .insert({
@@ -323,6 +418,7 @@ function CourseEditor() {
       })
       .select("id,section_id,title,type,position,duration_seconds,content")
       .single();
+    endMutation();
     if (error) {
       toast.error(error.message);
       return;
@@ -335,6 +431,7 @@ function CourseEditor() {
   }
 
   async function updateLesson(lesson: Lesson) {
+    beginMutation();
     const { error } = await supabase
       .from("lessons")
       .update({
@@ -343,6 +440,7 @@ function CourseEditor() {
         duration_seconds: lesson.duration_seconds,
       })
       .eq("id", lesson.id);
+    endMutation();
     if (error) toast.error(error.message);
     else {
       setSections((s) =>
@@ -361,7 +459,9 @@ function CourseEditor() {
 
   async function deleteLesson(lesson: Lesson) {
     if (!confirm("Delete this lesson?")) return;
+    beginMutation();
     const { error } = await supabase.from("lessons").delete().eq("id", lesson.id);
+    endMutation();
     if (error) toast.error(error.message);
     else
       setSections((s) =>
@@ -479,17 +579,27 @@ function CourseEditor() {
           </Link>
         </Button>
         <div className="flex items-center gap-3">
-          <Badge variant={course.status === "published" ? "default" : "secondary"}>
-            {course.status}
-          </Badge>
-          <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5">
-            <span className="text-xs text-muted-foreground">Draft</span>
+          {statusSavedFlash && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Check className="h-3.5 w-3.5 text-accent" /> Saved
+            </span>
+          )}
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 backdrop-blur-md">
+            <span
+              className={`text-xs ${course.status === "draft" ? "font-medium text-foreground" : "text-muted-foreground"}`}
+            >
+              Draft
+            </span>
             <Switch
               checked={course.status === "published"}
               onCheckedChange={(v) => toggleStatus(v ? "published" : "draft")}
               aria-label="Toggle published status"
             />
-            <span className="text-xs text-muted-foreground">Published</span>
+            <span
+              className={`text-xs ${course.status === "published" ? "font-medium text-foreground" : "text-muted-foreground"}`}
+            >
+              Published
+            </span>
           </div>
         </div>
       </div>
@@ -500,31 +610,12 @@ function CourseEditor() {
           <CardTitle>Course details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Title</label>
-              <Input
-                value={course.title}
-                onChange={(e) => setCourse({ ...course, title: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select
-                value={course.status}
-                onValueChange={(v: "draft" | "published") =>
-                  setCourse({ ...course, status: v })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="published">Published</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Title</label>
+            <Input
+              value={course.title}
+              onChange={(e) => setCourse({ ...course, title: e.target.value })}
+            />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Description</label>
@@ -558,10 +649,21 @@ function CourseEditor() {
               </label>
             </div>
           </div>
-          <div>
-            <Button onClick={saveMeta} disabled={savingMeta}>
-              <Save className="h-4 w-4" /> {savingMeta ? "Saving…" : "Save details"}
+          <div className="flex items-center gap-3">
+            <Button onClick={saveMeta} disabled={savingMeta || !metaDirty}>
+              {metaSavedFlash ? (
+                <>
+                  <Check className="h-4 w-4" /> Saved
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" /> {savingMeta ? "Saving…" : "Save details"}
+                </>
+              )}
             </Button>
+            {metaDirty && !savingMeta && (
+              <span className="text-xs text-muted-foreground">Unsaved changes</span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -569,16 +671,45 @@ function CourseEditor() {
       {/* Curriculum */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Curriculum</CardTitle>
+          <div className="flex items-center gap-3">
+            <CardTitle>Curriculum</CardTitle>
+            <span
+              className="flex items-center gap-1 text-xs text-muted-foreground"
+              aria-live="polite"
+            >
+              {mutationCount > 0 ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+                </>
+              ) : curriculumSavedFlash ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-accent" /> All changes saved
+                </>
+              ) : sections.length > 0 ? (
+                <>
+                  <Check className="h-3.5 w-3.5 opacity-60" /> Auto-saved
+                </>
+              ) : null}
+            </span>
+          </div>
           <Button onClick={() => setSectionDialogOpen(true)} size="sm">
             <Plus className="h-4 w-4" /> Add section
           </Button>
         </CardHeader>
         <CardContent className="space-y-3">
           {sections.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No sections yet. Add your first section to start building lessons.
-            </p>
+            <div className="rounded-lg border border-dashed bg-muted/20 p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No sections yet. Add your first section to start building lessons.
+              </p>
+              <Button
+                onClick={() => setSectionDialogOpen(true)}
+                size="sm"
+                className="mt-3"
+              >
+                <Plus className="h-4 w-4" /> Add section
+              </Button>
+            </div>
           )}
           <DndContext
             sensors={sensors}
@@ -626,6 +757,18 @@ function CourseEditor() {
                 })()}
             </DragOverlay>
           </DndContext>
+          {sections.length > 0 && (
+            <div className="sticky bottom-0 -mx-6 -mb-6 mt-4 border-t border-white/5 bg-background/80 px-6 py-3 backdrop-blur-md">
+              <Button
+                onClick={() => setSectionDialogOpen(true)}
+                size="sm"
+                variant="outline"
+                className="w-full"
+              >
+                <Plus className="h-4 w-4" /> Add section
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -711,26 +854,41 @@ function SectionCard({
 
   return (
     <div ref={sortable.setNodeRef} style={style}>
-      <Collapsible open={open} onOpenChange={setOpen} className="rounded-lg border bg-background">
+      <Collapsible
+        open={open}
+        onOpenChange={setOpen}
+        className={`group/section rounded-lg border transition-colors ${open ? "bg-muted/20" : "bg-background"}`}
+      >
         <div className="flex items-center justify-between gap-2 p-3">
           <div className="flex flex-1 items-center gap-2">
             <button
               type="button"
               {...sortable.attributes}
               {...sortable.listeners}
-              className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+              className="cursor-grab touch-none rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/section:opacity-100 hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
               aria-label="Drag section"
             >
               <GripVertical className="h-4 w-4" />
             </button>
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7">
+              <button
+                type="button"
+                className="flex flex-1 items-center gap-2 text-left"
+                aria-label={open ? "Collapse section" : "Expand section"}
+              >
                 <ChevronDown
-                  className={`h-4 w-4 transition-transform ${open ? "" : "-rotate-90"}`}
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`}
                 />
-              </Button>
+                {!editing && (
+                  <span className="font-medium">{section.title}</span>
+                )}
+                <Badge variant="secondary" className="ml-1">
+                  {section.lessons.length}{" "}
+                  {section.lessons.length === 1 ? "lesson" : "lessons"}
+                </Badge>
+              </button>
             </CollapsibleTrigger>
-            {editing ? (
+            {editing && (
               <Input
                 autoFocus
                 value={title}
@@ -742,37 +900,57 @@ function SectionCard({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                 }}
-                className="h-8"
+                className="h-8 max-w-sm"
               />
-            ) : (
-              <button
-                className="text-left font-medium hover:underline"
-                onClick={() => setEditing(true)}
-              >
-                {section.title}
-              </button>
             )}
-            <Badge variant="secondary" className="ml-1">
-              {section.lessons.length} {section.lessons.length === 1 ? "lesson" : "lessons"}
-            </Badge>
           </div>
-          <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" onClick={onDelete}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                aria-label="Section actions"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setTitle(section.title);
+                  setEditing(true);
+                  setOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" /> Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onDelete();
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" /> Delete section
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
-        <CollapsibleContent className="space-y-2 border-t bg-muted/30 p-3">
+        <CollapsibleContent className="space-y-2 border-t border-white/5 p-3">
           <SectionLessonsDroppable section={section}>
             <SortableContext
               items={section.lessons.map((l) => l.id)}
               strategy={verticalListSortingStrategy}
             >
               {section.lessons.length === 0 && (
-                <p className="rounded-md border border-dashed bg-background/50 p-3 text-center text-xs text-muted-foreground">
-                  Drop a lesson here or add a new one below.
-                </p>
+                <div className="rounded-md border border-dashed bg-background/40 p-6 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    No lessons yet — add your first lesson below.
+                  </p>
+                </div>
               )}
               {section.lessons.map((l) => (
                 <LessonRow
@@ -1400,35 +1578,72 @@ function LessonRow({
     opacity: sortable.isDragging ? 0.4 : 1,
   };
 
+  const duration = formatLessonDuration(lesson.duration_seconds);
+
   return (
     <>
       <div
         ref={sortable.setNodeRef}
         style={style}
-        className="flex items-center gap-2 rounded-md border bg-background p-2"
+        className="group/lesson flex items-center gap-2 rounded-md border border-white/5 bg-background p-2 transition-colors hover:border-white/15"
       >
         <button
           type="button"
           {...sortable.attributes}
           {...sortable.listeners}
-          className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+          className="cursor-grab touch-none rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/lesson:opacity-100 hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
           aria-label="Drag lesson"
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
-        <Icon className="h-4 w-4 text-accent" />
+        <Icon className="h-4 w-4 text-muted-foreground" />
         <button
           className="flex-1 text-left text-sm hover:underline"
           onClick={() => setOpen(true)}
         >
           {lesson.title}
         </button>
-        <Badge variant="outline" className="text-xs capitalize">
-          {lesson.type}
-        </Badge>
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onDelete}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        {duration && (
+          <span className="hidden text-xs tabular-nums text-muted-foreground sm:inline">
+            {duration}
+          </span>
+        )}
+        <span
+          className={`hidden rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide sm:inline ${LESSON_TYPE_CHIP[lesson.type]}`}
+        >
+          {LESSON_TYPE_LABEL[lesson.type]}
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              aria-label="Lesson actions"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                setOpen(true);
+              }}
+            >
+              <Pencil className="h-4 w-4" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                onDelete();
+              }}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <LessonEditorDialog
         open={open}
