@@ -424,7 +424,7 @@ function CourseEditor() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>Curriculum</CardTitle>
-          <Button onClick={addSection} size="sm">
+          <Button onClick={() => setSectionDialogOpen(true)} size="sm">
             <Plus className="h-4 w-4" /> Add section
           </Button>
         </CardHeader>
