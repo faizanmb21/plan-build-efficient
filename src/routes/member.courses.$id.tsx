@@ -254,6 +254,37 @@ function CoursePlayer() {
         )}
       </div>
 
+      {isComplete && (
+        <Card className="overflow-hidden border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="text-3xl">🎉</div>
+              <div>
+                <h2 className="font-display text-lg font-semibold">
+                  Course complete!
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  You finished every lesson in {course?.title}. Nice work.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {nextCourse ? (
+                <Button asChild>
+                  <Link to="/member/courses/$id" params={{ id: nextCourse.id }}>
+                    Continue with {nextCourse.title} →
+                  </Link>
+                </Button>
+              ) : (
+                <Button asChild>
+                  <Link to="/member">Back to dashboard</Link>
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="order-2 lg:order-1">
           {activeLesson ? (
