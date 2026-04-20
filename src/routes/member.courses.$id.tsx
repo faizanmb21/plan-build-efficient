@@ -138,6 +138,61 @@ function CoursePlayer() {
     load();
   }, [load]);
 
+  // When this course is complete, find the next assigned course to recommend.
+  React.useEffect(() => {
+    if (!user || !isComplete) return;
+    (async () => {
+      const { data: aData } = await supabase
+        .from("assignments")
+        .select("course_id,courses(id,title)")
+        .eq("user_id", user.id);
+      const others = ((aData ?? []) as Array<{
+        course_id: string;
+        courses: { id: string; title: string } | null;
+      }>).filter((a) => a.course_id !== courseId && a.courses);
+      if (others.length === 0) {
+        setNextCourse(null);
+        return;
+      }
+      // Pick the first one that isn't fully completed yet.
+      const courseIds = others.map((o) => o.course_id);
+      const { data: secs } = await supabase
+        .from("sections")
+        .select("id,course_id")
+        .in("course_id", courseIds);
+      const sectionToCourse = new Map((secs ?? []).map((s) => [s.id, s.course_id]));
+      const sectionIds = (secs ?? []).map((s) => s.id);
+      const { data: lessons } = sectionIds.length
+        ? await supabase.from("lessons").select("id,section_id").in("section_id", sectionIds)
+        : { data: [] as { id: string; section_id: string }[] };
+      const totals: Record<string, number> = {};
+      const lessonToCourse = new Map<string, string>();
+      for (const l of lessons ?? []) {
+        const cid = sectionToCourse.get(l.section_id)!;
+        lessonToCourse.set(l.id, cid);
+        totals[cid] = (totals[cid] ?? 0) + 1;
+      }
+      const lessonIds = Array.from(lessonToCourse.keys());
+      const { data: prog } = lessonIds.length
+        ? await supabase
+            .from("lesson_progress")
+            .select("lesson_id,completed")
+            .eq("user_id", user.id)
+            .in("lesson_id", lessonIds)
+        : { data: [] as { lesson_id: string; completed: boolean }[] };
+      const dones: Record<string, number> = {};
+      for (const p of prog ?? []) {
+        if (!p.completed) continue;
+        const cid = lessonToCourse.get(p.lesson_id);
+        if (cid) dones[cid] = (dones[cid] ?? 0) + 1;
+      }
+      const pick =
+        others.find((o) => (dones[o.course_id] ?? 0) < (totals[o.course_id] ?? 0)) ??
+        others[0];
+      setNextCourse(pick?.courses ?? null);
+    })();
+  }, [user, isComplete, courseId]);
+
   async function markCompleted(lessonId: string) {
     if (!user) return;
     const { error } = await supabase.from("lesson_progress").upsert(
