@@ -73,12 +73,14 @@ function CoursePlayer() {
   const [sections, setSections] = React.useState<Section[]>([]);
   const [progress, setProgress] = React.useState<Record<string, ProgressRow>>({});
   const [activeLessonId, setActiveLessonId] = React.useState<string | null>(null);
+  const [nextCourse, setNextCourse] = React.useState<{ id: string; title: string } | null>(null);
 
   const allLessons = React.useMemo(() => sections.flatMap((s) => s.lessons), [sections]);
   const activeLesson = allLessons.find((l) => l.id === activeLessonId) ?? null;
   const completedCount = Object.values(progress).filter((p) => p.completed).length;
   const totalCount = allLessons.length;
   const pct = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
+  const isComplete = totalCount > 0 && pct === 100;
 
   const load = React.useCallback(async () => {
     if (!user) return;
