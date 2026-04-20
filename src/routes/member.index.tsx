@@ -449,7 +449,7 @@ function StatTile({
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className={`h-3.5 w-3.5 ${accent ? "text-orange-400" : ""}`} />
+        <Icon className={`h-3.5 w-3.5 ${accent ? "text-primary" : ""}`} />
         {label}
       </div>
       <div className="mt-1 font-display text-2xl font-bold tracking-tight">
