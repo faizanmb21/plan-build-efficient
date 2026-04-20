@@ -259,9 +259,9 @@ function MemberHome() {
         </div>
       )}
       {overdueCount === 0 && dueSoonCount > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
-          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <p className="text-amber-600 dark:text-amber-400">
+        <div className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <p className="text-foreground">
             {dueSoonCount} course{dueSoonCount > 1 ? "s" : ""} due within 7 days.
           </p>
         </div>
