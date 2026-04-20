@@ -15,6 +15,16 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Table,
   TableBody,
@@ -24,7 +34,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Send, Trash2, Loader2 } from "lucide-react";
+import { Send, Trash2, Loader2, Check, ChevronsUpDown, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/ceo/assign")({
   component: AssignPage,
@@ -42,7 +53,7 @@ type Assignment = {
   created_at: string;
 };
 
-type Scope = "member" | "franchise" | "everyone";
+type Scope = "members" | "franchise" | "everyone";
 
 function AssignPage() {
   const { user } = useAuth();
@@ -53,12 +64,15 @@ function AssignPage() {
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
 
-  const [courseId, setCourseId] = React.useState<string>("");
-  const [scope, setScope] = React.useState<Scope>("member");
-  const [memberId, setMemberId] = React.useState<string>("");
+  const [courseIds, setCourseIds] = React.useState<string[]>([]);
+  const [scope, setScope] = React.useState<Scope>("members");
+  const [memberIds, setMemberIds] = React.useState<string[]>([]);
   const [franchiseId, setFranchiseId] = React.useState<string>("");
   const [priority, setPriority] = React.useState<"mandatory" | "recommended">("mandatory");
   const [deadline, setDeadline] = React.useState<string>("");
+
+  const [coursePopoverOpen, setCoursePopoverOpen] = React.useState(false);
+  const [memberPopoverOpen, setMemberPopoverOpen] = React.useState(false);
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
@@ -107,19 +121,32 @@ function AssignPage() {
     return map;
   }, [franchises]);
 
+  function toggleCourse(id: string) {
+    setCourseIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+  function toggleMember(id: string) {
+    setMemberIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  const canAssign =
+    courseIds.length > 0 &&
+    ((scope === "members" && memberIds.length > 0) ||
+      (scope === "franchise" && franchiseId) ||
+      scope === "everyone");
+
   async function handleAssign() {
-    if (!courseId) {
-      toast.error("Pick a course");
+    if (courseIds.length === 0) {
+      toast.error("Pick at least one course");
       return;
     }
 
     let targetIds: string[] = [];
-    if (scope === "member") {
-      if (!memberId) {
-        toast.error("Pick a member");
+    if (scope === "members") {
+      if (memberIds.length === 0) {
+        toast.error("Pick at least one member");
         return;
       }
-      targetIds = [memberId];
+      targetIds = memberIds;
     } else if (scope === "franchise") {
       if (!franchiseId) {
         toast.error("Pick a franchise");
@@ -139,22 +166,47 @@ function AssignPage() {
     }
 
     setSubmitting(true);
-    const rows = targetIds.map((uid) => ({
-      course_id: courseId,
-      user_id: uid,
-      priority,
-      deadline: deadline ? new Date(deadline).toISOString() : null,
-      assigned_by: user?.id ?? null,
-    }));
+    const rows = targetIds.flatMap((uid) =>
+      courseIds.map((cid) => ({
+        course_id: cid,
+        user_id: uid,
+        priority,
+        deadline: deadline ? new Date(deadline).toISOString() : null,
+        assigned_by: user?.id ?? null,
+      })),
+    );
 
-    const { error } = await supabase.from("assignments").insert(rows);
+    const { data: existing, error: existErr } = await supabase
+      .from("assignments")
+      .select("course_id, user_id")
+      .in("user_id", targetIds)
+      .in("course_id", courseIds);
+    if (existErr) {
+      setSubmitting(false);
+      toast.error(existErr.message);
+      return;
+    }
+    const existingSet = new Set((existing ?? []).map((r) => `${r.course_id}:${r.user_id}`));
+    const newRows = rows.filter((r) => !existingSet.has(`${r.course_id}:${r.user_id}`));
+    const skipped = rows.length - newRows.length;
+
+    if (newRows.length === 0) {
+      setSubmitting(false);
+      toast.info("All targets already have these courses assigned");
+      return;
+    }
+
+    const { error } = await supabase.from("assignments").insert(newRows);
     setSubmitting(false);
     if (error) {
       toast.error(error.message);
       return;
     }
-    toast.success(`Assigned to ${targetIds.length} member${targetIds.length === 1 ? "" : "s"}`);
-    setMemberId("");
+    toast.success(
+      `Assigned ${newRows.length} (${courseIds.length} course${courseIds.length === 1 ? "" : "s"} × ${targetIds.length} member${targetIds.length === 1 ? "" : "s"})${skipped ? `. Skipped ${skipped} duplicate${skipped === 1 ? "" : "s"}.` : ""}`,
+    );
+    setCourseIds([]);
+    setMemberIds([]);
     setFranchiseId("");
     setDeadline("");
     loadAll();
@@ -175,7 +227,7 @@ function AssignPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Assign courses</h1>
         <p className="text-muted-foreground text-sm">
-          Send a published course to a member, a whole franchise, or everyone.
+          Send one or more published courses to selected members, a whole franchise, or everyone.
         </p>
       </div>
 
@@ -187,24 +239,72 @@ function AssignPage() {
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Course</Label>
-              <Select value={courseId} onValueChange={setCourseId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick a course" />
-                </SelectTrigger>
-                <SelectContent>
-                  {courses.length === 0 && (
-                    <div className="text-muted-foreground px-2 py-1.5 text-sm">
-                      No published courses
-                    </div>
-                  )}
-                  {courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Course(s)</Label>
+              <Popover open={coursePopoverOpen} onOpenChange={setCoursePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {courseIds.length === 0
+                        ? "Pick course(s)"
+                        : `${courseIds.length} course${courseIds.length === 1 ? "" : "s"} selected`}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Search courses…" />
+                    <CommandList>
+                      <CommandEmpty>No courses found.</CommandEmpty>
+                      <CommandGroup>
+                        {courses.map((c) => {
+                          const checked = courseIds.includes(c.id);
+                          return (
+                            <CommandItem
+                              key={c.id}
+                              value={c.title}
+                              onSelect={() => toggleCourse(c.id)}
+                              className="flex items-center gap-2"
+                            >
+                              <Checkbox checked={checked} className="pointer-events-none" />
+                              <span className="flex-1 truncate">{c.title}</span>
+                              {checked && <Check className="h-4 w-4 opacity-70" />}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {courseIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {courseIds.map((id) => {
+                    const c = courseMap.get(id);
+                    if (!c) return null;
+                    return (
+                      <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                        <span className="max-w-[140px] truncate">{c.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleCourse(id)}
+                          className="hover:bg-background/40 rounded-full p-0.5"
+                          aria-label={`Remove ${c.title}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -231,39 +331,120 @@ function AssignPage() {
               onValueChange={(v) => setScope(v as Scope)}
               className="grid gap-2 md:grid-cols-3"
             >
-              <label className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3">
-                <RadioGroupItem value="member" id="scope-member" />
-                <span>Single member</span>
+              <label
+                className={cn(
+                  "hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3",
+                  scope === "members" && "border-primary",
+                )}
+              >
+                <RadioGroupItem value="members" id="scope-members" />
+                <span>Selected members</span>
               </label>
-              <label className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3">
+              <label
+                className={cn(
+                  "hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3",
+                  scope === "franchise" && "border-primary",
+                )}
+              >
                 <RadioGroupItem value="franchise" id="scope-franchise" />
                 <span>Whole franchise</span>
               </label>
-              <label className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3">
+              <label
+                className={cn(
+                  "hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3",
+                  scope === "everyone" && "border-primary",
+                )}
+              >
                 <RadioGroupItem value="everyone" id="scope-everyone" />
-                <span>Everyone</span>
+                <span>Everyone ({members.length})</span>
               </label>
             </RadioGroup>
           </div>
 
-          {scope === "member" && (
+          {scope === "members" && (
             <div className="space-y-2">
-              <Label>Member</Label>
-              <Select value={memberId} onValueChange={setMemberId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick a member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {members.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.full_name || "(unnamed)"}
-                      {m.franchise_id
-                        ? ` — ${franchiseMap.get(m.franchise_id)?.name ?? "?"}`
-                        : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Member(s)</Label>
+              <Popover open={memberPopoverOpen} onOpenChange={setMemberPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {memberIds.length === 0
+                        ? "Pick member(s)"
+                        : `${memberIds.length} member${memberIds.length === 1 ? "" : "s"} selected`}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Search members by name…" />
+                    <CommandList>
+                      <CommandEmpty>No members found.</CommandEmpty>
+                      <CommandGroup>
+                        {members.map((m) => {
+                          const checked = memberIds.includes(m.id);
+                          const name = m.full_name || "(unnamed)";
+                          const fname = m.franchise_id
+                            ? franchiseMap.get(m.franchise_id)?.name
+                            : null;
+                          return (
+                            <CommandItem
+                              key={m.id}
+                              value={`${name} ${fname ?? ""}`}
+                              onSelect={() => toggleMember(m.id)}
+                              className="flex items-center gap-2"
+                            >
+                              <Checkbox checked={checked} className="pointer-events-none" />
+                              <span className="flex-1 truncate">{name}</span>
+                              {fname && (
+                                <span className="text-muted-foreground text-xs">{fname}</span>
+                              )}
+                              {checked && <Check className="h-4 w-4 opacity-70" />}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {memberIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setMemberIds([])}
+                    className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
+                  >
+                    Clear all
+                  </button>
+                  {memberIds.map((id) => {
+                    const m = memberMap.get(id);
+                    if (!m) return null;
+                    return (
+                      <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                        <span className="max-w-[140px] truncate">
+                          {m.full_name || "(unnamed)"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleMember(id)}
+                          className="hover:bg-background/40 rounded-full p-0.5"
+                          aria-label="Remove member"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -275,11 +456,14 @@ function AssignPage() {
                   <SelectValue placeholder="Pick a franchise" />
                 </SelectTrigger>
                 <SelectContent>
-                  {franchises.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.name}
-                    </SelectItem>
-                  ))}
+                  {franchises.map((f) => {
+                    const count = members.filter((m) => m.franchise_id === f.id).length;
+                    return (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.name} ({count})
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -294,7 +478,11 @@ function AssignPage() {
             />
           </div>
 
-          <Button onClick={handleAssign} disabled={submitting} className="gap-2">
+          <Button
+            onClick={handleAssign}
+            disabled={submitting || !canAssign}
+            className="gap-2"
+          >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
