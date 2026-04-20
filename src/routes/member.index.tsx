@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   BookOpen,
   Clock,
@@ -14,16 +15,13 @@ import {
   CheckCircle2,
   Sparkles,
   Flame,
-  GraduationCap,
   Timer,
-  ChevronDown,
+  Calendar,
+  TrendingUp,
+  ArrowRight,
+  Trophy,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { PillarFlower } from "@/components/PillarFlower";
 import { getPillarScoresForUsers } from "@/lib/pillar-data";
 import type { PillarScores } from "@/lib/pillars";
@@ -48,7 +46,14 @@ type AssignmentRow = {
 type CourseStat = {
   total: number;
   done: number;
-  lastTouched: string | null; // ISO timestamp of most recent lesson_progress.updated_at
+  lastTouched: string | null;
+};
+
+type EnrichedAssignment = AssignmentRow & {
+  stat: CourseStat;
+  pct: number;
+  overdue: boolean;
+  dueSoon: boolean;
 };
 
 function MemberHome() {
@@ -59,8 +64,7 @@ function MemberHome() {
   const [pillarScores, setPillarScores] = React.useState<PillarScores | null>(null);
   const [hoursStudied, setHoursStudied] = React.useState(0);
   const [streakDays, setStreakDays] = React.useState(0);
-  const [showFlower, setShowFlower] = React.useState(false);
-  const [showCompleted, setShowCompleted] = React.useState(false);
+  const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     if (!user) return;
@@ -72,7 +76,6 @@ function MemberHome() {
     (async () => {
       setLoading(true);
 
-      // ---------- Assignments ----------
       const { data: aData, error } = await supabase
         .from("assignments")
         .select("id,course_id,priority,deadline,courses(id,title,description,thumbnail_url)")
@@ -93,7 +96,6 @@ function MemberHome() {
       }
       setAssignments(unique);
 
-      // ---------- Lesson totals + completion + last-touched ----------
       const courseIds = unique.map((a) => a.course_id);
       if (courseIds.length) {
         const { data: secs } = await supabase
@@ -144,7 +146,6 @@ function MemberHome() {
         setStats({});
       }
 
-      // ---------- Hours studied + streak (last 14 days) ----------
       const fourteenAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
       const { data: sess } = await supabase
         .from("study_sessions")
@@ -158,7 +159,7 @@ function MemberHome() {
         dayKeys.add(new Date(s.started_at).toISOString().slice(0, 10));
       }
       setHoursStudied(Math.round((totalSec / 3600) * 10) / 10);
-      // streak = consecutive days back from today
+      setActiveDays(dayKeys);
       let streak = 0;
       for (let i = 0; i < 14; i++) {
         const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
@@ -173,9 +174,8 @@ function MemberHome() {
     })();
   }, [user]);
 
-  // ---------- Bucket assignments ----------
   const now = Date.now();
-  const enriched = assignments.map((a) => {
+  const enriched: EnrichedAssignment[] = assignments.map((a) => {
     const s = stats[a.course_id] ?? { total: 0, done: 0, lastTouched: null };
     const pct = s.total ? Math.round((s.done / s.total) * 100) : 0;
     const overdue = !!(a.deadline && new Date(a.deadline).getTime() < now && pct < 100);
@@ -197,357 +197,497 @@ function MemberHome() {
     });
   const notStarted = enriched.filter((e) => e.pct === 0);
   const completed = enriched.filter((e) => e.pct === 100);
-  const overdueCount = enriched.filter((e) => e.overdue).length;
-  const dueSoonCount = enriched.filter((e) => e.dueSoon).length;
+  const overdue = enriched.filter((e) => e.overdue);
+  const upcoming = enriched
+    .filter((e) => e.deadline && e.pct < 100)
+    .sort(
+      (a, b) =>
+        new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime(),
+    )
+    .slice(0, 4);
 
   const continueCourse = inProgress[0] ?? notStarted[0] ?? null;
 
   const firstName =
     profile?.full_name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "there";
 
+  const overallPct = enriched.length
+    ? Math.round(
+        enriched.reduce((s, e) => s + e.pct, 0) / enriched.length,
+      )
+    : 0;
+
   return (
-    <div className="space-y-8">
-      {/* Welcome + stats */}
-      <header className="space-y-4">
+    <div className="space-y-6">
+      {/* Welcome header */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">
-            Hi {firstName} 👋
+            Welcome back, {firstName} 👋
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {streakDays > 1
-              ? `You're on a ${streakDays}-day streak — keep it going.`
-              : "Ready to learn something new today?"}
+              ? `You're on a ${streakDays}-day learning streak. Keep the momentum.`
+              : enriched.length === 0
+                ? "Your learning journey starts here."
+                : "Pick up where you left off."}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile
-            icon={BookOpen}
-            label="Enrolled"
-            value={enriched.length}
-          />
-          <StatTile
-            icon={CheckCircle2}
-            label="Completed"
-            value={completed.length}
-          />
-          <StatTile
-            icon={Timer}
-            label="Hours (14d)"
-            value={hoursStudied}
-          />
-          <StatTile
-            icon={Flame}
-            label="Day streak"
-            value={streakDays}
-            accent={streakDays > 1}
-          />
-        </div>
+        {overdue.length > 0 && (
+          <Badge variant="destructive" className="gap-1.5">
+            <AlertCircle className="h-3 w-3" />
+            {overdue.length} overdue
+          </Badge>
+        )}
       </header>
 
-      {/* Overdue banner */}
-      {overdueCount > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <div className="flex-1">
-            <p className="font-medium text-destructive">
-              {overdueCount} course{overdueCount > 1 ? "s" : ""} past deadline
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Catch up below to stay on track.
-            </p>
-          </div>
-        </div>
-      )}
-      {overdueCount === 0 && dueSoonCount > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm">
-          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          <p className="text-foreground">
-            {dueSoonCount} course{dueSoonCount > 1 ? "s" : ""} due within 7 days.
-          </p>
-        </div>
-      )}
+      {/* Two-column layout: main + rail */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* ======== MAIN COLUMN ======== */}
+        <div className="space-y-6">
+          {/* Continue learning hero */}
+          {loading ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Loading your courses…
+              </CardContent>
+            </Card>
+          ) : continueCourse ? (
+            <ContinueLearningHero a={continueCourse} />
+          ) : (
+            <EmptyState />
+          )}
 
-      {/* Continue learning hero */}
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : continueCourse ? (
-        <Card className="overflow-hidden">
-          <div className="grid sm:grid-cols-[200px_1fr]">
-            <div className="aspect-video sm:aspect-auto sm:h-full bg-muted">
-              {continueCourse.courses?.thumbnail_url ? (
-                <img
-                  src={continueCourse.courses.thumbnail_url}
-                  alt={continueCourse.courses.title}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
-                  <BookOpen className="h-10 w-10 text-primary/40" />
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col justify-between gap-4 p-5">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {continueCourse.pct === 0 ? "Pick up where you left off" : "Continue learning"}
-                  </span>
-                </div>
-                <h2 className="font-display text-xl font-semibold">
-                  {continueCourse.courses?.title}
-                </h2>
-                {continueCourse.stat.lastTouched && (
-                  <p className="text-xs text-muted-foreground">
-                    Last opened{" "}
-                    {formatDistanceToNow(new Date(continueCourse.stat.lastTouched), {
-                      addSuffix: true,
-                    })}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {continueCourse.stat.done} / {continueCourse.stat.total} lessons
+          {/* Tabbed course library */}
+          {enriched.length > 0 && (
+            <Tabs defaultValue="in-progress" className="space-y-4">
+              <TabsList className="bg-white/[0.04] border border-white/10">
+                <TabsTrigger value="in-progress" className="gap-1.5">
+                  In progress
+                  {inProgress.length > 0 && (
+                    <span className="rounded-full bg-primary/20 px-1.5 text-[10px] font-medium text-primary">
+                      {inProgress.length}
                     </span>
-                    <span>{continueCourse.pct}%</span>
-                  </div>
-                  <Progress value={continueCourse.pct} />
-                </div>
-                <Button asChild>
-                  <Link
-                    to="/member/courses/$id"
-                    params={{ id: continueCourse.course_id }}
-                  >
-                    <Play className="h-4 w-4" />
-                    {continueCourse.pct === 0 ? "Start course" : "Resume lesson"}
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Card>
-      ) : assignments.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No courses assigned yet</CardTitle>
-            <CardDescription>
-              Once your incharge or CEO assigns a course, it will appear here.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      ) : null}
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="not-started" className="gap-1.5">
+                  Not started
+                  {notStarted.length > 0 && (
+                    <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-medium">
+                      {notStarted.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="completed" className="gap-1.5">
+                  Completed
+                  {completed.length > 0 && (
+                    <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-medium">
+                      {completed.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
 
-      {/* In progress */}
-      {inProgress.length > 0 && (
-        <section className="space-y-3">
-          <SectionHeading
-            label="In progress"
-            count={inProgress.length}
-            icon={Play}
-          />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {inProgress.map((a) => (
-              <CourseCard key={a.id} a={a} />
-            ))}
-          </div>
-        </section>
-      )}
+              <TabsContent value="in-progress" className="m-0">
+                {inProgress.length > 0 ? (
+                  <CourseGrid items={inProgress} />
+                ) : (
+                  <BucketEmpty
+                    icon={Play}
+                    label="Nothing in progress"
+                    hint="Start a course from the Not started tab."
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="not-started" className="m-0">
+                {notStarted.length > 0 ? (
+                  <CourseGrid items={notStarted} />
+                ) : (
+                  <BucketEmpty
+                    icon={BookOpen}
+                    label="All caught up"
+                    hint="Every assigned course has been started."
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="completed" className="m-0">
+                {completed.length > 0 ? (
+                  <CourseGrid items={completed} />
+                ) : (
+                  <BucketEmpty
+                    icon={Trophy}
+                    label="No completions yet"
+                    hint="Finish your first course to earn a spot here."
+                  />
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
+        </div>
 
-      {/* Not started */}
-      {notStarted.length > 0 && (
-        <section className="space-y-3">
-          <SectionHeading
-            label="Not started"
-            count={notStarted.length}
-            icon={BookOpen}
-          />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {notStarted.map((a) => (
-              <CourseCard key={a.id} a={a} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Completed (collapsed) */}
-      {completed.length > 0 && (
-        <Collapsible open={showCompleted} onOpenChange={setShowCompleted}>
-          <CollapsibleTrigger asChild>
-            <button className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition-colors hover:bg-white/[0.06]">
-              <div className="flex items-center gap-2">
-                <GraduationCap className="h-4 w-4 text-primary" />
-                <span className="font-medium">Completed</span>
-                <Badge variant="secondary">{completed.length}</Badge>
-              </div>
-              <ChevronDown
-                className={`h-4 w-4 text-muted-foreground transition-transform ${
-                  showCompleted ? "rotate-180" : ""
-                }`}
+        {/* ======== RIGHT RAIL ======== */}
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          {/* Stats */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <TrendingUp className="h-4 w-4" />
+                Your activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3 pt-0">
+              <RailStat icon={BookOpen} value={enriched.length} label="Enrolled" />
+              <RailStat
+                icon={CheckCircle2}
+                value={completed.length}
+                label="Completed"
               />
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {completed.map((a) => (
-                <CourseCard key={a.id} a={a} />
-              ))}
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+              <RailStat icon={Timer} value={hoursStudied} label="Hours · 14d" />
+              <RailStat
+                icon={Flame}
+                value={streakDays}
+                label="Day streak"
+                accent={streakDays > 1}
+              />
+            </CardContent>
+          </Card>
 
-      {/* Skill flower (collapsible, compact) */}
-      <Collapsible open={showFlower} onOpenChange={setShowFlower}>
-        <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition-colors hover:bg-white/[0.06]">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="font-medium">Your skill flower</span>
-              <span className="text-xs text-muted-foreground">
+          {/* Streak / activity dots */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                Last 14 days
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <ActivityDots activeDays={activeDays} />
+              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Overall progress</span>
+                <span className="font-medium text-foreground">{overallPct}%</span>
+              </div>
+              <Progress value={overallPct} className="mt-1.5 h-1.5" />
+            </CardContent>
+          </Card>
+
+          {/* Upcoming deadlines */}
+          {upcoming.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  Upcoming deadlines
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 pt-0">
+                {upcoming.map((a) => (
+                  <Link
+                    key={a.id}
+                    to="/member/courses/$id"
+                    params={{ id: a.course_id }}
+                    className="block rounded-lg border border-white/5 bg-white/[0.02] p-2.5 transition-colors hover:bg-white/[0.06]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="line-clamp-1 text-xs font-medium">
+                        {a.courses?.title}
+                      </p>
+                      {a.overdue ? (
+                        <Badge variant="destructive" className="h-4 px-1 text-[9px]">
+                          Overdue
+                        </Badge>
+                      ) : a.dueSoon ? (
+                        <Badge className="h-4 px-1 text-[9px]">Soon</Badge>
+                      ) : null}
+                    </div>
+                    <p
+                      className={`mt-0.5 text-[10px] ${
+                        a.overdue ? "text-destructive" : "text-muted-foreground"
+                      }`}
+                    >
+                      {format(new Date(a.deadline!), "MMM d")} ·{" "}
+                      {formatDistanceToNow(new Date(a.deadline!), { addSuffix: true })}
+                    </p>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Skill flower compact */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Sparkles className="h-4 w-4" />
+                Skill mastery
+              </CardTitle>
+              <CardDescription className="text-[11px]">
                 12 IRM Academy pillars
-              </span>
-            </div>
-            <ChevronDown
-              className={`h-4 w-4 text-muted-foreground transition-transform ${
-                showFlower ? "rotate-180" : ""
-              }`}
-            />
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <Card className="mt-3">
-            <CardContent className="flex justify-center pt-6">
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-3 pt-0">
               {pillarScores ? (
-                <PillarFlower scores={pillarScores} size={260} showLegend />
+                <PillarFlower scores={pillarScores} size={220} />
               ) : (
-                <div className="flex h-[260px] w-[260px] items-center justify-center text-sm text-muted-foreground">
+                <div className="flex h-[220px] w-[220px] items-center justify-center text-xs text-muted-foreground">
                   Loading…
                 </div>
               )}
+              <Button asChild variant="ghost" size="sm" className="w-full">
+                <Link to="/member/grades">
+                  View grade report
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
             </CardContent>
           </Card>
-        </CollapsibleContent>
-      </Collapsible>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function StatTile({
+/* -------------------- Continue learning hero -------------------- */
+
+function ContinueLearningHero({ a }: { a: EnrichedAssignment }) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="grid sm:grid-cols-[260px_1fr]">
+        <div className="relative aspect-video sm:aspect-auto sm:h-full bg-muted">
+          {a.courses?.thumbnail_url ? (
+            <img
+              src={a.courses.thumbnail_url}
+              alt={a.courses.title}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/30 to-primary/5">
+              <BookOpen className="h-12 w-12 text-primary/50" />
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-card/40 sm:to-card/80" />
+        </div>
+        <div className="flex flex-col justify-between gap-4 p-5 sm:p-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-primary">
+                {a.pct === 0 ? "Start where you left off" : "Continue learning"}
+              </span>
+            </div>
+            <h2 className="font-display text-2xl font-semibold leading-tight">
+              {a.courses?.title}
+            </h2>
+            {a.courses?.description && (
+              <p className="line-clamp-2 text-sm text-muted-foreground">
+                {a.courses.description}
+              </p>
+            )}
+            {a.stat.lastTouched && (
+              <p className="text-xs text-muted-foreground">
+                Last opened{" "}
+                {formatDistanceToNow(new Date(a.stat.lastTouched), {
+                  addSuffix: true,
+                })}
+              </p>
+            )}
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {a.stat.done} of {a.stat.total} lessons
+                </span>
+                <span className="font-medium">{a.pct}%</span>
+              </div>
+              <Progress value={a.pct} className="h-2" />
+            </div>
+            <Button asChild size="lg" className="w-fit">
+              <Link to="/member/courses/$id" params={{ id: a.course_id }}>
+                <Play className="h-4 w-4" />
+                {a.pct === 0 ? "Start course" : "Resume lesson"}
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* -------------------- Course grid + card -------------------- */
+
+function CourseGrid({ items }: { items: EnrichedAssignment[] }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {items.map((a) => (
+        <CourseCard key={a.id} a={a} />
+      ))}
+    </div>
+  );
+}
+
+function CourseCard({ a }: { a: EnrichedAssignment }) {
+  return (
+    <Card interactive className="flex flex-col overflow-hidden">
+      <Link
+        to="/member/courses/$id"
+        params={{ id: a.course_id }}
+        className="flex flex-1 flex-col"
+      >
+        <div className="relative aspect-video w-full bg-muted">
+          {a.courses?.thumbnail_url ? (
+            <img
+              src={a.courses.thumbnail_url}
+              alt={a.courses.title ?? ""}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+              <BookOpen className="h-10 w-10 text-primary/40" />
+            </div>
+          )}
+          {a.pct === 100 && (
+            <div className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground">
+              <CheckCircle2 className="h-3 w-3" />
+              Done
+            </div>
+          )}
+          {a.priority === "mandatory" && a.pct < 100 && (
+            <div className="absolute right-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-medium backdrop-blur">
+              Mandatory
+            </div>
+          )}
+        </div>
+        <CardContent className="flex flex-1 flex-col gap-3 p-4">
+          <div className="flex-1 space-y-1">
+            <h3 className="line-clamp-2 font-medium leading-snug">
+              {a.courses?.title}
+            </h3>
+            {a.courses?.description && (
+              <p className="line-clamp-2 text-xs text-muted-foreground">
+                {a.courses.description}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>
+                {a.stat.done}/{a.stat.total} lessons
+              </span>
+              <span className="font-medium text-foreground">{a.pct}%</span>
+            </div>
+            <Progress value={a.pct} className="h-1.5" />
+          </div>
+          {a.deadline && (
+            <div
+              className={`flex items-center gap-1.5 text-[11px] ${
+                a.overdue ? "text-destructive" : "text-muted-foreground"
+              }`}
+            >
+              {a.overdue ? (
+                <AlertCircle className="h-3 w-3" />
+              ) : (
+                <Clock className="h-3 w-3" />
+              )}
+              {a.overdue ? "Overdue · " : "Due "}
+              {format(new Date(a.deadline), "MMM d")}
+            </div>
+          )}
+        </CardContent>
+      </Link>
+    </Card>
+  );
+}
+
+/* -------------------- Right-rail bits -------------------- */
+
+function RailStat({
   icon: Icon,
-  label,
   value,
+  label,
   accent,
 }: {
   icon: React.ComponentType<{ className?: string }>;
-  label: string;
   value: number;
+  label: string;
   accent?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className={`h-3.5 w-3.5 ${accent ? "text-primary" : ""}`} />
+    <div className="rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <Icon className={`h-3 w-3 ${accent ? "text-primary" : ""}`} />
         {label}
       </div>
-      <div className="mt-1 font-display text-2xl font-bold tracking-tight">
+      <div
+        className={`mt-1 font-display text-xl font-bold tracking-tight ${
+          accent ? "text-primary" : ""
+        }`}
+      >
         {value}
       </div>
     </div>
   );
 }
 
-function SectionHeading({
-  label,
-  count,
-  icon: Icon,
-}: {
-  label: string;
-  count: number;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
+function ActivityDots({ activeDays }: { activeDays: Set<string> }) {
+  const days = Array.from({ length: 14 }).map((_, i) => {
+    const d = new Date(Date.now() - (13 - i) * 24 * 60 * 60 * 1000);
+    const key = d.toISOString().slice(0, 10);
+    return { key, active: activeDays.has(key), label: format(d, "EEE d") };
+  });
   return (
-    <div className="flex items-center gap-2">
-      <Icon className="h-4 w-4 text-muted-foreground" />
-      <h2 className="font-display text-lg font-semibold">{label}</h2>
-      <Badge variant="secondary">{count}</Badge>
+    <div className="flex items-center gap-1">
+      {days.map((d) => (
+        <div
+          key={d.key}
+          title={d.label}
+          className={`h-6 flex-1 rounded ${
+            d.active
+              ? "bg-primary"
+              : "bg-white/[0.04] border border-white/5"
+          }`}
+        />
+      ))}
     </div>
   );
 }
 
-function CourseCard({
-  a,
+/* -------------------- Empty states -------------------- */
+
+function EmptyState() {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+        <div className="rounded-full bg-primary/10 p-4">
+          <BookOpen className="h-7 w-7 text-primary" />
+        </div>
+        <div>
+          <h2 className="font-display text-lg font-semibold">No courses yet</h2>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            Once your incharge or CEO assigns you a course, it will show up
+            here so you can start learning.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BucketEmpty({
+  icon: Icon,
+  label,
+  hint,
 }: {
-  a: {
-    id: string;
-    course_id: string;
-    priority: "mandatory" | "recommended";
-    deadline: string | null;
-    courses: { title: string; description: string | null; thumbnail_url: string | null } | null;
-    stat: CourseStat;
-    pct: number;
-    overdue: boolean;
-  };
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  hint: string;
 }) {
   return (
-    <Card className="flex flex-col overflow-hidden">
-      {a.courses?.thumbnail_url ? (
-        <div className="aspect-video w-full bg-muted">
-          <img
-            src={a.courses.thumbnail_url}
-            alt={a.courses.title}
-            className="h-full w-full object-cover"
-          />
-        </div>
-      ) : (
-        <div className="flex aspect-video w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
-          <BookOpen className="h-10 w-10 text-primary/40" />
-        </div>
-      )}
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base">{a.courses?.title}</CardTitle>
-          <Badge variant={a.priority === "mandatory" ? "default" : "secondary"}>
-            {a.priority}
-          </Badge>
-        </div>
-        {a.courses?.description ? (
-          <CardDescription className="line-clamp-2">
-            {a.courses.description}
-          </CardDescription>
-        ) : null}
-      </CardHeader>
-      <CardContent className="mt-auto space-y-3">
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              {a.stat.done} / {a.stat.total} lessons
-            </span>
-            <span>{a.pct}%</span>
-          </div>
-          <Progress value={a.pct} />
-        </div>
-        {a.deadline && (
-          <div
-            className={`flex items-center gap-1.5 text-xs ${
-              a.overdue ? "text-destructive" : "text-muted-foreground"
-            }`}
-          >
-            {a.overdue ? (
-              <AlertCircle className="h-3.5 w-3.5" />
-            ) : (
-              <Clock className="h-3.5 w-3.5" />
-            )}
-            Due {format(new Date(a.deadline), "PP")}
-          </div>
-        )}
-        <Button asChild size="sm" className="w-full">
-          <Link to="/member/courses/$id" params={{ id: a.course_id }}>
-            {a.pct === 0 ? "Start course" : a.pct === 100 ? "Review" : "Continue"}
-          </Link>
-        </Button>
+    <Card>
+      <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+        <Icon className="h-6 w-6 text-muted-foreground" />
+        <p className="font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
       </CardContent>
     </Card>
   );
