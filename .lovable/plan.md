@@ -1,67 +1,79 @@
 
+The user wants to redesign the member dashboard (`/member` index). Two concerns:
+1. Skill flower takes too much vertical space, pushes courses below the fold
+2. No "completed" state, no "next steps", no "continue learning" focus — feels incomplete vs. Thinkific/Udemy
 
-## Plan: Fix the Incharge portal (4 issues)
+Let me look at what good LMS dashboards do (Thinkific, Udemy, Coursera, Teachable):
+- **Hero "Continue learning"** card at the top — the one in-progress course, big CTA
+- **Stats strip** — courses enrolled, completed, hours learned, current streak
+- **In progress** section (cards with progress bars)
+- **Not started / Up next** section
+- **Completed** section (collapsed/secondary, with certificate or "Review" CTA)
+- **Skill mastery** moved to a sidebar OR a smaller compact widget OR a separate "My Progress" tab
+- **Deadlines / overdue** alert banner if anything is due
 
-### Issue 1 — Members page shows no real details
+For the completed-course experience:
+- Confetti/celebration on the course page when last lesson done
+- "Course complete" badge + score
+- "What's next" — recommended next course or next assigned course
+- "Review" CTA stays available
 
-**Cause**: `incharge.members.tsx` only renders `full_name` + `phone`. Email, join date, course progress, and grade summary are missing, so the page feels empty.
+## Plan: Redesign the Member dashboard (Thinkific/Udemy style)
 
-**Fix**: Enrich the active members card. For each member, show:
-- Avatar + full name + email (from `auth.users` via a small RPC, since we can't read auth directly with RLS)
-- Phone (if present)
-- Join date (`profiles.created_at`)
-- Quick stats: courses assigned, lessons completed, last seen (from `study_sessions.last_heartbeat_at`)
-- "View report" button → opens the existing `MemberGradeReport` dialog (same one used on grades page)
+### Layout (top → bottom)
 
-Add a new `SECURITY DEFINER` RPC `get_franchise_member_emails(_franchise_id uuid)` that returns `(user_id, email)` pairs after verifying the caller is the incharge of that franchise (or a CEO). This avoids exposing auth.users broadly.
+```text
+┌────────────────────────────────────────────────────────────┐
+│ Hi Maaz 👋  — "You're on a 3-day streak"                  │
+│ [Stats: 5 enrolled · 2 done · 12.4 hrs · 1 due soon]      │
+└────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│ CONTINUE LEARNING                                          │
+│ ┌────────┐  Course title · Section / Lesson title         │
+│ │ thumb  │  ▓▓▓▓▓░░░░░ 47%                                │
+│ └────────┘  [▶ Resume lesson]                             │
+└────────────────────────────────────────────────────────────┘
 
-### Issue 2 — Grades "By member" tab shows 0 members
+┌─ Overdue / Due soon banner (only if any) ─────────────────┐
 
-**Root cause** (this is the real bug): `incharge.grades.tsx` builds `memberRoleIds` by querying `user_roles` for `role='member'`. But the RLS policy on `user_roles` is `users read own roles` — an incharge can only read their OWN role. So `memberRoleIds` is always empty for an incharge → `memberRows` filters everyone out → table shows "No members in your franchise yet" and the **Members** summary tile reads **0**.
+In progress (3)               [grid of cards w/ progress]
+Not started (2)               [grid of cards, "Start"]
+Completed (2)                 [collapsed, "Review" / cert]
 
-**Fix**: Two options, picking the simple+correct one:
-
-- Drop the `user_roles` lookup entirely in `incharge.grades.tsx`. The `profiles` query is already filtered to `franchise_id = caller's franchise` (and incharge RLS only lets them see their franchise's profiles anyway). Treat every profile in their franchise *except themselves* as a member. Update `memberRows` and the `totals.totalMembers` calc accordingly.
-
-This also fixes the by-pillar "Members graded" column being correct while the by-member tab was empty.
-
-### Issue 3 — Attendance is completely empty
-
-**Cause**: The demo seeder (`seed_demo_content`) does not insert any `study_sessions` or `attendance_snapshots`. Real members would generate them by clocking in on Focus, but seeded members never have.
-
-**Fix**: Extend `seed_demo_content` to insert ~7 days of synthetic `study_sessions` per member (2-3 sessions/day, varied active/idle seconds, some with `ended_at = null` to simulate "live"), plus a handful of `attendance_snapshots` rows pointing at a placeholder image path. Now the Incharge attendance page and CEO rollup will show realistic numbers immediately after re-running the seeder.
-
-### Issue 4 — Incharge can't assign courses
-
-**Cause**: The `/ceo/assign` page exists but is CEO-only via `RoleGuard`. There's no incharge equivalent.
-
-**Fix**: Add `src/routes/incharge.assign.tsx` — a scoped clone of the CEO assign page that:
-- Lists all **published** courses (read-only, can't create/delete courses)
-- Lets the incharge assign to **a single member of their franchise** or **the entire franchise** (no "Everyone" option)
-- Shows recent assignments scoped to their franchise members only
-- Allows deleting an assignment they made (or any assignment to one of their members)
-
-Add nav entry in `src/routes/incharge.tsx`:
-```
-{ to: "/incharge/assign", label: "Assign courses", icon: Send }
+[Skill flower — collapsible, smaller (240px), under courses]
+or moved to /member/grades page as "Mastery"
 ```
 
-RLS check: The current `assignments` table policies only allow `ceo all assignments` and `users read own assignments`. We need to add:
-- `incharge insert assignments for franchise members` (INSERT WITH CHECK that the target user_id belongs to the incharge's franchise)
-- `incharge read franchise assignments` (already exists ✓)
-- `incharge delete franchise assignments` (DELETE USING franchise membership)
+### Concrete changes
 
-### Files to change
-- `src/routes/incharge.members.tsx` — enriched member cards + report dialog
-- `src/routes/incharge.grades.tsx` — drop the broken `user_roles` filter
-- `src/routes/incharge.tsx` — add "Assign courses" nav item
-- `src/routes/incharge.assign.tsx` — **new** scoped assignment page
-- DB migration — new RPC `get_franchise_member_emails`, two new RLS policies on `assignments`, extended `seed_demo_content` with study sessions
+**1. `src/routes/member.index.tsx` — full rewrite of the layout**
+- Add a **welcome header** with first name + 4 stat tiles (enrolled / completed / hours studied from `study_sessions.active_seconds` / due-soon count).
+- Add **"Continue learning" hero**: pick the most-recently-touched in-progress course (max `lesson_progress.updated_at`), show big card with thumbnail, current section/lesson title, progress bar, big "Resume" button linking to `/member/courses/$id`.
+- Bucket the assignments into three sections:
+  - **In progress** (0 < pct < 100)
+  - **Not started** (pct === 0) — show "Start course" CTA
+  - **Completed** (pct === 100) — collapsed by default via a `<details>` or accordion, "Review" button
+- **Overdue banner** at top in destructive variant if any assignment past deadline and not 100%.
+- Move the **skill flower** to the bottom in a smaller (260px) collapsible card, OR mirror it on the Grades page only. Pick: keep it on the dashboard but make it collapsible and 260px so it doesn't dominate.
 
-### Verification after build
-1. Log in as `incharge.lahore@irmacademy.test` / `Academy@123`
-2. **Members**: see 7 enriched member cards with email + stats + "View report" working
-3. **Grades**: "By member" tab shows the 7 Lahore members with their grade distributions
-4. **Assign courses** (new sidebar item): pick a course → "Whole franchise" → Assign → see new rows in Recent
-5. Re-run seeder once at `/ceo/seed` (CEO), then **Attendance** shows hours per Lahore member
+**2. `src/routes/member.courses.$id.tsx` — completion celebration**
+- When `pct === 100`, show a **"🎉 Course complete!"** banner above the lesson list with:
+  - Letter-grade summary if any submissions exist
+  - "Review lessons" stays available
+  - "What's next" button → links to next assigned in-progress / not-started course (or back to `/member` if none)
+
+**3. Optional polish**
+- Add a tiny **streak calculator** in the header: count distinct days in last 14 with `study_sessions.started_at`.
+- Empty states for each bucket so the page never looks blank.
+
+### Files touched
+- `src/routes/member.index.tsx` — major rewrite (keep data fetching, restructure UI)
+- `src/routes/member.courses.$id.tsx` — add completion banner + "what's next" logic
+
+### Verification
+Log in as `newtest@irmacademy.test` / `Academy@123`:
+1. Dashboard shows welcome + 4 stats + "Continue learning" hero (or "Start your first course" empty state if none assigned)
+2. Assigned courses are bucketed: In progress / Not started / Completed
+3. Skill flower is compact and collapsible at the bottom
+4. Open a course, finish all lessons → see "Course complete" banner with "What's next" link
 
