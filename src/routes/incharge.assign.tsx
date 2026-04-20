@@ -172,14 +172,35 @@ function InchargeAssignPage() {
       })),
     );
 
-    const { error } = await supabase.from("assignments").insert(rows);
+    // Fetch existing (course_id,user_id) pairs to skip duplicates (unique constraint)
+    const { data: existing, error: existErr } = await supabase
+      .from("assignments")
+      .select("course_id, user_id")
+      .in("user_id", targetIds)
+      .in("course_id", courseIds);
+    if (existErr) {
+      setSubmitting(false);
+      toast.error(existErr.message);
+      return;
+    }
+    const existingSet = new Set((existing ?? []).map((r) => `${r.course_id}:${r.user_id}`));
+    const newRows = rows.filter((r) => !existingSet.has(`${r.course_id}:${r.user_id}`));
+    const skipped = rows.length - newRows.length;
+
+    if (newRows.length === 0) {
+      setSubmitting(false);
+      toast.info("All selected members already have these courses assigned");
+      return;
+    }
+
+    const { error } = await supabase.from("assignments").insert(newRows);
     setSubmitting(false);
     if (error) {
       toast.error(error.message);
       return;
     }
     toast.success(
-      `Assigned ${courseIds.length} course${courseIds.length === 1 ? "" : "s"} to ${targetIds.length} member${targetIds.length === 1 ? "" : "s"}`,
+      `Assigned ${newRows.length} new assignment${newRows.length === 1 ? "" : "s"}${skipped ? ` (${skipped} already existed, skipped)` : ""}`,
     );
     setCourseIds([]);
     setMemberIds([]);
