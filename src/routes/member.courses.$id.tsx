@@ -73,12 +73,14 @@ function CoursePlayer() {
   const [sections, setSections] = React.useState<Section[]>([]);
   const [progress, setProgress] = React.useState<Record<string, ProgressRow>>({});
   const [activeLessonId, setActiveLessonId] = React.useState<string | null>(null);
+  const [nextCourse, setNextCourse] = React.useState<{ id: string; title: string } | null>(null);
 
   const allLessons = React.useMemo(() => sections.flatMap((s) => s.lessons), [sections]);
   const activeLesson = allLessons.find((l) => l.id === activeLessonId) ?? null;
   const completedCount = Object.values(progress).filter((p) => p.completed).length;
   const totalCount = allLessons.length;
   const pct = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
+  const isComplete = totalCount > 0 && pct === 100;
 
   const load = React.useCallback(async () => {
     if (!user) return;
@@ -135,6 +137,61 @@ function CoursePlayer() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  // When this course is complete, find the next assigned course to recommend.
+  React.useEffect(() => {
+    if (!user || !isComplete) return;
+    (async () => {
+      const { data: aData } = await supabase
+        .from("assignments")
+        .select("course_id,courses(id,title)")
+        .eq("user_id", user.id);
+      const others = ((aData ?? []) as Array<{
+        course_id: string;
+        courses: { id: string; title: string } | null;
+      }>).filter((a) => a.course_id !== courseId && a.courses);
+      if (others.length === 0) {
+        setNextCourse(null);
+        return;
+      }
+      // Pick the first one that isn't fully completed yet.
+      const courseIds = others.map((o) => o.course_id);
+      const { data: secs } = await supabase
+        .from("sections")
+        .select("id,course_id")
+        .in("course_id", courseIds);
+      const sectionToCourse = new Map((secs ?? []).map((s) => [s.id, s.course_id]));
+      const sectionIds = (secs ?? []).map((s) => s.id);
+      const { data: lessons } = sectionIds.length
+        ? await supabase.from("lessons").select("id,section_id").in("section_id", sectionIds)
+        : { data: [] as { id: string; section_id: string }[] };
+      const totals: Record<string, number> = {};
+      const lessonToCourse = new Map<string, string>();
+      for (const l of lessons ?? []) {
+        const cid = sectionToCourse.get(l.section_id)!;
+        lessonToCourse.set(l.id, cid);
+        totals[cid] = (totals[cid] ?? 0) + 1;
+      }
+      const lessonIds = Array.from(lessonToCourse.keys());
+      const { data: prog } = lessonIds.length
+        ? await supabase
+            .from("lesson_progress")
+            .select("lesson_id,completed")
+            .eq("user_id", user.id)
+            .in("lesson_id", lessonIds)
+        : { data: [] as { lesson_id: string; completed: boolean }[] };
+      const dones: Record<string, number> = {};
+      for (const p of prog ?? []) {
+        if (!p.completed) continue;
+        const cid = lessonToCourse.get(p.lesson_id);
+        if (cid) dones[cid] = (dones[cid] ?? 0) + 1;
+      }
+      const pick =
+        others.find((o) => (dones[o.course_id] ?? 0) < (totals[o.course_id] ?? 0)) ??
+        others[0];
+      setNextCourse(pick?.courses ?? null);
+    })();
+  }, [user, isComplete, courseId]);
 
   async function markCompleted(lessonId: string) {
     if (!user) return;
@@ -196,6 +253,37 @@ function CoursePlayer() {
           <p className="text-sm text-muted-foreground">{course.description}</p>
         )}
       </div>
+
+      {isComplete && (
+        <Card className="overflow-hidden border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="text-3xl">🎉</div>
+              <div>
+                <h2 className="font-display text-lg font-semibold">
+                  Course complete!
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  You finished every lesson in {course?.title}. Nice work.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {nextCourse ? (
+                <Button asChild>
+                  <Link to="/member/courses/$id" params={{ id: nextCourse.id }}>
+                    Continue with {nextCourse.title} →
+                  </Link>
+                </Button>
+              ) : (
+                <Button asChild>
+                  <Link to="/member">Back to dashboard</Link>
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="order-2 lg:order-1">
