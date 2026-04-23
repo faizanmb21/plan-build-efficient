@@ -11,11 +11,25 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, RefreshCcw, CheckCircle2, Award } from "lucide-react";
+import { letterColorClass } from "@/lib/grade-utils";
 
 export const Route = createFileRoute("/member/grades")({
   component: GradesPage,
 });
+
+interface ProjectGradeRow {
+  id: string;
+  project_id: string;
+  project_title: string;
+  status: "pending" | "approved" | "revision";
+  letter_grade: string | null;
+  grade: number | null;
+  feedback: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
 
 interface GradeRow {
   id: string;
