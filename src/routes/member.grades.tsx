@@ -13,23 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, RefreshCcw, CheckCircle2, Award } from "lucide-react";
-import { letterColorClass } from "@/lib/grade-utils";
 
 export const Route = createFileRoute("/member/grades")({
   component: GradesPage,
 });
-
-interface ProjectGradeRow {
-  id: string;
-  project_id: string;
-  project_title: string;
-  status: "pending" | "approved" | "revision";
-  letter_grade: string | null;
-  grade: number | null;
-  feedback: string | null;
-  created_at: string;
-  reviewed_at: string | null;
-}
 
 interface GradeRow {
   id: string;
@@ -45,14 +32,29 @@ interface GradeRow {
   course_id: string | null;
 }
 
+interface ProjectGradeRow {
+  id: string;
+  status: "pending" | "approved" | "revision";
+  letter_grade: string | null;
+  grade: number | null;
+  feedback: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  project_id: string;
+  project_title: string;
+}
+
 function GradesPage() {
   const { user } = useAuth();
   const [rows, setRows] = React.useState<GradeRow[]>([]);
+  const [projectRows, setProjectRows] = React.useState<ProjectGradeRow[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   const load = React.useCallback(async () => {
     if (!user) return;
     setLoading(true);
+
+    // Lesson submissions
     const { data: subs } = await supabase
       .from("submissions")
       .select(
@@ -88,23 +90,41 @@ function GradesPage() {
       course_id: lessonMap.get(s.lesson_id)?.courseId ?? null,
     }));
     setRows(enriched);
+
+    // Project submissions
+    const { data: psubs } = await supabase
+      .from("project_submissions")
+      .select(
+        "id,status,letter_grade,grade,feedback,created_at,reviewed_at,project_id",
+      )
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    const projectIds = Array.from(
+      new Set((psubs ?? []).map((s) => s.project_id)),
+    );
+    const { data: projects } = projectIds.length
+      ? await supabase
+          .from("projects")
+          .select("id,title")
+          .in("id", projectIds)
+      : { data: [] as any[] };
+
+    const projectMap = new Map<string, string>();
+    (projects ?? []).forEach((p: any) => projectMap.set(p.id, p.title));
+
+    const enrichedProjects: ProjectGradeRow[] = (psubs ?? []).map((s: any) => ({
+      ...s,
+      project_title: projectMap.get(s.project_id) ?? "Project",
+    }));
+    setProjectRows(enrichedProjects);
+
     setLoading(false);
   }, [user]);
 
   React.useEffect(() => {
     load();
   }, [load]);
-
-  const passed = rows.filter((r) => r.status === "approved");
-  const redo = rows.filter((r) => r.status === "revision");
-  const pending = rows.filter((r) => r.status === "pending");
-
-  const avg =
-    passed.length > 0
-      ? Math.round(
-          passed.reduce((s, r) => s + (r.grade ?? 0), 0) / passed.length,
-        )
-      : null;
 
   return (
     <div className="space-y-6">
@@ -125,6 +145,66 @@ function GradesPage() {
         </Button>
       </header>
 
+      <Tabs defaultValue="lessons">
+        <TabsList>
+          <TabsTrigger value="lessons">Lesson grades</TabsTrigger>
+          <TabsTrigger value="projects">Project grades</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="lessons" className="space-y-6">
+          <GradesSection
+            rows={rows}
+            loading={loading}
+            emptyTitle="No submissions yet"
+            emptyDescription="Submit a practical from any course to start earning grades."
+            renderCard={(r) => <LessonGradeCard key={r.id} row={r} />}
+          />
+        </TabsContent>
+
+        <TabsContent value="projects" className="space-y-6">
+          <GradesSection
+            rows={projectRows}
+            loading={loading}
+            emptyTitle="No project submissions yet"
+            emptyDescription="Submit an assigned project to start earning grades."
+            renderCard={(r) => <ProjectGradeCard key={r.id} row={r} />}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+interface AnyGradeRow {
+  status: "pending" | "approved" | "revision";
+  grade: number | null;
+}
+
+function GradesSection<T extends AnyGradeRow>({
+  rows,
+  loading,
+  emptyTitle,
+  emptyDescription,
+  renderCard,
+}: {
+  rows: T[];
+  loading: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  renderCard: (row: T) => React.ReactNode;
+}) {
+  const passed = rows.filter((r) => r.status === "approved");
+  const redo = rows.filter((r) => r.status === "revision");
+  const pending = rows.filter((r) => r.status === "pending");
+  const avg =
+    passed.length > 0
+      ? Math.round(
+          passed.reduce((s, r) => s + (r.grade ?? 0), 0) / passed.length,
+        )
+      : null;
+
+  return (
+    <>
       <div className="grid gap-3 sm:grid-cols-4">
         <SummaryCard label="Passed" value={passed.length} icon={CheckCircle2} />
         <SummaryCard label="Redo" value={redo.length} />
@@ -141,20 +221,14 @@ function GradesPage() {
       ) : rows.length === 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle>No submissions yet</CardTitle>
-            <CardDescription>
-              Submit a practical from any course to start earning grades.
-            </CardDescription>
+            <CardTitle>{emptyTitle}</CardTitle>
+            <CardDescription>{emptyDescription}</CardDescription>
           </CardHeader>
         </Card>
       ) : (
-        <div className="grid gap-3">
-          {rows.map((r) => (
-            <GradeCard key={r.id} row={r} />
-          ))}
-        </div>
+        <div className="grid gap-3">{rows.map((r) => renderCard(r))}</div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -180,10 +254,40 @@ function SummaryCard({
   );
 }
 
-function GradeCard({ row }: { row: GradeRow }) {
-  const isPass = row.status === "approved";
-  const isRedo = row.status === "revision";
-  const isPending = row.status === "pending";
+function StatusBadges({
+  status,
+  letter,
+}: {
+  status: "pending" | "approved" | "revision";
+  letter: string | null;
+}) {
+  const isPass = status === "approved";
+  const isRedo = status === "revision";
+  const isPending = status === "pending";
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      {letter && (
+        <Badge
+          variant="outline"
+          className={`font-mono text-base ${
+            isRedo ? "border-destructive text-destructive" : ""
+          }`}
+        >
+          {letter}
+        </Badge>
+      )}
+      {isPass && (
+        <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
+          Passed
+        </Badge>
+      )}
+      {isRedo && <Badge variant="destructive">Redo required</Badge>}
+      {isPending && <Badge variant="secondary">Pending</Badge>}
+    </div>
+  );
+}
+
+function LessonGradeCard({ row }: { row: GradeRow }) {
   return (
     <Card>
       <CardContent className="space-y-2 p-4">
@@ -197,27 +301,7 @@ function GradeCard({ row }: { row: GradeRow }) {
                 : `Submitted ${new Date(row.created_at).toLocaleDateString()}`}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {row.letter_grade && (
-              <Badge
-                variant="outline"
-                className={`font-mono text-base ${
-                  isRedo ? "border-destructive text-destructive" : ""
-                }`}
-              >
-                {row.letter_grade}
-              </Badge>
-            )}
-            {isPass && (
-              <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
-                Passed
-              </Badge>
-            )}
-            {isRedo && (
-              <Badge variant="destructive">Redo required</Badge>
-            )}
-            {isPending && <Badge variant="secondary">Pending</Badge>}
-          </div>
+          <StatusBadges status={row.status} letter={row.letter_grade} />
         </div>
         {row.feedback && (
           <p className="rounded-md bg-muted/50 p-2 text-sm">{row.feedback}</p>
@@ -225,15 +309,41 @@ function GradeCard({ row }: { row: GradeRow }) {
         {row.course_id && (
           <div className="flex justify-end">
             <Button asChild size="sm" variant="ghost">
-              <Link
-                to="/member/courses/$id"
-                params={{ id: row.course_id }}
-              >
+              <Link to="/member/courses/$id" params={{ id: row.course_id }}>
                 Open course
               </Link>
             </Button>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProjectGradeCard({ row }: { row: ProjectGradeRow }) {
+  return (
+    <Card>
+      <CardContent className="space-y-2 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate font-medium">{row.project_title}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Project ·{" "}
+              {row.reviewed_at
+                ? `Graded ${new Date(row.reviewed_at).toLocaleDateString()}`
+                : `Submitted ${new Date(row.created_at).toLocaleDateString()}`}
+            </p>
+          </div>
+          <StatusBadges status={row.status} letter={row.letter_grade} />
+        </div>
+        {row.feedback && (
+          <p className="rounded-md bg-muted/50 p-2 text-sm">{row.feedback}</p>
+        )}
+        <div className="flex justify-end">
+          <Button asChild size="sm" variant="ghost">
+            <Link to="/member/projects">Open projects</Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
