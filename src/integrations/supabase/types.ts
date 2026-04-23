@@ -364,6 +364,138 @@ export type Database = {
           },
         ]
       }
+      project_assignments: {
+        Row: {
+          assigned_by: string | null
+          created_at: string
+          id: string
+          priority: Database["public"]["Enums"]["assignment_priority"]
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          priority?: Database["public"]["Enums"]["assignment_priority"]
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          priority?: Database["public"]["Enums"]["assignment_priority"]
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_assignments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_submissions: {
+        Row: {
+          created_at: string
+          feedback: string | null
+          file_url: string
+          grade: number | null
+          id: string
+          letter_grade: string | null
+          project_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["submission_status"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          feedback?: string | null
+          file_url: string
+          grade?: number | null
+          id?: string
+          letter_grade?: string | null
+          project_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["submission_status"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          feedback?: string | null
+          file_url?: string
+          grade?: number | null
+          id?: string
+          letter_grade?: string | null
+          project_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["submission_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_submissions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          attachment_path: string | null
+          created_at: string
+          created_by: string
+          deadline: string | null
+          description: string | null
+          franchise_id: string | null
+          id: string
+          status: Database["public"]["Enums"]["course_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          attachment_path?: string | null
+          created_at?: string
+          created_by: string
+          deadline?: string | null
+          description?: string | null
+          franchise_id?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["course_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          attachment_path?: string | null
+          created_at?: string
+          created_by?: string
+          deadline?: string | null
+          description?: string | null
+          franchise_id?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["course_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_franchise_id_fkey"
+            columns: ["franchise_id"]
+            isOneToOne: false
+            referencedRelation: "franchises"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sections: {
         Row: {
           course_id: string
