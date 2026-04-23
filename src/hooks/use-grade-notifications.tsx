@@ -95,9 +95,80 @@ export function useGradeNotifications(userId: string | undefined) {
       )
       .subscribe();
 
+    // Also watch project submissions for grade updates
+    const projectSeen = new Map<string, string>();
+    (async () => {
+      const { data } = await supabase
+        .from("project_submissions")
+        .select("id, status, letter_grade")
+        .eq("user_id", userId);
+      if (cancelled || !data) return;
+      for (const row of data) {
+        projectSeen.set(row.id, `${row.status}:${row.letter_grade ?? ""}`);
+      }
+    })();
+
+    const projectChannel = supabase
+      .channel(`project-subs-grade-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "project_submissions",
+          filter: `user_id=eq.${userId}`,
+        },
+        async (payload) => {
+          const row = payload.new as {
+            id: string;
+            status: string;
+            letter_grade: string | null;
+            feedback: string | null;
+            project_id: string;
+          };
+          const key = `${row.status}:${row.letter_grade ?? ""}`;
+          const prev = projectSeen.get(row.id);
+          projectSeen.set(row.id, key);
+          if (prev === key) return;
+          if (row.status !== "approved" && row.status !== "revision") return;
+
+          const { data: project } = await supabase
+            .from("projects")
+            .select("title")
+            .eq("id", row.project_id)
+            .maybeSingle();
+
+          const passed = row.status === "approved";
+          const grade = row.letter_grade ?? (passed ? "Passed" : "Redo");
+          const projectTitle = project?.title ?? "Your project";
+          const description = row.feedback
+            ? `${row.feedback.slice(0, 140)}${row.feedback.length > 140 ? "…" : ""}`
+            : "Open Projects to see details";
+
+          const toastFn = passed ? toast.success : toast.warning;
+          toastFn(
+            passed
+              ? `Project graded ${grade} — ${projectTitle}`
+              : `Redo required (${grade}) — ${projectTitle}`,
+            {
+              description,
+              duration: 8000,
+              action: {
+                label: "Open",
+                onClick: () => {
+                  window.location.href = `/member/projects`;
+                },
+              },
+            },
+          );
+        },
+      )
+      .subscribe();
+
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);
+      supabase.removeChannel(projectChannel);
     };
   }, [userId]);
 }

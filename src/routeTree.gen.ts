@@ -19,15 +19,18 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as MemberIndexRouteImport } from './routes/member.index'
 import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
+import { Route as MemberProjectsRouteImport } from './routes/member.projects'
 import { Route as MemberGradesRouteImport } from './routes/member.grades'
 import { Route as MemberFocusRouteImport } from './routes/member.focus'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
+import { Route as InchargeProjectsRouteImport } from './routes/incharge.projects'
 import { Route as InchargeMembersRouteImport } from './routes/incharge.members'
 import { Route as InchargeGradesRouteImport } from './routes/incharge.grades'
 import { Route as InchargeAttendanceRouteImport } from './routes/incharge.attendance'
 import { Route as InchargeAssignRouteImport } from './routes/incharge.assign'
 import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
+import { Route as CeoProjectsRouteImport } from './routes/ceo.projects'
 import { Route as CeoGradesRouteImport } from './routes/ceo.grades'
 import { Route as CeoFranchisesRouteImport } from './routes/ceo.franchises'
 import { Route as CeoAttendanceRouteImport } from './routes/ceo.attendance'
@@ -89,6 +92,11 @@ const CeoIndexRoute = CeoIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CeoRoute,
 } as any)
+const MemberProjectsRoute = MemberProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => MemberRoute,
+} as any)
 const MemberGradesRoute = MemberGradesRouteImport.update({
   id: '/grades',
   path: '/grades',
@@ -107,6 +115,11 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
 const InchargeReviewsRoute = InchargeReviewsRouteImport.update({
   id: '/reviews',
   path: '/reviews',
+  getParentRoute: () => InchargeRoute,
+} as any)
+const InchargeProjectsRoute = InchargeProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => InchargeRoute,
 } as any)
 const InchargeMembersRoute = InchargeMembersRouteImport.update({
@@ -132,6 +145,11 @@ const InchargeAssignRoute = InchargeAssignRouteImport.update({
 const CeoSeedRoute = CeoSeedRouteImport.update({
   id: '/seed',
   path: '/seed',
+  getParentRoute: () => CeoRoute,
+} as any)
+const CeoProjectsRoute = CeoProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => CeoRoute,
 } as any)
 const CeoGradesRoute = CeoGradesRouteImport.update({
@@ -197,15 +215,18 @@ export interface FileRoutesByFullPath {
   '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
   '/ceo/grades': typeof CeoGradesRouteWithChildren
+  '/ceo/projects': typeof CeoProjectsRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRoute
+  '/incharge/projects': typeof InchargeProjectsRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
+  '/member/projects': typeof MemberProjectsRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
@@ -224,15 +245,18 @@ export interface FileRoutesByTo {
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/grades': typeof CeoGradesRouteWithChildren
+  '/ceo/projects': typeof CeoProjectsRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRoute
+  '/incharge/projects': typeof InchargeProjectsRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
+  '/member/projects': typeof MemberProjectsRoute
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
@@ -256,15 +280,18 @@ export interface FileRoutesById {
   '/ceo/attendance': typeof CeoAttendanceRoute
   '/ceo/franchises': typeof CeoFranchisesRouteWithChildren
   '/ceo/grades': typeof CeoGradesRouteWithChildren
+  '/ceo/projects': typeof CeoProjectsRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRoute
+  '/incharge/projects': typeof InchargeProjectsRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
   '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
+  '/member/projects': typeof MemberProjectsRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
@@ -289,15 +316,18 @@ export interface FileRouteTypes {
     | '/ceo/attendance'
     | '/ceo/franchises'
     | '/ceo/grades'
+    | '/ceo/projects'
     | '/ceo/seed'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
     | '/incharge/members'
+    | '/incharge/projects'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
     | '/member/grades'
+    | '/member/projects'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
@@ -316,15 +346,18 @@ export interface FileRouteTypes {
     | '/ceo/assign'
     | '/ceo/attendance'
     | '/ceo/grades'
+    | '/ceo/projects'
     | '/ceo/seed'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
     | '/incharge/members'
+    | '/incharge/projects'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
     | '/member/grades'
+    | '/member/projects'
     | '/ceo'
     | '/incharge'
     | '/member'
@@ -347,15 +380,18 @@ export interface FileRouteTypes {
     | '/ceo/attendance'
     | '/ceo/franchises'
     | '/ceo/grades'
+    | '/ceo/projects'
     | '/ceo/seed'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
     | '/incharge/members'
+    | '/incharge/projects'
     | '/incharge/reviews'
     | '/invite/$token'
     | '/member/focus'
     | '/member/grades'
+    | '/member/projects'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
@@ -450,6 +486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoIndexRouteImport
       parentRoute: typeof CeoRoute
     }
+    '/member/projects': {
+      id: '/member/projects'
+      path: '/projects'
+      fullPath: '/member/projects'
+      preLoaderRoute: typeof MemberProjectsRouteImport
+      parentRoute: typeof MemberRoute
+    }
     '/member/grades': {
       id: '/member/grades'
       path: '/grades'
@@ -476,6 +519,13 @@ declare module '@tanstack/react-router' {
       path: '/reviews'
       fullPath: '/incharge/reviews'
       preLoaderRoute: typeof InchargeReviewsRouteImport
+      parentRoute: typeof InchargeRoute
+    }
+    '/incharge/projects': {
+      id: '/incharge/projects'
+      path: '/projects'
+      fullPath: '/incharge/projects'
+      preLoaderRoute: typeof InchargeProjectsRouteImport
       parentRoute: typeof InchargeRoute
     }
     '/incharge/members': {
@@ -511,6 +561,13 @@ declare module '@tanstack/react-router' {
       path: '/seed'
       fullPath: '/ceo/seed'
       preLoaderRoute: typeof CeoSeedRouteImport
+      parentRoute: typeof CeoRoute
+    }
+    '/ceo/projects': {
+      id: '/ceo/projects'
+      path: '/projects'
+      fullPath: '/ceo/projects'
+      preLoaderRoute: typeof CeoProjectsRouteImport
       parentRoute: typeof CeoRoute
     }
     '/ceo/grades': {
@@ -617,6 +674,7 @@ interface CeoRouteChildren {
   CeoAttendanceRoute: typeof CeoAttendanceRoute
   CeoFranchisesRoute: typeof CeoFranchisesRouteWithChildren
   CeoGradesRoute: typeof CeoGradesRouteWithChildren
+  CeoProjectsRoute: typeof CeoProjectsRoute
   CeoSeedRoute: typeof CeoSeedRoute
   CeoIndexRoute: typeof CeoIndexRoute
   CeoCoursesIndexRoute: typeof CeoCoursesIndexRoute
@@ -628,6 +686,7 @@ const CeoRouteChildren: CeoRouteChildren = {
   CeoAttendanceRoute: CeoAttendanceRoute,
   CeoFranchisesRoute: CeoFranchisesRouteWithChildren,
   CeoGradesRoute: CeoGradesRouteWithChildren,
+  CeoProjectsRoute: CeoProjectsRoute,
   CeoSeedRoute: CeoSeedRoute,
   CeoIndexRoute: CeoIndexRoute,
   CeoCoursesIndexRoute: CeoCoursesIndexRoute,
@@ -641,6 +700,7 @@ interface InchargeRouteChildren {
   InchargeAttendanceRoute: typeof InchargeAttendanceRoute
   InchargeGradesRoute: typeof InchargeGradesRoute
   InchargeMembersRoute: typeof InchargeMembersRoute
+  InchargeProjectsRoute: typeof InchargeProjectsRoute
   InchargeReviewsRoute: typeof InchargeReviewsRoute
   InchargeIndexRoute: typeof InchargeIndexRoute
 }
@@ -650,6 +710,7 @@ const InchargeRouteChildren: InchargeRouteChildren = {
   InchargeAttendanceRoute: InchargeAttendanceRoute,
   InchargeGradesRoute: InchargeGradesRoute,
   InchargeMembersRoute: InchargeMembersRoute,
+  InchargeProjectsRoute: InchargeProjectsRoute,
   InchargeReviewsRoute: InchargeReviewsRoute,
   InchargeIndexRoute: InchargeIndexRoute,
 }
@@ -661,6 +722,7 @@ const InchargeRouteWithChildren = InchargeRoute._addFileChildren(
 interface MemberRouteChildren {
   MemberFocusRoute: typeof MemberFocusRoute
   MemberGradesRoute: typeof MemberGradesRoute
+  MemberProjectsRoute: typeof MemberProjectsRoute
   MemberIndexRoute: typeof MemberIndexRoute
   MemberCoursesIdRoute: typeof MemberCoursesIdRoute
 }
@@ -668,6 +730,7 @@ interface MemberRouteChildren {
 const MemberRouteChildren: MemberRouteChildren = {
   MemberFocusRoute: MemberFocusRoute,
   MemberGradesRoute: MemberGradesRoute,
+  MemberProjectsRoute: MemberProjectsRoute,
   MemberIndexRoute: MemberIndexRoute,
   MemberCoursesIdRoute: MemberCoursesIdRoute,
 }
