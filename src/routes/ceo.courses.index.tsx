@@ -382,7 +382,7 @@ function PlaylistCreate({ onCreated }: { onCreated: (id: string) => void }) {
         type: "video";
         position: number;
         duration_seconds: number | null;
-        content: { video_url: string; storage_path: null };
+        content: { url: string; path: null };
       }> = [];
       groups.forEach((g, gi) => {
         const sectionId = byPos.get(gi)!;
@@ -393,7 +393,7 @@ function PlaylistCreate({ onCreated }: { onCreated: (id: string) => void }) {
             type: "video",
             position: vi,
             duration_seconds: v.durationSeconds,
-            content: { video_url: v.watchUrl, storage_path: null },
+            content: { url: v.watchUrl, path: null },
           });
         });
       });
