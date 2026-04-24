@@ -26,6 +26,7 @@ import {
   ListVideo,
   Loader2,
   Sparkles,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
