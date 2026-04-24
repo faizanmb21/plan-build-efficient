@@ -19,6 +19,7 @@ import { Copy, Trash2, UserPlus, Mail, Phone, Calendar, BookOpen, Activity, File
 import { toast } from "sonner";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { formatRelative } from "@/lib/grade-utils";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/incharge/members")({
   component: InchargeMembers,
@@ -153,13 +154,15 @@ function InchargeMembers() {
     load();
   }, [load]);
 
+  const confirm = useConfirm();
   async function removeMember(m: MemberRow) {
-    if (
-      !confirm(
-        `Remove ${m.full_name ?? "this member"} from your franchise? Their account stays but they lose access.`,
-      )
-    )
-      return;
+    const ok = await confirm({
+      title: "Remove member?",
+      description: `Remove ${m.full_name ?? "this member"} from your franchise? Their account stays but they lose access.`,
+      confirmLabel: "Remove",
+      variant: "destructive",
+    });
+    if (!ok) return;
     const { error } = await supabase.rpc("remove_member_from_franchise", { _user_id: m.id });
     if (error) toast.error(error.message);
     else {
@@ -169,7 +172,13 @@ function InchargeMembers() {
   }
 
   async function revokeInvite(inv: Invite) {
-    if (!confirm(`Revoke invite for ${inv.email}?`)) return;
+    const ok = await confirm({
+      title: "Revoke invite?",
+      description: `Revoke invite for ${inv.email}?`,
+      confirmLabel: "Revoke",
+      variant: "destructive",
+    });
+    if (!ok) return;
     const { error } = await supabase.from("invites").delete().eq("id", inv.id);
     if (error) toast.error(error.message);
     else {

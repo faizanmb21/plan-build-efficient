@@ -47,6 +47,7 @@ import { toast } from "sonner";
 import { PillarFlower } from "@/components/PillarFlower";
 import { getPillarScoresForUsers } from "@/lib/pillar-data";
 import type { PillarScores } from "@/lib/pillars";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/franchises/")({
   component: FranchisesPage,
@@ -136,14 +137,15 @@ function FranchisesPage() {
 
   const visible = franchises.filter((f) => (showArchived ? !!f.archived_at : !f.archived_at));
 
+  const confirm = useConfirm();
   async function archive(id: string, name: string) {
-    if (
-      !confirm(
-        `Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Archive franchise?",
+      description: `Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`,
+      confirmLabel: "Archive",
+      variant: "destructive",
+    });
+    if (!ok) return;
 
     const { error } = await supabase.rpc("archive_franchise", { _franchise_id: id });
     if (error) return toast.error(error.message);
@@ -161,11 +163,15 @@ function FranchisesPage() {
   }
 
   async function purge(id: string, name: string, force: boolean) {
-    const msg = force
-      ? `Permanently delete "${name}" RIGHT NOW? This cannot be undone.`
-      : `Permanently delete "${name}"? This cannot be undone.`;
-
-    if (!confirm(msg)) return;
+    const ok = await confirm({
+      title: force ? "Delete RIGHT NOW?" : "Delete franchise?",
+      description: force
+        ? `Permanently delete "${name}" RIGHT NOW? This cannot be undone.`
+        : `Permanently delete "${name}"? This cannot be undone.`,
+      confirmLabel: "Delete permanently",
+      variant: "destructive",
+    });
+    if (!ok) return;
 
     const { error } = await supabase.rpc("purge_franchise", {
       _franchise_id: id,
@@ -629,8 +635,15 @@ function InviteRowItem({
     toast.success("Invite link copied");
   }
 
+  const confirm = useConfirm();
   async function revoke() {
-    if (!confirm("Delete this invite?")) return;
+    const ok = await confirm({
+      title: "Delete invite?",
+      description: "This invite link will stop working.",
+      confirmLabel: "Delete",
+      variant: "destructive",
+    });
+    if (!ok) return;
     const { error } = await supabase.from("invites").delete().eq("id", invite.id);
     if (error) {
       toast.error(error.message);
