@@ -5,15 +5,22 @@ import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { CheckCircle2, Clock, RefreshCcw, FileText, Loader2, FolderKanban } from "lucide-react";
 import { LessonReviewDialog, type LessonSubmission } from "@/components/grading/LessonReviewDialog";
 import { ProjectGradeDialog, type ProjectSubmission } from "@/components/grading/ProjectGradeDialog";
 import { letterColorClass } from "@/lib/grade-utils";
 
-export const Route = createFileRoute("/incharge/reviews")({
-  component: ReviewsPage,
+export const Route = createFileRoute("/ceo/submissions")({
+  component: CeoSubmissionsPage,
 });
 
 type SubmissionStatus = "pending" | "approved" | "revision";
@@ -27,63 +34,74 @@ const STATUS_META: Record<
   revision: { label: "Revision", icon: RefreshCcw, cls: "bg-destructive/15 text-destructive" },
 };
 
-type ProjectSubRow = ProjectSubmission & {
+type LessonRow = LessonSubmission & { franchise_id: string | null; franchise_name: string };
+type ProjectRow = ProjectSubmission & {
   member_name: string;
   project_title: string;
+  franchise_id: string | null;
+  franchise_name: string;
 };
 
-function ReviewsPage() {
+function CeoSubmissionsPage() {
   const { user } = useAuth();
   const [kind, setKind] = React.useState<"lesson" | "project">("lesson");
   const [statusTab, setStatusTab] = React.useState<SubmissionStatus | "all">("pending");
+  const [franchiseFilter, setFranchiseFilter] = React.useState<string>("all");
 
-  const [lessonRows, setLessonRows] = React.useState<LessonSubmission[]>([]);
-  const [projectRows, setProjectRows] = React.useState<ProjectSubRow[]>([]);
+  const [lessonRows, setLessonRows] = React.useState<LessonRow[]>([]);
+  const [projectRows, setProjectRows] = React.useState<ProjectRow[]>([]);
+  const [franchises, setFranchises] = React.useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = React.useState(true);
 
-  const [activeLesson, setActiveLesson] = React.useState<LessonSubmission | null>(null);
-  const [activeProject, setActiveProject] = React.useState<ProjectSubRow | null>(null);
+  const [activeLesson, setActiveLesson] = React.useState<LessonRow | null>(null);
+  const [activeProject, setActiveProject] = React.useState<ProjectRow | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
 
-    // ----- Lesson practical submissions -----
-    const { data: subs, error } = await supabase
-      .from("submissions")
-      .select("id,status,file_url,grade,letter_grade,feedback,created_at,reviewed_at,user_id,lesson_id")
-      .order("created_at", { ascending: false });
+    const [{ data: subs, error: sErr }, { data: psubs }] = await Promise.all([
+      supabase
+        .from("submissions")
+        .select("id,status,file_url,grade,letter_grade,feedback,created_at,reviewed_at,user_id,lesson_id")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("project_submissions")
+        .select("id,project_id,user_id,file_url,status,letter_grade,grade,feedback,reviewed_at,created_at")
+        .order("created_at", { ascending: false }),
+    ]);
 
-    if (error) {
-      toast.error(error.message);
+    if (sErr) {
+      toast.error(sErr.message);
       setLoading(false);
       return;
     }
 
     const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
-    const userIds = Array.from(new Set((subs ?? []).map((s) => s.user_id)));
-
-    // ----- Project submissions (RLS scopes them to franchise automatically) -----
-    const { data: psubs } = await supabase
-      .from("project_submissions")
-      .select("id,project_id,user_id,file_url,status,letter_grade,grade,feedback,reviewed_at,created_at")
-      .order("created_at", { ascending: false });
-
     const projIds = Array.from(new Set((psubs ?? []).map((s) => s.project_id)));
-    const allUserIds = Array.from(new Set([...userIds, ...((psubs ?? []).map((s) => s.user_id))]));
+    const userIds = Array.from(new Set([
+      ...(subs ?? []).map((s) => s.user_id),
+      ...(psubs ?? []).map((s) => s.user_id),
+    ]));
 
-    const [{ data: lessons }, { data: profiles }, { data: projects }] = await Promise.all([
+    const [
+      { data: lessons },
+      { data: projects },
+      { data: profiles },
+      { data: fRows },
+    ] = await Promise.all([
       lessonIds.length
         ? supabase
             .from("lessons")
             .select("id,title,section_id,sections(course_id,courses(title))")
             .in("id", lessonIds)
         : Promise.resolve({ data: [] as any[] }),
-      allUserIds.length
-        ? supabase.from("profiles").select("id,full_name").in("id", allUserIds)
-        : Promise.resolve({ data: [] as any[] }),
       projIds.length
         ? supabase.from("projects").select("id,title").in("id", projIds)
         : Promise.resolve({ data: [] as any[] }),
+      userIds.length
+        ? supabase.from("profiles").select("id,full_name,franchise_id").in("id", userIds)
+        : Promise.resolve({ data: [] as any[] }),
+      supabase.from("franchises").select("id,name").is("archived_at", null).order("name"),
     ]);
 
     const lessonMap = new Map<string, { title: string; courseTitle: string }>();
@@ -93,33 +111,49 @@ function ReviewsPage() {
         courseTitle: l.sections?.courses?.title ?? "Course",
       });
     });
-    const profileMap = new Map<string, string>();
-    (profiles ?? []).forEach((p: any) => {
-      profileMap.set(p.id, p.full_name ?? "Member");
-    });
     const projectMap = new Map<string, string>();
-    (projects ?? []).forEach((p: any) => {
-      projectMap.set(p.id, p.title ?? "Project");
-    });
+    (projects ?? []).forEach((p: any) => projectMap.set(p.id, p.title ?? "Project"));
+    const profileMap = new Map<string, { name: string; franchise_id: string | null }>();
+    (profiles ?? []).forEach((p: any) =>
+      profileMap.set(p.id, { name: p.full_name ?? "Member", franchise_id: p.franchise_id ?? null }),
+    );
+    const franchiseMap = new Map<string, string>();
+    (fRows ?? []).forEach((f: any) => franchiseMap.set(f.id, f.name));
 
-    const enrichedLessons: LessonSubmission[] = (subs ?? []).map((s: any) => ({
-      ...s,
-      status: s.status as SubmissionStatus,
-      letter_grade: (s.letter_grade as string | null) ?? null,
-      lesson_title: lessonMap.get(s.lesson_id)?.title ?? "Lesson",
-      course_title: lessonMap.get(s.lesson_id)?.courseTitle ?? "Course",
-      member_name: profileMap.get(s.user_id) ?? "Member",
-    }));
+    setFranchises((fRows ?? []) as { id: string; name: string }[]);
 
-    const enrichedProjects: ProjectSubRow[] = (psubs ?? []).map((s: any) => ({
-      ...s,
-      status: s.status as SubmissionStatus,
-      member_name: profileMap.get(s.user_id) ?? "Member",
-      project_title: projectMap.get(s.project_id) ?? "Project",
-    }));
+    setLessonRows(
+      (subs ?? []).map((s: any) => {
+        const profile = profileMap.get(s.user_id);
+        const franchise_id = profile?.franchise_id ?? null;
+        return {
+          ...s,
+          status: s.status as SubmissionStatus,
+          letter_grade: (s.letter_grade as string | null) ?? null,
+          lesson_title: lessonMap.get(s.lesson_id)?.title ?? "Lesson",
+          course_title: lessonMap.get(s.lesson_id)?.courseTitle ?? "Course",
+          member_name: profile?.name ?? "Member",
+          franchise_id,
+          franchise_name: franchise_id ? franchiseMap.get(franchise_id) ?? "—" : "—",
+        } as LessonRow;
+      }),
+    );
 
-    setLessonRows(enrichedLessons);
-    setProjectRows(enrichedProjects);
+    setProjectRows(
+      (psubs ?? []).map((s: any) => {
+        const profile = profileMap.get(s.user_id);
+        const franchise_id = profile?.franchise_id ?? null;
+        return {
+          ...s,
+          status: s.status as SubmissionStatus,
+          member_name: profile?.name ?? "Member",
+          project_title: projectMap.get(s.project_id) ?? "Project",
+          franchise_id,
+          franchise_name: franchise_id ? franchiseMap.get(franchise_id) ?? "—" : "—",
+        } as ProjectRow;
+      }),
+    );
+
     setLoading(false);
   }, []);
 
@@ -127,46 +161,68 @@ function ReviewsPage() {
     load();
   }, [load]);
 
-  const filteredLessons = React.useMemo(
-    () => (statusTab === "all" ? lessonRows : lessonRows.filter((r) => r.status === statusTab)),
-    [lessonRows, statusTab],
-  );
-  const filteredProjects = React.useMemo(
-    () => (statusTab === "all" ? projectRows : projectRows.filter((r) => r.status === statusTab)),
-    [projectRows, statusTab],
-  );
+  const filteredLessons = React.useMemo(() => {
+    return lessonRows.filter(
+      (r) =>
+        (statusTab === "all" || r.status === statusTab) &&
+        (franchiseFilter === "all" || r.franchise_id === franchiseFilter),
+    );
+  }, [lessonRows, statusTab, franchiseFilter]);
+
+  const filteredProjects = React.useMemo(() => {
+    return projectRows.filter(
+      (r) =>
+        (statusTab === "all" || r.status === statusTab) &&
+        (franchiseFilter === "all" || r.franchise_id === franchiseFilter),
+    );
+  }, [projectRows, statusTab, franchiseFilter]);
 
   const counts = React.useMemo(() => {
-    const src = kind === "lesson" ? lessonRows : projectRows;
+    const src = (kind === "lesson" ? lessonRows : projectRows).filter(
+      (r) => franchiseFilter === "all" || r.franchise_id === franchiseFilter,
+    );
     return {
       pending: src.filter((r) => r.status === "pending").length,
       approved: src.filter((r) => r.status === "approved").length,
       revision: src.filter((r) => r.status === "revision").length,
       all: src.length,
     };
-  }, [kind, lessonRows, projectRows]);
+  }, [kind, lessonRows, projectRows, franchiseFilter]);
 
   const totalPending = lessonRows.filter((r) => r.status === "pending").length +
     projectRows.filter((r) => r.status === "pending").length;
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Submissions</h1>
           <p className="text-sm text-muted-foreground">
-            Grade course practicals and standalone project submissions from members in your franchise.
+            Every course practical and project submission across all franchises.
             {totalPending > 0 && (
               <span className="ml-2 font-medium text-amber-600 dark:text-amber-300">
-                {totalPending} pending review
+                {totalPending} pending
               </span>
             )}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={franchiseFilter} onValueChange={setFranchiseFilter}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filter franchise" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All franchises</SelectItem>
+              {franchises.map((f) => (
+                <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+            Refresh
+          </Button>
+        </div>
       </header>
 
       <Tabs value={kind} onValueChange={(v) => setKind(v as "lesson" | "project")}>
@@ -246,7 +302,7 @@ function EmptyCard({ kind, tab }: { kind: "lesson" | "project"; tab: string }) {
         <CardTitle>Nothing here</CardTitle>
         <CardDescription>
           {tab === "pending"
-            ? `No ${kind === "lesson" ? "course practical" : "project"} submissions waiting for review. 🎉`
+            ? `No ${kind === "lesson" ? "course practical" : "project"} submissions waiting for review.`
             : "No submissions match this filter."}
         </CardDescription>
       </CardHeader>
@@ -254,7 +310,7 @@ function EmptyCard({ kind, tab }: { kind: "lesson" | "project"; tab: string }) {
   );
 }
 
-function LessonCard({ row, onOpen }: { row: LessonSubmission; onOpen: () => void }) {
+function LessonCard({ row, onOpen }: { row: LessonRow; onOpen: () => void }) {
   const meta = STATUS_META[row.status];
   const Icon = meta.icon;
   return (
@@ -275,7 +331,8 @@ function LessonCard({ row, onOpen }: { row: LessonSubmission; onOpen: () => void
             )}
           </div>
           <p className="mt-1 truncate text-sm text-muted-foreground">
-            {row.member_name} · {row.course_title} · {new Date(row.created_at).toLocaleDateString()}
+            {row.member_name} · {row.franchise_name} · {row.course_title} ·{" "}
+            {new Date(row.created_at).toLocaleDateString()}
             {row.grade !== null && ` · ${row.grade}%`}
           </p>
         </div>
@@ -287,7 +344,7 @@ function LessonCard({ row, onOpen }: { row: LessonSubmission; onOpen: () => void
   );
 }
 
-function ProjectCard({ row, onOpen }: { row: ProjectSubRow; onOpen: () => void }) {
+function ProjectCard({ row, onOpen }: { row: ProjectRow; onOpen: () => void }) {
   const meta = STATUS_META[row.status];
   const Icon = meta.icon;
   return (
@@ -308,7 +365,7 @@ function ProjectCard({ row, onOpen }: { row: ProjectSubRow; onOpen: () => void }
             )}
           </div>
           <p className="mt-1 truncate text-sm text-muted-foreground">
-            {row.member_name} · Project · {new Date(row.created_at).toLocaleDateString()}
+            {row.member_name} · {row.franchise_name} · {new Date(row.created_at).toLocaleDateString()}
             {row.grade !== null && ` · ${row.grade}%`}
           </p>
         </div>

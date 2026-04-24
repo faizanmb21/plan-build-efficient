@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell, type NavItem } from "@/components/AppShell";
-import { LayoutDashboard, ClipboardList, Activity, Users, GraduationCap, Send, FolderKanban } from "lucide-react";
+import { LayoutDashboard, FileCheck, Activity, Users, GraduationCap, Send, FolderKanban } from "lucide-react";
 
 const nav: NavItem[] = [
   { to: "/incharge", label: "Dashboard", icon: LayoutDashboard },
@@ -10,7 +10,7 @@ const nav: NavItem[] = [
   { to: "/incharge/projects", label: "Projects", icon: FolderKanban },
   { to: "/incharge/grades", label: "Grades", icon: GraduationCap },
   { to: "/incharge/attendance", label: "Attendance", icon: Activity },
-  { to: "/incharge/reviews", label: "Reviews", icon: ClipboardList },
+  { to: "/incharge/reviews", label: "Submissions", icon: FileCheck },
 ];
 
 export const Route = createFileRoute("/incharge")({
