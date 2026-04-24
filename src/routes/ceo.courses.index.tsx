@@ -154,7 +154,7 @@ function CoursesPage() {
                   variant={c.status === "published" ? "default" : "secondary"}
                   className="absolute right-2 top-2"
                 >
-                  {c.status}
+                  {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
                 </Badge>
               </div>
               <CardHeader className="space-y-0 pb-2">
@@ -165,6 +165,15 @@ function CoursesPage() {
                   {c.description || "No description"}
                 </p>
                 <div className="flex items-center gap-2">
+                  <Button asChild size="icon" variant="ghost" aria-label="Preview as member">
+                    <a
+                      href={`/member/courses/${c.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </a>
+                  </Button>
                   <Button asChild size="sm" variant="outline" className="flex-1">
                     <Link to="/ceo/courses/$id/edit" params={{ id: c.id }}>
                       <Pencil className="h-3.5 w-3.5" /> Edit
