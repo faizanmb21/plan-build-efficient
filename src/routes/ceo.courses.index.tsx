@@ -166,14 +166,13 @@ function CoursesPage() {
                   {c.description || "No description"}
                 </p>
                 <div className="flex items-center gap-2">
-                  <Button asChild size="icon" variant="ghost" aria-label="Preview as member">
-                    <a
-                      href={`/member/courses/${c.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </a>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={() => setPreviewCourse(c)}
+                  >
+                    <Eye className="h-3.5 w-3.5" /> View as member
                   </Button>
                   <Button asChild size="sm" variant="outline" className="flex-1">
                     <Link to="/ceo/courses/$id/edit" params={{ id: c.id }}>
@@ -194,6 +193,28 @@ function CoursesPage() {
           ))}
         </div>
       )}
+
+      <Dialog
+        open={!!previewCourse}
+        onOpenChange={(o) => !o && setPreviewCourse(null)}
+      >
+        <DialogContent className="max-w-6xl p-0 sm:max-w-[min(96vw,1400px)] overflow-hidden">
+          <DialogHeader className="border-b border-white/10 px-4 py-3">
+            <DialogTitle className="text-base">
+              Member preview — {previewCourse?.title}
+            </DialogTitle>
+          </DialogHeader>
+          {previewCourse && (
+            <iframe
+              key={previewCourse.id}
+              src={`/member/courses/${previewCourse.id}`}
+              title={`Preview: ${previewCourse.title}`}
+              className="w-full bg-background"
+              style={{ height: "min(85vh, 900px)", border: 0 }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
