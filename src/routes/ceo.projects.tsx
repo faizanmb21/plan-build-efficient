@@ -57,7 +57,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { letterColorClass } from "@/lib/grade-utils";
-import { GradeDialog } from "./incharge.projects";
+import { ProjectGradeDialog } from "@/components/grading/ProjectGradeDialog";
 
 export const Route = createFileRoute("/ceo/projects")({
   component: CeoProjectsPage,
@@ -304,7 +304,7 @@ function CeoProjectsPage() {
         </DialogContent>
       </Dialog>
 
-      <GradeDialog
+      <ProjectGradeDialog
         sub={reviewing}
         memberName={reviewing ? memberMap.get(reviewing.user_id)?.full_name ?? null : null}
         reviewerId={user?.id ?? ""}
