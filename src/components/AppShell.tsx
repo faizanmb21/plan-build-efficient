@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 
 export interface NavItem {
   to: string;
@@ -105,6 +106,7 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
 
         <main key={location.pathname} className="flex-1 overflow-x-hidden p-4 lg:p-6 animate-fade-in">{children}</main>
       </div>
+      <ConfirmDialogHost />
     </div>
   );
 }

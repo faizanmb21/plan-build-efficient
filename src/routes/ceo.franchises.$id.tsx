@@ -31,6 +31,7 @@ import { PillarFlower } from "@/components/PillarFlower";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { GraduationCap } from "lucide-react";
 import { PILLARS, type PillarScores } from "@/lib/pillars";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/franchises/$id")({
   component: FranchiseDetailPage,
@@ -279,8 +280,15 @@ function FranchiseDetailPage() {
     load();
   }, [load]);
 
+  const confirm = useConfirm();
   async function removeMember(uid: string, name: string) {
-    if (!confirm(`Remove ${name || "this member"} from the franchise?`)) return;
+    const ok = await confirm({
+      title: "Remove member?",
+      description: `Remove ${name || "this member"} from the franchise?`,
+      confirmLabel: "Remove",
+      variant: "destructive",
+    });
+    if (!ok) return;
     const { error } = await supabase.rpc("remove_member_from_franchise", { _user_id: uid });
     if (error) return toast.error(error.message);
     toast.success("Member removed");

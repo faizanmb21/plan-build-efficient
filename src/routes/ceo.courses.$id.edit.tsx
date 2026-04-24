@@ -81,6 +81,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/courses/$id/edit")({
   component: CourseEditor,
@@ -139,6 +140,7 @@ function formatLessonDuration(seconds: number | null | undefined): string | null
 
 function CourseEditor() {
   const { id: courseId } = Route.useParams();
+  const confirm = useConfirm();
   const [loading, setLoading] = React.useState(true);
   const [course, setCourse] = React.useState<{
     title: string;
@@ -360,7 +362,13 @@ function CourseEditor() {
   }
 
   async function deleteSection(id: string) {
-    if (!confirm("Delete this section and its lessons?")) return;
+    const ok = await confirm({
+      title: "Delete section?",
+      description: "This will remove the section and all its lessons.",
+      confirmLabel: "Delete",
+      variant: "destructive",
+    });
+    if (!ok) return;
     beginMutation();
     const { error } = await supabase.from("sections").delete().eq("id", id);
     endMutation();
@@ -483,7 +491,13 @@ function CourseEditor() {
   }
 
   async function deleteLesson(lesson: Lesson) {
-    if (!confirm("Delete this lesson?")) return;
+    const ok = await confirm({
+      title: "Delete lesson?",
+      description: `“${lesson.title}” will be removed.`,
+      confirmLabel: "Delete",
+      variant: "destructive",
+    });
+    if (!ok) return;
     beginMutation();
     const { error } = await supabase.from("lessons").delete().eq("id", lesson.id);
     endMutation();
