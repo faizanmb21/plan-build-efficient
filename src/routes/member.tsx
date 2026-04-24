@@ -20,7 +20,7 @@ function MemberLayout() {
   const { user } = useAuth();
   useGradeNotifications(user?.id);
   return (
-    <RoleGuard allow={["member"]}>
+    <RoleGuard allow={["member", "ceo"]}>
       <AppShell nav={nav} roleLabel="Member">
         <Outlet />
       </AppShell>
