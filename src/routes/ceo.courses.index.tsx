@@ -26,6 +26,7 @@ import {
   ListVideo,
   Loader2,
   Sparkles,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -153,7 +154,7 @@ function CoursesPage() {
                   variant={c.status === "published" ? "default" : "secondary"}
                   className="absolute right-2 top-2"
                 >
-                  {c.status}
+                  {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
                 </Badge>
               </div>
               <CardHeader className="space-y-0 pb-2">
@@ -164,6 +165,15 @@ function CoursesPage() {
                   {c.description || "No description"}
                 </p>
                 <div className="flex items-center gap-2">
+                  <Button asChild size="icon" variant="ghost" aria-label="Preview as member">
+                    <a
+                      href={`/member/courses/${c.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </a>
+                  </Button>
                   <Button asChild size="sm" variant="outline" className="flex-1">
                     <Link to="/ceo/courses/$id/edit" params={{ id: c.id }}>
                       <Pencil className="h-3.5 w-3.5" /> Edit
@@ -462,28 +472,29 @@ function PlaylistCreate({ onCreated }: { onCreated: (id: string) => void }) {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
+            <div className="grid grid-cols-2 items-center gap-2 text-sm">
               <span className="font-medium">
                 {chosen.length} of {items.length} selected
               </span>
-              <span className="text-muted-foreground">
+              <span className="text-right text-muted-foreground tabular-nums">
                 Total {formatDuration(totalSeconds)}
               </span>
             </div>
-            <div className="max-h-56 overflow-y-auto rounded-md border border-white/10 divide-y divide-white/5">
+            <div className="max-h-56 overflow-y-auto rounded-md border border-white/10 divide-y divide-white/5 pr-2">
               {items.map((it) => (
                 <label
                   key={it.videoId}
-                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-white/5"
+                  className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-white/5"
                 >
                   <Checkbox
                     checked={!!selected[it.videoId]}
                     onCheckedChange={(v) =>
                       setSelected((s) => ({ ...s, [it.videoId]: v === true }))
                     }
+                    className="mt-0.5"
                   />
-                  <span className="flex-1 truncate text-sm">{it.title}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="flex-1 line-clamp-2 text-sm leading-snug">{it.title}</span>
+                  <span className="shrink-0 w-14 text-right text-xs text-muted-foreground tabular-nums">
                     {formatDuration(it.durationSeconds)}
                   </span>
                 </label>
