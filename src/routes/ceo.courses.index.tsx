@@ -472,28 +472,29 @@ function PlaylistCreate({ onCreated }: { onCreated: (id: string) => void }) {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
+            <div className="grid grid-cols-2 items-center gap-2 text-sm">
               <span className="font-medium">
                 {chosen.length} of {items.length} selected
               </span>
-              <span className="text-muted-foreground">
+              <span className="text-right text-muted-foreground tabular-nums">
                 Total {formatDuration(totalSeconds)}
               </span>
             </div>
-            <div className="max-h-56 overflow-y-auto rounded-md border border-white/10 divide-y divide-white/5">
+            <div className="max-h-56 overflow-y-auto rounded-md border border-white/10 divide-y divide-white/5 pr-2">
               {items.map((it) => (
                 <label
                   key={it.videoId}
-                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-white/5"
+                  className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-white/5"
                 >
                   <Checkbox
                     checked={!!selected[it.videoId]}
                     onCheckedChange={(v) =>
                       setSelected((s) => ({ ...s, [it.videoId]: v === true }))
                     }
+                    className="mt-0.5"
                   />
-                  <span className="flex-1 truncate text-sm">{it.title}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="flex-1 line-clamp-2 text-sm leading-snug">{it.title}</span>
+                  <span className="shrink-0 w-14 text-right text-xs text-muted-foreground tabular-nums">
                     {formatDuration(it.durationSeconds)}
                   </span>
                 </label>
