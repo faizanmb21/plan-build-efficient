@@ -44,7 +44,8 @@ export async function uploadProjectFile(
   file: File,
 ): Promise<string> {
   const ext = file.name.split(".").pop() || "bin";
-  const path = `projects/${userId}/${projectId}/${Date.now()}.${ext}`;
+  // Storage RLS requires the first folder to be the user's UUID.
+  const path = `${userId}/projects/${projectId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage
     .from("submissions")
     .upload(path, file, { upsert: false, contentType: file.type });
