@@ -1,83 +1,48 @@
 
 
-## Plan: Replace browser dialogs with in-app UI everywhere + add playlist-first course creation
+## Plan: Polish the New Course dialog + add "Preview as member" for CEO
 
-Two things in one pass:
+Three small fixes in two files:
 
-### Part 1 — Replace native browser popups with in-app dialogs
+### 1. Fix overlapping title and duration in the playlist video list
+In `src/routes/ceo.courses.index.tsx`, the video rows in the playlist preview can collide because the long title sits in the same row as the duration with only `truncate` (single-line). When the title wraps to a second line behind the scrollbar it visually crashes into the duration column.
 
-Native `confirm()`, `alert()`, and `prompt()` calls show ugly browser-chrome modals that don't match the dark glass theme. Swap every one for a themed shadcn `AlertDialog` (for confirm/alert) or `Dialog` with an `Input` (for prompt).
+Fix the row layout (`<label>` inside the playlist preview list):
+- Switch from single-line `truncate` to a 2-line clamp (`line-clamp-2`) so long titles wrap cleanly.
+- Make the duration a fixed-width, non-shrinking column (`shrink-0 w-14 text-right`) and align it to the top of the row (`items-start`) so it never collides with wrapped title text.
+- Add `pr-2` to the list container so text doesn't sit under the scrollbar.
 
-**Confirmed usages to replace** (found via search across all dashboards):
+Also tighten the header row above the list — give "X of Y selected" and "Total …" each their own column so they can't overlap on narrow widths.
 
-CEO routes:
-- `ceo.courses.index.tsx` — `confirm("Delete this course and all its content?")`
-- `ceo.courses.$id.edit.tsx` — multiple `confirm(...)` for delete section, delete lesson, delete quiz question, etc.
-- `ceo.franchises.$id.tsx` — `confirm("Remove this member from franchise?")`
-- `ceo.franchises.index.tsx` — `confirm("Delete franchise?")`
-- `ceo.projects.tsx` — `confirm("Delete project?")` and any `prompt(...)`
-- `ceo.assign.tsx`, `ceo.seed.tsx` — any remaining confirms
+### 2. Capitalize the status badge ("Published" / "Draft")
+On the course card in `src/routes/ceo.courses.index.tsx`, the badge currently renders the raw enum value (`published` / `draft`). Render it title-cased:
+```tsx
+{c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+```
 
-Incharge routes:
-- `incharge.projects.tsx` — delete project confirm
-- `incharge.assign.tsx`, `incharge.members.tsx` — remove/unassign confirms
+### 3. "Preview as member" button on each course card (CEO only)
+Members already have a working course player at `/member/courses/$id` (see `src/routes/member.courses.$id.tsx`). The CEO can navigate there directly — RLS lets the CEO read any course. So we just add an action button to the CEO course card that opens that route in a new tab so the CEO's own work session in the dashboard isn't disrupted.
 
-Member routes:
-- `member.projects.tsx` — resubmit / withdraw confirms (if any)
+In the course card action row in `src/routes/ceo.courses.index.tsx`:
+- Replace the current 2-button row (Edit + Delete trash) with a 3-button row:
+  - **Preview** (eye icon, ghost variant) → `<a href="/member/courses/{id}" target="_blank" rel="noopener noreferrer">` so the CEO sees the exact member experience (sections, lessons, video player, quizzes, practical submit UI) in a fresh tab.
+  - **Edit** (pencil, outline, flex-1) — unchanged.
+  - **Delete** (trash, ghost icon) — unchanged.
+- Add `Eye` to the existing `lucide-react` import.
 
-**Approach** — build one tiny shared helper to keep edits small:
-
-New file `src/components/ui/confirm-dialog.tsx` exporting:
-- `<ConfirmDialog open onOpenChange title description confirmLabel variant onConfirm />` — themed AlertDialog wrapper with destructive/default variants
-- `useConfirm()` hook returning `confirm({ title, description, confirmLabel, variant })` that returns a Promise<boolean> — lets us replace `if (!confirm("..."))` with `if (!(await confirm({...})))` in one line, no JSX restructure per call site
-
-Mount a single `<ConfirmDialogHost />` once inside `AppShell` so the hook works from any route without per-page wiring.
-
-For the rare `prompt()` cases, add a sibling `usePrompt()` hook that opens a `Dialog` with an `Input` and returns `Promise<string | null>`.
-
-### Part 2 — Playlist-first "New course" dialog (from previous plan, slightly refined)
-
-Same as the previously-discussed plan, refined to use the new in-app confirm helper for any error states:
-
-Replace the current `<form>` inside the New Course dialog in `src/routes/ceo.courses.index.tsx` with shadcn `<Tabs>`:
-
-**Tab 1 — From YouTube playlist** (default)
-- Paste playlist URL → **Fetch** button calls existing `fetchYoutubePlaylist()` from `src/lib/youtube-playlist.ts`
-- Pre-fills: course title (from playlist title, editable), thumbnail (first video's `thumbnailUrl`), description (optional)
-- Preview list: "Found N videos · total Xh Ym" with per-video checkboxes (all on by default)
-- Section strategy radio:
-  - Single section "All lessons" (default)
-  - Auto-chapter every N videos (number input)
-- **Create course** → atomic insert chain: course → section(s) → lessons (preserving playlist order, `type: "video"`, `content: { video_url }`, `duration_seconds`) → cleanup-on-failure deletes the half-built course
-- Toast and redirect to `/ceo/courses/$id/edit`
-
-**Tab 2 — Custom (build manually)**
-- Today's exact form: Title + Description → empty editor (unchanged)
-
-Keep the existing in-editor playlist importer in `AddLessonDialog` untouched (still useful for adding a second playlist later).
+No backend or RLS work needed — CEO already has read access to courses, sections, lessons, and lesson_progress; the member route will simply render whatever the CEO clicks. (Submitting a practical or marking progress as the CEO would write a row tied to the CEO's user_id, which is harmless and only visible to them.)
 
 ### Files
 
-New:
-- `src/components/ui/confirm-dialog.tsx` — `ConfirmDialog`, `useConfirm`, `usePrompt`, `ConfirmDialogHost`
-
 Edited:
-- `src/components/AppShell.tsx` — mount `<ConfirmDialogHost />` once
-- `src/routes/ceo.courses.index.tsx` — playlist-first tabs in New Course dialog + replace `confirm()` with `useConfirm()`
-- `src/routes/ceo.courses.$id.edit.tsx` — replace all `confirm()` calls
-- `src/routes/ceo.franchises.$id.tsx`, `ceo.franchises.index.tsx`, `ceo.projects.tsx`, `ceo.assign.tsx`, `ceo.seed.tsx` — same swap
-- `src/routes/incharge.projects.tsx`, `incharge.assign.tsx`, `incharge.members.tsx` — same swap
-- `src/routes/member.projects.tsx` — same swap if any confirms exist
+- `src/routes/ceo.courses.index.tsx` — three changes above (row layout fix, capitalized badge, Preview button + Eye import).
 
-No DB changes. No new dependencies.
+No new files. No DB or route changes.
 
 ### Verification
 
-1. CEO → /ceo/courses → New course → "From YouTube playlist" tab default → paste a playlist link → Fetch → see title/thumbnail prefilled + checklist of videos → Create → lands in editor with sections + lessons populated, thumbnail set.
-2. CEO → /ceo/courses → click delete on any course → themed dark dialog appears (not a native browser popup) with Cancel + destructive Delete buttons.
-3. CEO → /ceo/courses/{id}/edit → delete a lesson, delete a section, delete a quiz question → all show themed dialogs.
-4. CEO → /ceo/franchises → delete franchise / remove member → themed dialogs.
-5. Incharge → /incharge/projects → delete a project → themed dialog.
-6. Switch to "Custom" tab in New Course → Title + Description only → behaves exactly like today.
-7. Cancel on any themed dialog → no action taken; Confirm → action runs and toast appears.
+1. CEO → /ceo/courses → New course → Fetch a long-titled playlist → titles now wrap to 2 lines and durations stay right-aligned in their own column with no overlap.
+2. CEO → /ceo/courses → existing course card shows badge **"Published"** (capital P) instead of "published".
+3. CEO → /ceo/courses → click new **Preview** button on a card → opens `/member/courses/{id}` in a new tab, showing the full member-side player exactly as a member sees it.
+4. Edit and Delete buttons still work as before.
 
