@@ -55,6 +55,7 @@ function CoursesPage() {
   const [courses, setCourses] = React.useState<Course[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [open, setOpen] = React.useState(false);
+  const [previewCourse, setPreviewCourse] = React.useState<Course | null>(null);
 
   async function load() {
     setLoading(true);
