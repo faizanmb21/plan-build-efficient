@@ -29,6 +29,7 @@ import { Route as InchargeMembersRouteImport } from './routes/incharge.members'
 import { Route as InchargeGradesRouteImport } from './routes/incharge.grades'
 import { Route as InchargeAttendanceRouteImport } from './routes/incharge.attendance'
 import { Route as InchargeAssignRouteImport } from './routes/incharge.assign'
+import { Route as CeoSubmissionsRouteImport } from './routes/ceo.submissions'
 import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
 import { Route as CeoProjectsRouteImport } from './routes/ceo.projects'
 import { Route as CeoGradesRouteImport } from './routes/ceo.grades'
@@ -142,6 +143,11 @@ const InchargeAssignRoute = InchargeAssignRouteImport.update({
   path: '/assign',
   getParentRoute: () => InchargeRoute,
 } as any)
+const CeoSubmissionsRoute = CeoSubmissionsRouteImport.update({
+  id: '/submissions',
+  path: '/submissions',
+  getParentRoute: () => CeoRoute,
+} as any)
 const CeoSeedRoute = CeoSeedRouteImport.update({
   id: '/seed',
   path: '/seed',
@@ -217,6 +223,7 @@ export interface FileRoutesByFullPath {
   '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/projects': typeof CeoProjectsRoute
   '/ceo/seed': typeof CeoSeedRoute
+  '/ceo/submissions': typeof CeoSubmissionsRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
@@ -247,6 +254,7 @@ export interface FileRoutesByTo {
   '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/projects': typeof CeoProjectsRoute
   '/ceo/seed': typeof CeoSeedRoute
+  '/ceo/submissions': typeof CeoSubmissionsRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
@@ -282,6 +290,7 @@ export interface FileRoutesById {
   '/ceo/grades': typeof CeoGradesRouteWithChildren
   '/ceo/projects': typeof CeoProjectsRoute
   '/ceo/seed': typeof CeoSeedRoute
+  '/ceo/submissions': typeof CeoSubmissionsRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
@@ -318,6 +327,7 @@ export interface FileRouteTypes {
     | '/ceo/grades'
     | '/ceo/projects'
     | '/ceo/seed'
+    | '/ceo/submissions'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
@@ -348,6 +358,7 @@ export interface FileRouteTypes {
     | '/ceo/grades'
     | '/ceo/projects'
     | '/ceo/seed'
+    | '/ceo/submissions'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
@@ -382,6 +393,7 @@ export interface FileRouteTypes {
     | '/ceo/grades'
     | '/ceo/projects'
     | '/ceo/seed'
+    | '/ceo/submissions'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
@@ -556,6 +568,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InchargeAssignRouteImport
       parentRoute: typeof InchargeRoute
     }
+    '/ceo/submissions': {
+      id: '/ceo/submissions'
+      path: '/submissions'
+      fullPath: '/ceo/submissions'
+      preLoaderRoute: typeof CeoSubmissionsRouteImport
+      parentRoute: typeof CeoRoute
+    }
     '/ceo/seed': {
       id: '/ceo/seed'
       path: '/seed'
@@ -676,6 +695,7 @@ interface CeoRouteChildren {
   CeoGradesRoute: typeof CeoGradesRouteWithChildren
   CeoProjectsRoute: typeof CeoProjectsRoute
   CeoSeedRoute: typeof CeoSeedRoute
+  CeoSubmissionsRoute: typeof CeoSubmissionsRoute
   CeoIndexRoute: typeof CeoIndexRoute
   CeoCoursesIndexRoute: typeof CeoCoursesIndexRoute
   CeoCoursesIdEditRoute: typeof CeoCoursesIdEditRoute
@@ -688,6 +708,7 @@ const CeoRouteChildren: CeoRouteChildren = {
   CeoGradesRoute: CeoGradesRouteWithChildren,
   CeoProjectsRoute: CeoProjectsRoute,
   CeoSeedRoute: CeoSeedRoute,
+  CeoSubmissionsRoute: CeoSubmissionsRoute,
   CeoIndexRoute: CeoIndexRoute,
   CeoCoursesIndexRoute: CeoCoursesIndexRoute,
   CeoCoursesIdEditRoute: CeoCoursesIdEditRoute,
