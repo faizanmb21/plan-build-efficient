@@ -1,84 +1,68 @@
 
 
-## Plan: Projects module (group-assignable, gradable, private per-member)
+## Plan: Fix submission upload + unify submissions/grading view across courses & projects
 
-A new **Projects** section that lives outside courses. Incharge or CEO writes a project brief, assigns it to one or many members (or a whole franchise / everyone), members submit a file, the assigner (or any incharge of that member's franchise / CEO) grades it with the same A+ / A / B / C system used for practical lessons. Each member only ever sees their own submissions and grades.
+### Issue 1 — Fix the "row-level security policy" error on member project submit
 
-### Database (one migration)
+Root cause: the **storage** bucket `submissions` has an INSERT policy requiring the first folder in the upload path to be the user's UUID (`{userId}/...`). Our project upload helper writes to `projects/{userId}/{projectId}/...`, so the first folder is the literal `"projects"` and storage rejects it.
 
-Two new tables, no changes to existing ones.
+Fix:
+- In `src/lib/project-utils.ts`, change `uploadProjectFile` path from `projects/{userId}/{projectId}/{ts}.{ext}` → `{userId}/projects/{projectId}/{ts}.{ext}`.
+- No DB migration needed; existing storage policy already allows `{userId}/...` for any subfolder.
 
-**`projects`** — the brief
-- `id`, `title`, `description` (long text brief), `attachment_path` (optional, stored in `submissions` bucket), `deadline` (nullable), `created_by`, `franchise_id` (nullable — null = cross-franchise / CEO-wide), `status` (`draft` | `published` | `archived`), `created_at`, `updated_at`
+### Issue 2 — Unify submission visibility for Incharge & CEO across BOTH course-lesson "test projects" AND standalone Projects
 
-**`project_assignments`** — who has to do it
-- `id`, `project_id`, `user_id`, `priority` (`mandatory` | `recommended`), `assigned_by`, `created_at`
-- UNIQUE `(project_id, user_id)` so re-assigning is safely idempotent
+Root cause: today the CEO sidebar links to `/ceo/submissions` but the route doesn't exist (404 "Not Found"). Course-lesson practical submissions (the `submissions` table — what Maaz uploaded inside the Branding course Lesson 1) are only viewable by **incharges** via `/incharge/reviews`. The CEO has no place to see or grade them. Standalone project submissions live in a separate table and have their own per-project drill-down inside `/incharge/projects` and `/ceo/projects`, but there's no single inbox.
 
-**`project_submissions`** — what they turned in + the grade
-- `id`, `project_id`, `user_id`, `file_url` (storage path in `submissions` bucket), `status` (`pending` | `approved` | `revision`), `letter_grade` (`A+`/`A`/`B`/`C`), `grade` (numeric 0–100), `feedback`, `reviewed_by`, `reviewed_at`, `created_at`
-- Mirrors `submissions` table shape so we can reuse all grading utilities
+#### A. Create CEO Submissions hub — `src/routes/ceo.submissions.tsx`
+Mirror `incharge.reviews.tsx` but scoped CEO-wide (no franchise filter). Tabs:
+- **Course practicals** — pulls from `submissions` table (the lesson-level practicals like Maaz's branding submission), enriched with lesson title + course title + member name + franchise name. Filters by status (Pending / Graded / Needs revision) and by franchise. Click → opens the existing `ReviewDialog` (extracted from `incharge.reviews.tsx`) to grade with A+/A/B/C + feedback + optional AI review.
+- **Project submissions** — pulls from `project_submissions`, enriched with project title + member + franchise. Click → opens the existing `GradeDialog` (already in `incharge.projects.tsx`).
 
-**RLS — strict per-member isolation**
-- `projects`: CEO all; incharge SELECT where `franchise_id` is null OR equals their franchise; incharge INSERT/UPDATE only for their own franchise or null; members SELECT only projects they have an assignment for (via EXISTS on `project_assignments`)
-- `project_assignments`: CEO all; incharge SELECT/INSERT/DELETE only where the target user is in their franchise (same pattern as `assignments`); members SELECT only their own rows
-- `project_submissions`: CEO all; incharge SELECT/UPDATE only where the submission's user is in their franchise; members SELECT/INSERT only their own rows
-- Result: a Lahore incharge cannot see Sargodha members' projects, members cannot see each other's submissions.
+A single **Counts header** shows Pending/Graded across both types so the CEO sees one inbox.
 
-### New routes / UI
+#### B. Add the same dual-tab inbox for Incharge — extend `src/routes/incharge.reviews.tsx`
+Today it only shows course-lesson practicals. Add a second tab "Project submissions" that lists `project_submissions` for members in the incharge's franchise (RLS already allows this), with the same `GradeDialog` to grade. This way the incharge has one place: `/incharge/reviews` for everything that needs grading.
 
-**Incharge side** — `src/routes/incharge.projects.tsx`
-- List of projects in this franchise (cards with title, deadline, # assigned, # submitted, # graded)
-- "New project" dialog: title, description, optional file attachment, deadline, priority, multi-select members or whole franchise (mirrors `incharge.assign.tsx` UX exactly — same Popover + Command + checkbox pattern)
-- Click a project → drawer/dialog showing per-member status (Not submitted / Pending / Graded with letter), with "Review" buttons that open the same grading UI used in `incharge.reviews.tsx` (letter buttons + feedback textarea + optional AI review)
+Rename the sidebar label `Reviews` → `Submissions` for consistency with CEO.
 
-**CEO side** — `src/routes/ceo.projects.tsx`
-- Same as incharge but with extra scope picker: "Selected members" / "Whole franchise" / "Everyone" (mirrors `ceo.assign.tsx`)
-- Can see and grade across all franchises
+#### C. Extract grading dialogs into shared components
+Move:
+- `ReviewDialog` (lesson practical grading) → `src/components/grading/LessonReviewDialog.tsx`
+- `GradeDialog` (project submission grading) → `src/components/grading/ProjectGradeDialog.tsx`
 
-**Member side** — `src/routes/member.projects.tsx`
-- "My projects" list: each card shows brief, deadline, status badge (Not submitted / Pending review / Graded A/B/C / Needs revision), and "Submit" or "Resubmit" button
-- Submit dialog uploads to `submissions` storage bucket under `projects/{user_id}/{project_id}/{timestamp}.{ext}`
-- After grade, member sees letter, feedback, and can resubmit if marked C (revision)
+Then `incharge.reviews.tsx`, `incharge.projects.tsx`, `ceo.projects.tsx`, and the new `ceo.submissions.tsx` all import the same dialogs. No behaviour change, just deduplication so future fixes apply everywhere.
 
-**Member grades page (`src/routes/member.grades.tsx`)** — extend, don't replace
-- Add a tab/section "Project grades" alongside the existing "Lesson grades" so the member's full graded history is in one place. Reuse `aggregateGrades` from `grade-utils.ts` since the row shape matches.
+#### D. Wire navigation
+- CEO sidebar already has "Submissions" → just create the route file so it stops 404'ing.
+- Incharge sidebar: rename `Reviews` → `Submissions`.
+- Both Member-side flows (course practical via lesson player, standalone project via `/member/projects`) already work — no member changes.
 
-### Navigation
+### Result — clear grading flow per type
 
-- Add `{ to: "/incharge/projects", label: "Projects", icon: ClipboardList }` to `src/routes/incharge.tsx` nav
-- Add `{ to: "/ceo/projects", label: "Projects", icon: ClipboardList }` to `src/routes/ceo.tsx` nav
-- Add `{ to: "/member/projects", label: "Projects", icon: ClipboardList }` to `src/routes/member.tsx` nav
+| What member submits | Where it lives | Who grades it & where |
+|---|---|---|
+| Practical inside a course lesson (e.g. Branding → Lesson 1 test project) | `submissions` table | Incharge: `/incharge/reviews` → "Course practicals" tab. CEO: `/ceo/submissions` → "Course practicals" tab. |
+| Standalone Project assigned via Projects module | `project_submissions` table | Incharge: `/incharge/projects` (per-project drill-down) **OR** `/incharge/reviews` → "Project submissions" tab. CEO: same with `/ceo/projects` and `/ceo/submissions`. |
 
-### What we reuse (no rewrites)
-
-- Storage bucket `submissions` (already private with proper policies)
-- Letter grade system, colors, aggregation: `src/lib/grade-utils.ts`
-- AI review server fn: `src/server/review-submission.ts` — extend it to accept either `submissionId` (lesson) or `projectSubmissionId`
-- Multi-select assign UX: copy patterns from `incharge.assign.tsx` and `ceo.assign.tsx`
-- Realtime grade toasts: extend `useGradeNotifications` to also subscribe to `project_submissions` updates so members get notified when graded
-
-### Files touched
+### Files
 
 New:
-- `supabase/migrations/<timestamp>_projects.sql` — tables + RLS + indexes
-- `src/routes/incharge.projects.tsx`
-- `src/routes/ceo.projects.tsx`
-- `src/routes/member.projects.tsx`
-- `src/lib/project-utils.ts` — small shared helpers (status badges, file upload helper)
+- `src/routes/ceo.submissions.tsx`
+- `src/components/grading/LessonReviewDialog.tsx`
+- `src/components/grading/ProjectGradeDialog.tsx`
 
 Edited:
-- `src/routes/incharge.tsx`, `src/routes/ceo.tsx`, `src/routes/member.tsx` — nav entries
-- `src/routes/member.grades.tsx` — add Projects tab
-- `src/hooks/use-grade-notifications.tsx` — also listen to `project_submissions`
-- `src/server/review-submission.ts` — accept project submission id
+- `src/lib/project-utils.ts` — storage path fix
+- `src/routes/incharge.reviews.tsx` — add Project submissions tab, use shared dialogs
+- `src/routes/incharge.projects.tsx`, `src/routes/ceo.projects.tsx` — import shared `ProjectGradeDialog`
+- `src/routes/incharge.tsx` — rename nav label to "Submissions"
 
 ### Verification
 
-1. Log in as **CEO** → /ceo/projects → create "Brand Reel — April" with brief + PDF attachment, scope "Selected members" → pick 2 members from Lahore + 1 from Sargodha → Assign. Toast "Assigned 3".
-2. Log in as **Lahore incharge** → /incharge/projects → see "Brand Reel — April" with 2 assignees (NOT the Sargodha one). Cannot see projects from other franchises.
-3. Log in as **Lahore member who got assigned** → /member/projects → see the project, submit a file. Status flips to Pending.
-4. Back as Lahore incharge → click the project → see Pending → grade as **A** with feedback. Member gets a realtime toast.
-5. Member checks /member/grades → "Project grades" tab now shows the A with feedback, in the same aggregate distribution as lesson grades.
-6. Log in as a **member who was NOT assigned** → /member/projects → list is empty (RLS proven). No SQL leak from other tabs.
+1. As Maaz (member) → /member/projects → submit a PDF to "Ad 1" project → success toast (no RLS error). Status flips to Pending.
+2. As CEO → /ceo/submissions → "Project submissions" tab shows Maaz's submission with member + franchise. Open → grade A → save → toast.
+3. As CEO → /ceo/submissions → "Course practicals" tab shows Maaz's earlier Branding Lesson 1 submission. Open → grade B with feedback → status flips to Graded.
+4. As Lahore incharge → /incharge/reviews → both tabs show only Lahore-franchise members' submissions. Sargodha submissions absent.
+5. As Maaz → /member/grades → both new grades visible in Lessons + Projects tabs.
 
