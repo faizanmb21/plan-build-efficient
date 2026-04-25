@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -27,6 +27,8 @@ import { getPillarScoresForUsers } from "@/lib/pillar-data";
 import type { PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/member/")({
+  validateSearch: (search: Record<string, unknown>): { previewMember?: string } =>
+    typeof search.previewMember === "string" ? { previewMember: search.previewMember } : {},
   component: MemberHome,
 });
 
@@ -58,6 +60,8 @@ type EnrichedAssignment = AssignmentRow & {
 
 function MemberHome() {
   const { user, profile } = useAuth();
+  const { previewMember } = useSearch({ from: "/member/" });
+  const effectiveUserId = previewMember ?? user?.id;
   const [loading, setLoading] = React.useState(true);
   const [assignments, setAssignments] = React.useState<AssignmentRow[]>([]);
   const [stats, setStats] = React.useState<Record<string, CourseStat>>({});
@@ -67,19 +71,19 @@ function MemberHome() {
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
-    if (!user) return;
-    getPillarScoresForUsers([user.id]).then(setPillarScores);
-  }, [user]);
+    if (!effectiveUserId) return;
+    getPillarScoresForUsers([effectiveUserId]).then(setPillarScores);
+  }, [effectiveUserId]);
 
   React.useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     (async () => {
       setLoading(true);
 
       const { data: aData, error } = await supabase
         .from("assignments")
         .select("id,course_id,priority,deadline,courses(id,title,description,thumbnail_url)")
-        .eq("user_id", user.id)
+        .eq("user_id", effectiveUserId)
         .order("created_at", { ascending: false });
       if (error) {
         console.error(error);
@@ -119,7 +123,7 @@ function MemberHome() {
           ? await supabase
               .from("lesson_progress")
               .select("lesson_id,completed,updated_at")
-              .eq("user_id", user.id)
+              .eq("user_id", effectiveUserId)
               .in("lesson_id", lessonIds)
           : { data: [] as { lesson_id: string; completed: boolean; updated_at: string }[] };
         const dones: Record<string, number> = {};
@@ -150,7 +154,7 @@ function MemberHome() {
       const { data: sess } = await supabase
         .from("study_sessions")
         .select("active_seconds,started_at")
-        .eq("user_id", user.id)
+        .eq("user_id", effectiveUserId)
         .gte("started_at", fourteenAgo);
       let totalSec = 0;
       const dayKeys = new Set<string>();
@@ -172,7 +176,7 @@ function MemberHome() {
 
       setLoading(false);
     })();
-  }, [user]);
+  }, [effectiveUserId]);
 
   const now = Date.now();
   const enriched: EnrichedAssignment[] = assignments.map((a) => {

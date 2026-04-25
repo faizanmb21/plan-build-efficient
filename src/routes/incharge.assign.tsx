@@ -47,6 +47,7 @@ export const Route = createFileRoute("/incharge/assign")({
 
 type Course = { id: string; title: string };
 type Member = { id: string; full_name: string | null };
+type RoleRow = { user_id: string; role: "ceo" | "incharge" | "member" };
 type Assignment = {
   id: string;
   course_id: string;
@@ -84,13 +85,19 @@ function InchargeAssignPage() {
     }
     setLoading(true);
 
-    const profsRes = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("franchise_id", franchiseId)
-      .order("full_name");
+    const [profsRes, rolesRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("franchise_id", franchiseId)
+        .order("full_name"),
+      supabase.from("user_roles").select("user_id, role").eq("role", "member"),
+    ]);
 
-    const memberRows = (profsRes.data ?? []).filter((m) => m.id !== user.id) as Member[];
+    const memberRoleIds = new Set(((rolesRes.data ?? []) as RoleRow[]).map((row) => row.user_id));
+    const memberRows = (profsRes.data ?? []).filter(
+      (m) => m.id !== user.id && memberRoleIds.has(m.id),
+    ) as Member[];
     const memberIdsAll = memberRows.map((m) => m.id);
 
     const [coursesRes, assignmentsRes] = await Promise.all([
@@ -110,6 +117,7 @@ function InchargeAssignPage() {
     ]);
 
     if (profsRes.error) toast.error(profsRes.error.message);
+    if (rolesRes.error) toast.error(rolesRes.error.message);
     if (coursesRes.error) toast.error(coursesRes.error.message);
     if (assignmentsRes.error) toast.error(assignmentsRes.error.message);
 
@@ -189,7 +197,19 @@ function InchargeAssignPage() {
 
     if (newRows.length === 0) {
       setSubmitting(false);
-      toast.info("All selected members already have these courses assigned");
+      const targetLabel = targetIds
+        .slice(0, 3)
+        .map((id) => memberMap.get(id)?.full_name ?? "Member")
+        .join(", ");
+      const extraTargets = targetIds.length > 3 ? ` +${targetIds.length - 3} more` : "";
+      const courseLabel = courseIds
+        .slice(0, 2)
+        .map((id) => courseMap.get(id)?.title ?? "this course")
+        .join(", ");
+      const extraCourses = courseIds.length > 2 ? ` +${courseIds.length - 2} more` : "";
+      toast.info(
+        `${targetLabel}${extraTargets} already ${targetIds.length === 1 ? "has" : "have"} ${courseLabel}${extraCourses} assigned. It will show in the member dashboard under All or Not started.`,
+      );
       return;
     }
 
