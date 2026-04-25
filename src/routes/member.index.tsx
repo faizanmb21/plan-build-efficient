@@ -27,9 +27,8 @@ import { getPillarScoresForUsers } from "@/lib/pillar-data";
 import type { PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/member/")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    previewMember: typeof search.previewMember === "string" ? search.previewMember : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { previewMember?: string } =>
+    typeof search.previewMember === "string" ? { previewMember: search.previewMember } : {},
   component: MemberHome,
 });
 
