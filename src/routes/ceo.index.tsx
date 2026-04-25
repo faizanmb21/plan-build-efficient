@@ -1,11 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, BookOpen, Users, FileCheck, Sparkles, ArrowRight } from "lucide-react";
+import { Building2, BookOpen, Users, FileCheck, Sparkles, ArrowRight, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { PillarFlower } from "@/components/PillarFlower";
 import { getPillarScoresForUsers } from "@/lib/pillar-data";
@@ -13,7 +13,29 @@ import type { PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/ceo/")({
   component: CeoDashboard,
+  errorComponent: CeoDashboardError,
 });
+
+function CeoDashboardError({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+      <AlertTriangle className="h-8 w-8 text-destructive" />
+      <h2 className="text-lg font-semibold">Couldn't load the dashboard</h2>
+      <p className="max-w-md text-sm text-muted-foreground">
+        {error?.message || "An unexpected error occurred."}
+      </p>
+      <Button
+        onClick={() => {
+          router.invalidate();
+          reset();
+        }}
+      >
+        Retry
+      </Button>
+    </div>
+  );
+}
 
 interface Stats {
   franchises: number;
@@ -44,18 +66,26 @@ async function fetchStats(): Promise<Stats> {
 }
 
 async function fetchOrgScores(): Promise<PillarScores> {
-  const { data: memberRoles } = await supabase
-    .from("user_roles")
-    .select("user_id")
-    .eq("role", "member");
-  const userIds = (memberRoles ?? []).map((r) => r.user_id);
-  return getPillarScoresForUsers(userIds);
+  try {
+    const { data: memberRoles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "member");
+    const userIds = (memberRoles ?? []).map((r) => r.user_id);
+    return await getPillarScoresForUsers(userIds);
+  } catch (e) {
+    console.error("fetchOrgScores failed", e);
+    // Return empty scores rather than throwing — keeps the dashboard alive.
+    return Array.from({ length: 12 }, () => 0) as PillarScores;
+  }
 }
 
 function CeoDashboard() {
   const { profile } = useAuth();
-  const { data: stats } = useQuery({ queryKey: ["ceo", "stats"], queryFn: fetchStats });
-  const { data: scores } = useQuery({ queryKey: ["ceo", "org-scores"], queryFn: fetchOrgScores });
+  const statsQuery = useQuery({ queryKey: ["ceo", "stats"], queryFn: fetchStats });
+  const scoresQuery = useQuery({ queryKey: ["ceo", "org-scores"], queryFn: fetchOrgScores });
+  const stats = statsQuery.data;
+  const scores = scoresQuery.data;
 
   return (
     <div className="space-y-8">

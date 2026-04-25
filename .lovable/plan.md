@@ -1,48 +1,66 @@
+## Plan: Fix the "Something went wrong" screen — no data loss, just a bad role row + a missing error guard
 
+### What I checked first (the important bit)
 
-## Plan: Polish the New Course dialog + add "Preview as member" for CEO
+I queried the database before changing anything. Nothing was deleted:
 
-Three small fixes in two files:
+- **Maaz** is still there — `email: newtest@irmacademy.test`, role `member`, franchise Lahore. ✓
+- **All 21 demo members** are still there (Hamza, Ayesha, Bilal, … Arham, Demo Creator (You)). ✓
+- **You / test user**: `you@irmacademy.test` → "Demo Creator (You)" → role `member`, franchise PDK. ✓
+- **CEO**: `ceo@irmacademy.test` → "Imran Iqbal (CEO)" → role `ceo`. ✓
 
-### 1. Fix overlapping title and duration in the playlist video list
-In `src/routes/ceo.courses.index.tsx`, the video rows in the playlist preview can collide because the long title sits in the same row as the duration with only `truncate` (single-line). When the title wraps to a second line behind the scrollbar it visually crashes into the duration column.
+So no member was deleted. What you're seeing is the generic router error screen ("Something went wrong / Try again / Go home"), and it has two real causes I found in the data + code:
 
-Fix the row layout (`<label>` inside the playlist preview list):
-- Switch from single-line `truncate` to a 2-line clamp (`line-clamp-2`) so long titles wrap cleanly.
-- Make the duration a fixed-width, non-shrinking column (`shrink-0 w-14 text-right`) and align it to the top of the row (`items-start`) so it never collides with wrapped title text.
-- Add `pr-2` to the list container so text doesn't sit under the scrollbar.
+### Real cause #1 — duplicate role on the CEO account (data bug)
 
-Also tighten the header row above the list — give "X of Y selected" and "Total …" each their own column so they can't overlap on narrow widths.
+The CEO account `ceo@irmacademy.test` (Imran Iqbal) has **two** rows in `user_roles`: `ceo` AND `member`. That's leftover from an earlier seed. It's not breaking by itself today, but it means:
+- When the CEO opens any /member URL, the RoleGuard sees `member` in their roles and lets them in (which is why /member previously felt like the CEO got "logged out as member").
+- Some queries that key off `roles` array length or "is this user a member" return wrong answers.
 
-### 2. Capitalize the status badge ("Published" / "Draft")
-On the course card in `src/routes/ceo.courses.index.tsx`, the badge currently renders the raw enum value (`published` / `draft`). Render it title-cased:
-```tsx
-{c.status.charAt(0).toUpperCase() + c.status.slice(1)}
-```
+I'll delete the stray `member` role row for the CEO. The CEO's `ceo` role is untouched.
 
-### 3. "Preview as member" button on each course card (CEO only)
-Members already have a working course player at `/member/courses/$id` (see `src/routes/member.courses.$id.tsx`). The CEO can navigate there directly — RLS lets the CEO read any course. So we just add an action button to the CEO course card that opens that route in a new tab so the CEO's own work session in the dashboard isn't disrupted.
+There's also a stray profile `Faizan Muhammad` with no role and no franchise (probably created by a real signup attempt). I'll leave that alone — deleting a real auth user is destructive and not something to do without you asking.
 
-In the course card action row in `src/routes/ceo.courses.index.tsx`:
-- Replace the current 2-button row (Edit + Delete trash) with a 3-button row:
-  - **Preview** (eye icon, ghost variant) → `<a href="/member/courses/{id}" target="_blank" rel="noopener noreferrer">` so the CEO sees the exact member experience (sections, lessons, video player, quizzes, practical submit UI) in a fresh tab.
-  - **Edit** (pencil, outline, flex-1) — unchanged.
-  - **Delete** (trash, ghost icon) — unchanged.
-- Add `Eye` to the existing `lucide-react` import.
+### Real cause #2 — CEO dashboard has no error boundary, so any transient failure shows the global "Something went wrong"
 
-No backend or RLS work needed — CEO already has read access to courses, sections, lessons, and lesson_progress; the member route will simply render whatever the CEO clicks. (Submitting a practical or marking progress as the CEO would write a row tied to the CEO's user_id, which is harmless and only visible to them.)
+`src/routes/ceo.index.tsx` has two `useQuery` calls (`fetchStats`, `fetchOrgScores`). If either throws (network blip, a Supabase RLS hiccup, a transient 500), React Query rethrows into the route, and because `/ceo/` route has **no `errorComponent`**, TanStack Router falls back to the global `defaultErrorComponent` — which is exactly the red-triangle "Something went wrong" screen in your screenshot.
 
-### Files
+The `fetchOrgScores` query in particular is the likely culprit because:
+1. It loads ALL `user_roles` where role = 'member' (now 21 users).
+2. It then calls `getPillarScoresForUsers(userIds)` which loads submissions for all of them.
+3. If any of those rows trips the RLS path or returns malformed data, the whole query throws and the dashboard goes red.
 
-Edited:
-- `src/routes/ceo.courses.index.tsx` — three changes above (row layout fix, capitalized badge, Preview button + Eye import).
+Fix: wrap each query so a failure renders an inline "couldn't load this section" instead of the whole page. Specifically:
+- Add `errorComponent` to the `/ceo/` route so errors show "Couldn't load dashboard. [Retry]" inline, not the full-screen red triangle.
+- In the dashboard component, if `statsQuery.error` is set, render the stat row with `—` placeholders + a small retry button (no throw).
+- If `scoresQuery.error` is set, render the pillar card with "Couldn't load mastery scores. [Retry]" instead of throwing.
+- Same defensive treatment in `fetchOrgScores`: if any sub-query inside `getPillarScoresForUsers` returns an error, return empty scores instead of throwing — so a single bad row never takes down the dashboard.
 
-No new files. No DB or route changes.
+### Files I'll touch
 
-### Verification
+1. **Database migration** (one-shot data fix):
+   ```sql
+   -- Remove the duplicate 'member' role on the CEO account
+   DELETE FROM public.user_roles
+   WHERE user_id = '7e0aace9-7865-402c-b0c4-a5074812000f'
+     AND role = 'member';
+   ```
+   Result: CEO has only `ceo` role. Maaz, you@, and all 20 demo members are untouched.
 
-1. CEO → /ceo/courses → New course → Fetch a long-titled playlist → titles now wrap to 2 lines and durations stay right-aligned in their own column with no overlap.
-2. CEO → /ceo/courses → existing course card shows badge **"Published"** (capital P) instead of "published".
-3. CEO → /ceo/courses → click new **Preview** button on a card → opens `/member/courses/{id}` in a new tab, showing the full member-side player exactly as a member sees it.
-4. Edit and Delete buttons still work as before.
+2. **`src/routes/ceo.index.tsx`** — add `errorComponent` to the route, render per-query error states inline, never throw out of the component.
 
+3. **`src/lib/pillar-data.ts`** — make `getPillarScoresForUsers` swallow per-query errors and return zeros for that pillar instead of throwing the whole function. (Read-only check first — I'll only touch this if it's currently throwing on RLS errors.)
+
+### What I will NOT do
+
+- Won't delete any member, won't touch Maaz, won't touch you@irmacademy.test, won't touch any of the 21 demo accounts.
+- Won't delete `Faizan Muhammad` (the orphan profile with no role) without your explicit go-ahead.
+- Won't reseed — your existing assignments to Maaz stay exactly as they are.
+
+### How to verify after the fix
+
+1. Refresh /ceo → dashboard loads with stat tiles + pillar flower (no red error screen).
+2. Open the CEO browser tab → confirm sidebar still says "CEO" (because the stray `member` role is gone, the role label can never accidentally flip).
+3. Log in as Maaz (`newtest@irmacademy.test`) → /member → assigned courses still show under "All" / "Not started" exactly as before.
+4. Log in as you@irmacademy.test → /member → still works.
+5. Sign in as CEO → /ceo/courses → "View as member" preview opens the in-app dialog and shows the course (no separate sign-in prompt).
