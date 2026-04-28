@@ -20,6 +20,10 @@ function createSupabaseClient() {
       storage: typeof window !== 'undefined' ? tabStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
+      // Each tab keeps its OWN session (CEO / Incharge / Member side-by-side).
+      // Disable cross-tab BroadcastChannel so signing in/out in one tab does
+      // not mutate the auth state of other tabs in the same window.
+      broadcastChannel: '',
     }
   });
 }
