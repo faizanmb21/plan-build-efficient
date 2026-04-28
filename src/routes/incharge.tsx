@@ -41,8 +41,10 @@ function InchargeError({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 function InchargeLayout() {
+  // CEOs can view the Incharge area for monitoring/preview purposes,
+  // without switching accounts.
   return (
-    <RoleGuard allow={["incharge"]}>
+    <RoleGuard allow={["incharge", "ceo"]}>
       <AppShell nav={nav} roleLabel="Incharge">
         <Outlet />
       </AppShell>
