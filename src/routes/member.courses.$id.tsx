@@ -306,13 +306,41 @@ function CoursePlayer() {
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="order-2 lg:order-1">
           {activeLesson ? (
-            <LessonView
-              lesson={activeLesson}
-              done={!!progress[activeLesson.id]?.completed}
-              onComplete={() => markCompleted(activeLesson.id)}
-              onSubmissionSaved={() => load()}
-              userId={user?.id ?? ""}
-            />
+            activeLocked ? (
+              <Card className="border-amber-500/40 bg-amber-500/5">
+                <CardContent className="space-y-3 p-6 text-center">
+                  <Lock className="mx-auto h-8 w-8 text-amber-600" />
+                  <h2 className="text-lg font-semibold">Lesson locked</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Finish{" "}
+                    <span className="font-medium text-foreground">
+                      {blockingLesson?.title}
+                    </span>{" "}
+                    first to unlock this lesson.
+                    {blockingLesson?.content?.assignment?.brief ||
+                    blockingLesson?.type === "practical"
+                      ? " Your tech-test must be approved by your incharge."
+                      : ""}
+                  </p>
+                  {blockingLesson && (
+                    <Button
+                      size="sm"
+                      onClick={() => setActiveLessonId(blockingLesson.id)}
+                    >
+                      Go to {blockingLesson.title}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <LessonView
+                lesson={activeLesson}
+                done={!!progress[activeLesson.id]?.completed}
+                onComplete={() => markCompleted(activeLesson.id)}
+                onSubmissionSaved={() => load()}
+                userId={user?.id ?? ""}
+              />
+            )
           ) : (
             <Card>
               <CardContent className="p-6 text-sm text-muted-foreground">
@@ -334,17 +362,30 @@ function CoursePlayer() {
                     const Icon = ICONS[l.type];
                     const done = progress[l.id]?.completed;
                     const active = l.id === activeLessonId;
+                    const locked = isLessonLocked(l.id);
                     return (
                       <li key={l.id}>
                         <button
-                          onClick={() => setActiveLessonId(l.id)}
+                          onClick={() => {
+                            if (locked) {
+                              toast("🔒 Finish the previous lesson first.");
+                              return;
+                            }
+                            setActiveLessonId(l.id);
+                          }}
+                          aria-disabled={locked}
+                          title={locked ? "Locked — finish the previous lesson first" : undefined}
                           className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
                             active
                               ? "bg-primary/10 text-foreground"
-                              : "hover:bg-muted text-muted-foreground"
+                              : locked
+                                ? "cursor-not-allowed text-muted-foreground/50"
+                                : "hover:bg-muted text-muted-foreground"
                           }`}
                         >
-                          {done ? (
+                          {locked ? (
+                            <Lock className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                          ) : done ? (
                             <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
                           ) : (
                             <Circle className="h-4 w-4 shrink-0" />
