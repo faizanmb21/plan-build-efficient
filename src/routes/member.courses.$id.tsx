@@ -18,6 +18,8 @@ import {
   Circle,
   Upload,
   Download,
+  Lock,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
