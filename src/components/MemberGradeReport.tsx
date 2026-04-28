@@ -35,17 +35,30 @@ export function MemberGradeReport({ userId, fullName, franchiseName }: Props) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data: subs } = await supabase
+      type SubRow = {
+        id: string;
+        user_id: string;
+        lesson_id: string;
+        status: string;
+        letter_grade: string | null;
+        grade: number | null;
+        feedback: string | null;
+        created_at: string;
+        reviewed_at: string | null;
+        reviewed_by: string | null;
+      };
+      const { data: subsRaw } = await supabase
         .from("submissions")
         .select(
           "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
         )
         .eq("user_id", userId)
         .order("reviewed_at", { ascending: false, nullsFirst: false });
+      const subs = (subsRaw ?? []) as unknown as SubRow[];
 
-      const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
+      const lessonIds = Array.from(new Set(subs.map((s) => s.lesson_id)));
       const reviewerIds = Array.from(
-        new Set((subs ?? []).map((s) => s.reviewed_by).filter(Boolean) as string[]),
+        new Set(subs.map((s) => s.reviewed_by).filter(Boolean) as string[]),
       );
 
       const [{ data: lessons }, { data: reviewers }] = await Promise.all([
@@ -56,7 +69,7 @@ export function MemberGradeReport({ userId, fullName, franchiseName }: Props) {
               .in("id", lessonIds)
           : Promise.resolve({ data: [] as unknown[] }),
         reviewerIds.length
-          ? supabase.from("profiles").select("id,full_name").in("id", reviewerIds)
+          ? supabase.from("profiles").select("id,full_name").in("id", reviewerIds as string[])
           : Promise.resolve({ data: [] as unknown[] }),
       ]);
 
@@ -71,6 +84,7 @@ export function MemberGradeReport({ userId, fullName, franchiseName }: Props) {
       (reviewers as { id: string; full_name: string | null }[] | null | undefined)?.forEach((p) =>
         reviewerMap.set(p.id, p.full_name),
       );
+
 
       const enriched: EnrichedRow[] = (subs ?? []).map((s) => {
         const l = lessonMap.get(s.lesson_id);
