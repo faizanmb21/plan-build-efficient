@@ -58,10 +58,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loadUserData(data.session?.user.id);
   }, [loadUserData]);
 
+  // Track this tab's "owned" session id so foreign cross-tab broadcasts
+  // (Supabase fires onAuthStateChange across tabs via BroadcastChannel) do
+  // not flip our session to another role's user.
+  const ownUserIdRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
     let cancelled = false;
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       if (cancelled) return;
+      const ownId = ownUserIdRef.current;
+      const nextId = sess?.user.id ?? null;
+      // If this tab already has a session and the event references a
+      // DIFFERENT user (came from another tab), ignore it — unless it's a
+      // local sign-out (no session at all).
+      if (ownId && nextId && ownId !== nextId && event !== "SIGNED_OUT") {
+        return;
+      }
+      ownUserIdRef.current = nextId;
       setSession(sess);
       // Defer to avoid deadlock in onAuthStateChange
       setTimeout(() => {
@@ -70,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
+      ownUserIdRef.current = data.session?.user.id ?? null;
       setSession(data.session);
       loadUserData(data.session?.user.id).finally(() => {
         if (!cancelled) setLoading(false);

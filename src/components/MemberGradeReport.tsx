@@ -83,6 +83,7 @@ export function MemberGradeReport({ userId, fullName, franchiseName }: Props) {
         };
       });
 
+
       if (!cancelled) {
         setRows(enriched);
         setLoading(false);
