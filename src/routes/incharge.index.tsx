@@ -1,17 +1,39 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ClipboardList, Users, ArrowRight } from "lucide-react";
+import { AlertTriangle, ClipboardList, Users, ArrowRight } from "lucide-react";
 import { PillarFlower } from "@/components/PillarFlower";
 import { getPillarScoresForUsers } from "@/lib/pillar-data";
 import type { PillarScores } from "@/lib/pillars";
 
 export const Route = createFileRoute("/incharge/")({
   component: InchargeDashboard,
+  errorComponent: InchargeDashboardError,
 });
+
+function InchargeDashboardError({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+      <AlertTriangle className="h-8 w-8 text-destructive" />
+      <h2 className="text-lg font-semibold">Couldn't load incharge dashboard</h2>
+      <p className="max-w-md text-sm text-muted-foreground">
+        {error?.message || "An unexpected error occurred."}
+      </p>
+      <Button
+        onClick={() => {
+          router.invalidate();
+          reset();
+        }}
+      >
+        Retry
+      </Button>
+    </div>
+  );
+}
 
 interface Member {
   id: string;
@@ -19,40 +41,82 @@ interface Member {
 }
 
 function InchargeDashboard() {
-  const { profile } = useAuth();
+  const { profile, roles } = useAuth();
   const [members, setMembers] = React.useState<Member[]>([]);
   const [franchiseScores, setFranchiseScores] = React.useState<PillarScores | null>(null);
   const [perMember, setPerMember] = React.useState<Record<string, PillarScores>>({});
   const [pendingCount, setPendingCount] = React.useState<number>(0);
+  const [franchiseName, setFranchiseName] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    let cancelled = false;
     (async () => {
-      if (!profile?.franchise_id) return;
-      const [{ data: profs }, { count: pending }] = await Promise.all([
+      try {
+        let franchiseId = profile?.franchise_id ?? null;
+        if (!franchiseId && roles.includes("ceo")) {
+          const { data: firstFranchise } = await supabase
+            .from("franchises")
+            .select("id, name")
+            .is("archived_at", null)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          franchiseId = firstFranchise?.id ?? null;
+          if (!cancelled) setFranchiseName(firstFranchise?.name ?? null);
+        }
+        if (!franchiseId) {
+          if (!cancelled) {
+            setMembers([]);
+            setPendingCount(0);
+            setFranchiseScores(Array.from({ length: 12 }, () => 0) as PillarScores);
+            setPerMember({});
+          }
+          return;
+        }
+
+      const [{ data: profs }, { data: franchise }] = await Promise.all([
         supabase
           .from("profiles")
           .select("id, full_name")
-          .eq("franchise_id", profile.franchise_id),
-        supabase
-          .from("submissions")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "pending"),
+          .eq("franchise_id", franchiseId),
+        supabase.from("franchises").select("name").eq("id", franchiseId).maybeSingle(),
       ]);
       const memberList = (profs ?? []) as Member[];
+      const userIds = memberList.map((m) => m.id);
+      const { count: pending } = userIds.length
+        ? await supabase
+            .from("submissions")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "pending")
+            .in("user_id", userIds)
+        : { count: 0 };
+      if (cancelled) return;
       setMembers(memberList);
       setPendingCount(pending ?? 0);
+      setFranchiseName(franchise?.name ?? franchiseName);
 
-      const userIds = memberList.map((m) => m.id);
       const fs = await getPillarScoresForUsers(userIds);
+      if (cancelled) return;
       setFranchiseScores(fs);
 
       // Per-member flowers
       const entries = await Promise.all(
         memberList.map(async (m) => [m.id, await getPillarScoresForUsers([m.id])] as const),
       );
+      if (cancelled) return;
       setPerMember(Object.fromEntries(entries));
+      } catch (e) {
+        console.error("Incharge dashboard failed", e);
+        if (!cancelled) {
+          setFranchiseScores(Array.from({ length: 12 }, () => 0) as PillarScores);
+          setPerMember({});
+        }
+      }
     })();
-  }, [profile?.franchise_id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.franchise_id, roles]);
 
   return (
     <div className="space-y-8">
@@ -61,7 +125,7 @@ function InchargeDashboard() {
           {profile?.full_name?.split(" ")[0] ?? "Incharge"}'s franchise
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Track your team's mastery across all 12 IRM Academy skill pillars.
+          Track {franchiseName ? `${franchiseName}'s` : "your team's"} mastery across all 12 IRM Academy skill pillars.
         </p>
       </header>
 
