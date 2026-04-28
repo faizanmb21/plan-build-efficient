@@ -435,6 +435,35 @@ function LessonView({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {hasAssignment && !done && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-medium text-foreground">
+                Tech-test required to unlock the next lesson
+              </p>
+              <p className="text-muted-foreground">
+                Watch the video below, then upload your submission. Your incharge must
+                approve it before the next lesson opens.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {hasAssignment && (
+          <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">📋 Tech-test / project submission</p>
+            <PracticalSubmit
+              lessonId={lesson.id}
+              brief={lesson.content.assignment.brief}
+              attachmentPath={lesson.content.assignment.attachment_path ?? null}
+              attachmentName={lesson.content.assignment.attachment_name ?? null}
+              userId={userId}
+              onSubmitted={onSubmissionSaved}
+            />
+          </div>
+        )}
+
         {lesson.type === "video" && (
           <VideoPlayer path={lesson.content?.path} url={lesson.content?.url} />
         )}
@@ -456,20 +485,6 @@ function LessonView({
               onSubmissionSaved();
             }}
           />
-        )}
-
-        {hasAssignment && (
-          <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
-            <p className="text-sm font-semibold">Assignment required to complete this lesson</p>
-            <PracticalSubmit
-              lessonId={lesson.id}
-              brief={lesson.content.assignment.brief}
-              attachmentPath={lesson.content.assignment.attachment_path ?? null}
-              attachmentName={lesson.content.assignment.attachment_name ?? null}
-              userId={userId}
-              onSubmitted={onSubmissionSaved}
-            />
-          </div>
         )}
 
         {(lesson.type === "video" || lesson.type === "pdf") && !hasAssignment && (
