@@ -84,6 +84,22 @@ function CoursePlayer() {
   const pct = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
   const isComplete = totalCount > 0 && pct === 100;
 
+  // First incomplete lesson — everything AFTER it is locked.
+  const firstIncompleteIdx = React.useMemo(
+    () => allLessons.findIndex((l) => !progress[l.id]?.completed),
+    [allLessons, progress],
+  );
+  const isLessonLocked = React.useCallback(
+    (lessonId: string) => {
+      if (firstIncompleteIdx < 0) return false; // course fully complete
+      const idx = allLessons.findIndex((l) => l.id === lessonId);
+      return idx > firstIncompleteIdx;
+    },
+    [allLessons, firstIncompleteIdx],
+  );
+  const activeLocked = activeLesson ? isLessonLocked(activeLesson.id) : false;
+  const blockingLesson = activeLocked ? allLessons[firstIncompleteIdx] : null;
+
   const load = React.useCallback(async () => {
     if (!user) return;
     setLoading(true);
