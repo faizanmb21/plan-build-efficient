@@ -1,89 +1,51 @@
-# Keep CEO / Incharge / Member sessions independent across tabs
+## What's happening today
 
-## The problem
+I checked the database and confirmed the tech-test you attached to "Graphic Design Basics | FREE COURSE" IS saved correctly (`content.assignment.brief = "SUbmit"` plus the WhatsApp image attachment).
 
-You can sign in as CEO in tab A. The moment you open tab B and sign in as Incharge, tab A "logs out" (or flips to the Incharge user) — and the same happens with Member. You want all three roles open at the same time in different tabs of the same window, with no tab kicking the others out.
+The member course player (`src/routes/member.courses.$id.tsx`) already has code to render the submission panel for any video/PDF/quiz lesson that has an attached assignment. The reason you didn't see it is layout-related, not data-related:
 
-## Why it's happening
+1. The submission panel is rendered **below the YouTube embed**. On the lesson you screenshotted, the video iframe is ~500px tall, and your viewport is 732px, so the "Upload submission" panel is below the fold — you have to scroll past the video.
+2. The lesson is already marked "Completed" from before the tech-test was attached. So even though the panel renders, there is currently no visual cue at the top of the page that something is required, and nothing stops the member from clicking the next lesson in the sidebar.
+3. There is no enforcement anywhere: members can click any lesson in the sidebar at will, and the "Completed" badge on a lesson is set the moment a submission is **approved by the incharge** — not when the member uploads. So even a perfectly-flowing member could jump ahead.
 
-We already store the session in `sessionStorage` so each tab has its own auth token (see `src/integrations/supabase/tab-storage.ts`). That part works.
+## What I'll change
 
-The remaining leak is **Supabase's cross-tab broadcast channel**. Internally `supabase-js` uses a `BroadcastChannel` named after the project (e.g. `sb-<ref>-auth-token`) to tell every other tab on the same origin "the user just signed in / signed out / token refreshed." When tab B logs in as Incharge, tab A receives that event and:
+### 1. Make the tech-test panel impossible to miss
 
-1. `onAuthStateChange` fires in tab A with the NEW session (Incharge).
-2. Our `AuthProvider` in `src/lib/auth.tsx` overwrites its `session` / `roles` / `profile` state.
-3. `RoleGuard` re-evaluates — the CEO tab is now holding an Incharge session, no longer matches `allow={["ceo"]}`, and redirects (looks like a logout).
+In the lesson view:
+- Move the "Assignment required to complete this lesson" panel **above** the video/PDF, with a clear header ("📋 Tech-test required to unlock the next lesson") and a status pill (Not submitted / Pending review / Approved / Redo required).
+- Auto-scroll to it when a lesson with an unmet assignment is opened.
+- Show a yellow banner at the top of the lesson card if the assignment isn't approved yet, listing what's blocking progress.
 
-Per-tab `sessionStorage` does not stop this because the broadcast happens in memory, not via storage.
+### 2. Enforce sequential lesson unlocking
 
-## The fix
+A lesson is **locked** until the previous lesson in course order (across sections) is `lesson_progress.completed = true`. A lesson is "complete" when:
+- For plain video/PDF: member clicks "Mark as completed".
+- For quiz: member passes the quiz.
+- For practical, OR any lesson with an attached tech-test/assignment: the latest submission for that lesson has `status = 'approved'` (graded A+/A/B by the incharge).
 
-Disable the cross-tab broadcast in the Supabase client so each tab's auth state is fully isolated. This is the supported way to run multiple sessions per browser.
+Implementation:
+- In the sidebar, lessons after the first incomplete one render with a lock icon and are non-clickable, with a tooltip "Finish the previous lesson first".
+- The "Mark as completed" button is hidden whenever `hasAssignment` is true (already true today) — completion is driven solely by submission approval.
+- The auto-advance after `markCompleted` only fires if the next lesson is unlocked (it will be, because the just-completed lesson is now done).
+- When a member opens a locked lesson via direct URL, show a friendly "🔒 Locked — finish lesson X first" card instead of the player.
 
-### Change 1 — `src/integrations/supabase/client.ts`
+### 3. Small fixes uncovered while reading the file
 
-In `createSupabaseClient()`'s `auth` options, disable the broadcast channel:
+- The submission record for a video lesson with an attached test currently writes its grade to `lesson_progress` only on the incharge's "Save review" — which already exists in `LessonReviewDialog`. I'll double-check the upsert uses the right `lesson_id` (it does today; no change needed, just verifying).
+- Add a "Tech-test status" column to the member dashboard list of in-progress lessons so it's obvious where they're stuck.
 
-```ts
-auth: {
-  storage: typeof window !== 'undefined' ? tabStorage : undefined,
-  persistSession: true,
-  autoRefreshToken: true,
-  // Each tab keeps its OWN session (CEO / Incharge / Member can be open
-  // side-by-side). Disable cross-tab sync so signing in or out in one tab
-  // does not mutate the auth state of the others.
-  broadcastChannel: '',
-}
+## Files to edit
+
+```text
+src/routes/member.courses.$id.tsx   - reorder LessonView, add lock logic in sidebar, locked-lesson card
+src/routes/member.index.tsx         - small status indicator (optional, low risk)
 ```
 
-Setting `broadcastChannel` to an empty string tells `supabase-js` not to open a `BroadcastChannel`, which is exactly what we want here.
+No database changes, no RLS changes, no new tables. Approval flow on the incharge side is unchanged.
 
-Note: `client.ts` is in the auto-generated header, but the rule is "don't change the imports / exports surface." We're only adjusting the auth options object the file already constructs, which is the documented way to configure multi-tab behavior. If you'd prefer not to touch `client.ts`, the alternative is to ignore broadcast events in `AuthProvider` (see Alternative below) — but the client-level fix is cleaner and one line.
+## What this does NOT change
 
-### Change 2 — harden `AuthProvider` (`src/lib/auth.tsx`)
-
-Even with the broadcast disabled, add a small guard so a stray event (e.g. token refresh from another tab on older builds) cannot wipe a valid session:
-
-- In the `onAuthStateChange` handler, ignore events whose `sess?.user.id` differs from the user this tab originally loaded, unless the event is `SIGNED_OUT` triggered locally.
-- Track "this tab's user id" in a ref set when `getSession()` resolves and when the user signs in/out from THIS tab via the login form.
-
-This is defensive — the broadcast change alone should solve the symptom, but this prevents regressions.
-
-### Change 3 — verify sign-out only clears the current tab
-
-`signOut()` in `auth.tsx` calls `supabase.auth.signOut()` which by default has `scope: 'local'` in v2 (only this client). Confirm we are not passing `{ scope: 'global' }` anywhere — a global sign-out would invalidate the refresh token used by other tabs and log them all out server-side. A quick grep across `src/` for `signOut(` will confirm. If any call passes `global`, switch it to default/local.
-
-## Alternative (if you'd rather not touch client.ts)
-
-In `src/lib/auth.tsx`, inside the `onAuthStateChange` callback, ignore events that come from another tab:
-
-```ts
-const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
-  // Ignore cross-tab broadcasts — each tab manages its own session.
-  // Only react to events that change THIS tab's session id.
-  const currentId = sessionRef.current?.user.id ?? null;
-  const nextId = sess?.user.id ?? null;
-  if (event !== 'SIGNED_OUT' && currentId && nextId && currentId !== nextId) {
-    return;
-  }
-  // ...existing logic
-});
-```
-
-This is functionally equivalent for the user-visible bug but keeps `client.ts` untouched.
-
-## How to verify
-
-1. Open tab A → log in as CEO → land on `/ceo`.
-2. Open tab B (same window) → log in as Incharge → land on `/incharge`.
-3. Switch back to tab A → should still be on the CEO dashboard, still signed in as CEO.
-4. Open tab C → log in as a member account → land on `/member`.
-5. Switch through A / B / C → each tab keeps its own role, sidebar label, and data. No tab redirects to login.
-6. Sign out in tab B → tabs A and C remain signed in.
-
-## Files touched
-
-- `src/integrations/supabase/client.ts` — add `broadcastChannel: ''` to auth options.
-- `src/lib/auth.tsx` — guard `onAuthStateChange` against foreign user ids; verify no `signOut({ scope: 'global' })` calls anywhere in `src/`.
-
-No database changes, no route changes, no UI changes.
+- The CEO/Incharge editor for attaching tech-tests already works (your data proves it).
+- The incharge review flow in `incharge.reviews.tsx` and `LessonReviewDialog.tsx` is unchanged.
+- Tab-isolated CEO/Incharge sessions stay as they are.
