@@ -18,6 +18,8 @@ import {
   Circle,
   Upload,
   Download,
+  Lock,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
@@ -81,6 +83,22 @@ function CoursePlayer() {
   const totalCount = allLessons.length;
   const pct = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
   const isComplete = totalCount > 0 && pct === 100;
+
+  // First incomplete lesson — everything AFTER it is locked.
+  const firstIncompleteIdx = React.useMemo(
+    () => allLessons.findIndex((l) => !progress[l.id]?.completed),
+    [allLessons, progress],
+  );
+  const isLessonLocked = React.useCallback(
+    (lessonId: string) => {
+      if (firstIncompleteIdx < 0) return false; // course fully complete
+      const idx = allLessons.findIndex((l) => l.id === lessonId);
+      return idx > firstIncompleteIdx;
+    },
+    [allLessons, firstIncompleteIdx],
+  );
+  const activeLocked = activeLesson ? isLessonLocked(activeLesson.id) : false;
+  const blockingLesson = activeLocked ? allLessons[firstIncompleteIdx] : null;
 
   const load = React.useCallback(async () => {
     if (!user) return;
@@ -288,13 +306,41 @@ function CoursePlayer() {
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="order-2 lg:order-1">
           {activeLesson ? (
-            <LessonView
-              lesson={activeLesson}
-              done={!!progress[activeLesson.id]?.completed}
-              onComplete={() => markCompleted(activeLesson.id)}
-              onSubmissionSaved={() => load()}
-              userId={user?.id ?? ""}
-            />
+            activeLocked ? (
+              <Card className="border-amber-500/40 bg-amber-500/5">
+                <CardContent className="space-y-3 p-6 text-center">
+                  <Lock className="mx-auto h-8 w-8 text-amber-600" />
+                  <h2 className="text-lg font-semibold">Lesson locked</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Finish{" "}
+                    <span className="font-medium text-foreground">
+                      {blockingLesson?.title}
+                    </span>{" "}
+                    first to unlock this lesson.
+                    {blockingLesson?.content?.assignment?.brief ||
+                    blockingLesson?.type === "practical"
+                      ? " Your tech-test must be approved by your incharge."
+                      : ""}
+                  </p>
+                  {blockingLesson && (
+                    <Button
+                      size="sm"
+                      onClick={() => setActiveLessonId(blockingLesson.id)}
+                    >
+                      Go to {blockingLesson.title}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <LessonView
+                lesson={activeLesson}
+                done={!!progress[activeLesson.id]?.completed}
+                onComplete={() => markCompleted(activeLesson.id)}
+                onSubmissionSaved={() => load()}
+                userId={user?.id ?? ""}
+              />
+            )
           ) : (
             <Card>
               <CardContent className="p-6 text-sm text-muted-foreground">
@@ -316,17 +362,30 @@ function CoursePlayer() {
                     const Icon = ICONS[l.type];
                     const done = progress[l.id]?.completed;
                     const active = l.id === activeLessonId;
+                    const locked = isLessonLocked(l.id);
                     return (
                       <li key={l.id}>
                         <button
-                          onClick={() => setActiveLessonId(l.id)}
+                          onClick={() => {
+                            if (locked) {
+                              toast("🔒 Finish the previous lesson first.");
+                              return;
+                            }
+                            setActiveLessonId(l.id);
+                          }}
+                          aria-disabled={locked}
+                          title={locked ? "Locked — finish the previous lesson first" : undefined}
                           className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
                             active
                               ? "bg-primary/10 text-foreground"
-                              : "hover:bg-muted text-muted-foreground"
+                              : locked
+                                ? "cursor-not-allowed text-muted-foreground/50"
+                                : "hover:bg-muted text-muted-foreground"
                           }`}
                         >
-                          {done ? (
+                          {locked ? (
+                            <Lock className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                          ) : done ? (
                             <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
                           ) : (
                             <Circle className="h-4 w-4 shrink-0" />
@@ -376,6 +435,35 @@ function LessonView({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {hasAssignment && !done && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-medium text-foreground">
+                Tech-test required to unlock the next lesson
+              </p>
+              <p className="text-muted-foreground">
+                Watch the video below, then upload your submission. Your incharge must
+                approve it before the next lesson opens.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {hasAssignment && (
+          <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">📋 Tech-test / project submission</p>
+            <PracticalSubmit
+              lessonId={lesson.id}
+              brief={lesson.content.assignment.brief}
+              attachmentPath={lesson.content.assignment.attachment_path ?? null}
+              attachmentName={lesson.content.assignment.attachment_name ?? null}
+              userId={userId}
+              onSubmitted={onSubmissionSaved}
+            />
+          </div>
+        )}
+
         {lesson.type === "video" && (
           <VideoPlayer path={lesson.content?.path} url={lesson.content?.url} />
         )}
@@ -397,20 +485,6 @@ function LessonView({
               onSubmissionSaved();
             }}
           />
-        )}
-
-        {hasAssignment && (
-          <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
-            <p className="text-sm font-semibold">Assignment required to complete this lesson</p>
-            <PracticalSubmit
-              lessonId={lesson.id}
-              brief={lesson.content.assignment.brief}
-              attachmentPath={lesson.content.assignment.attachment_path ?? null}
-              attachmentName={lesson.content.assignment.attachment_name ?? null}
-              userId={userId}
-              onSubmitted={onSubmissionSaved}
-            />
-          </div>
         )}
 
         {(lesson.type === "video" || lesson.type === "pdf") && !hasAssignment && (
