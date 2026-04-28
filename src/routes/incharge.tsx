@@ -1,7 +1,8 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell, type NavItem } from "@/components/AppShell";
-import { LayoutDashboard, FileCheck, Activity, Users, GraduationCap, Send, FolderKanban } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, LayoutDashboard, FileCheck, Activity, Users, GraduationCap, Send, FolderKanban } from "lucide-react";
 
 const nav: NavItem[] = [
   { to: "/incharge", label: "Dashboard", icon: LayoutDashboard },
@@ -15,7 +16,29 @@ const nav: NavItem[] = [
 
 export const Route = createFileRoute("/incharge")({
   component: InchargeLayout,
+  errorComponent: InchargeError,
 });
+
+function InchargeError({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
+      <AlertTriangle className="h-8 w-8 text-destructive" />
+      <h2 className="text-lg font-semibold">Couldn't load this page</h2>
+      <p className="max-w-md text-sm text-muted-foreground">
+        {error?.message || "An unexpected error occurred."}
+      </p>
+      <Button
+        onClick={() => {
+          router.invalidate();
+          reset();
+        }}
+      >
+        Retry
+      </Button>
+    </div>
+  );
+}
 
 function InchargeLayout() {
   return (
