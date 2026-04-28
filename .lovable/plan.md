@@ -1,66 +1,89 @@
-## Plan: Fix the "Something went wrong" screen — no data loss, just a bad role row + a missing error guard
+# Keep CEO / Incharge / Member sessions independent across tabs
 
-### What I checked first (the important bit)
+## The problem
 
-I queried the database before changing anything. Nothing was deleted:
+You can sign in as CEO in tab A. The moment you open tab B and sign in as Incharge, tab A "logs out" (or flips to the Incharge user) — and the same happens with Member. You want all three roles open at the same time in different tabs of the same window, with no tab kicking the others out.
 
-- **Maaz** is still there — `email: newtest@irmacademy.test`, role `member`, franchise Lahore. ✓
-- **All 21 demo members** are still there (Hamza, Ayesha, Bilal, … Arham, Demo Creator (You)). ✓
-- **You / test user**: `you@irmacademy.test` → "Demo Creator (You)" → role `member`, franchise PDK. ✓
-- **CEO**: `ceo@irmacademy.test` → "Imran Iqbal (CEO)" → role `ceo`. ✓
+## Why it's happening
 
-So no member was deleted. What you're seeing is the generic router error screen ("Something went wrong / Try again / Go home"), and it has two real causes I found in the data + code:
+We already store the session in `sessionStorage` so each tab has its own auth token (see `src/integrations/supabase/tab-storage.ts`). That part works.
 
-### Real cause #1 — duplicate role on the CEO account (data bug)
+The remaining leak is **Supabase's cross-tab broadcast channel**. Internally `supabase-js` uses a `BroadcastChannel` named after the project (e.g. `sb-<ref>-auth-token`) to tell every other tab on the same origin "the user just signed in / signed out / token refreshed." When tab B logs in as Incharge, tab A receives that event and:
 
-The CEO account `ceo@irmacademy.test` (Imran Iqbal) has **two** rows in `user_roles`: `ceo` AND `member`. That's leftover from an earlier seed. It's not breaking by itself today, but it means:
-- When the CEO opens any /member URL, the RoleGuard sees `member` in their roles and lets them in (which is why /member previously felt like the CEO got "logged out as member").
-- Some queries that key off `roles` array length or "is this user a member" return wrong answers.
+1. `onAuthStateChange` fires in tab A with the NEW session (Incharge).
+2. Our `AuthProvider` in `src/lib/auth.tsx` overwrites its `session` / `roles` / `profile` state.
+3. `RoleGuard` re-evaluates — the CEO tab is now holding an Incharge session, no longer matches `allow={["ceo"]}`, and redirects (looks like a logout).
 
-I'll delete the stray `member` role row for the CEO. The CEO's `ceo` role is untouched.
+Per-tab `sessionStorage` does not stop this because the broadcast happens in memory, not via storage.
 
-There's also a stray profile `Faizan Muhammad` with no role and no franchise (probably created by a real signup attempt). I'll leave that alone — deleting a real auth user is destructive and not something to do without you asking.
+## The fix
 
-### Real cause #2 — CEO dashboard has no error boundary, so any transient failure shows the global "Something went wrong"
+Disable the cross-tab broadcast in the Supabase client so each tab's auth state is fully isolated. This is the supported way to run multiple sessions per browser.
 
-`src/routes/ceo.index.tsx` has two `useQuery` calls (`fetchStats`, `fetchOrgScores`). If either throws (network blip, a Supabase RLS hiccup, a transient 500), React Query rethrows into the route, and because `/ceo/` route has **no `errorComponent`**, TanStack Router falls back to the global `defaultErrorComponent` — which is exactly the red-triangle "Something went wrong" screen in your screenshot.
+### Change 1 — `src/integrations/supabase/client.ts`
 
-The `fetchOrgScores` query in particular is the likely culprit because:
-1. It loads ALL `user_roles` where role = 'member' (now 21 users).
-2. It then calls `getPillarScoresForUsers(userIds)` which loads submissions for all of them.
-3. If any of those rows trips the RLS path or returns malformed data, the whole query throws and the dashboard goes red.
+In `createSupabaseClient()`'s `auth` options, disable the broadcast channel:
 
-Fix: wrap each query so a failure renders an inline "couldn't load this section" instead of the whole page. Specifically:
-- Add `errorComponent` to the `/ceo/` route so errors show "Couldn't load dashboard. [Retry]" inline, not the full-screen red triangle.
-- In the dashboard component, if `statsQuery.error` is set, render the stat row with `—` placeholders + a small retry button (no throw).
-- If `scoresQuery.error` is set, render the pillar card with "Couldn't load mastery scores. [Retry]" instead of throwing.
-- Same defensive treatment in `fetchOrgScores`: if any sub-query inside `getPillarScoresForUsers` returns an error, return empty scores instead of throwing — so a single bad row never takes down the dashboard.
+```ts
+auth: {
+  storage: typeof window !== 'undefined' ? tabStorage : undefined,
+  persistSession: true,
+  autoRefreshToken: true,
+  // Each tab keeps its OWN session (CEO / Incharge / Member can be open
+  // side-by-side). Disable cross-tab sync so signing in or out in one tab
+  // does not mutate the auth state of the others.
+  broadcastChannel: '',
+}
+```
 
-### Files I'll touch
+Setting `broadcastChannel` to an empty string tells `supabase-js` not to open a `BroadcastChannel`, which is exactly what we want here.
 
-1. **Database migration** (one-shot data fix):
-   ```sql
-   -- Remove the duplicate 'member' role on the CEO account
-   DELETE FROM public.user_roles
-   WHERE user_id = '7e0aace9-7865-402c-b0c4-a5074812000f'
-     AND role = 'member';
-   ```
-   Result: CEO has only `ceo` role. Maaz, you@, and all 20 demo members are untouched.
+Note: `client.ts` is in the auto-generated header, but the rule is "don't change the imports / exports surface." We're only adjusting the auth options object the file already constructs, which is the documented way to configure multi-tab behavior. If you'd prefer not to touch `client.ts`, the alternative is to ignore broadcast events in `AuthProvider` (see Alternative below) — but the client-level fix is cleaner and one line.
 
-2. **`src/routes/ceo.index.tsx`** — add `errorComponent` to the route, render per-query error states inline, never throw out of the component.
+### Change 2 — harden `AuthProvider` (`src/lib/auth.tsx`)
 
-3. **`src/lib/pillar-data.ts`** — make `getPillarScoresForUsers` swallow per-query errors and return zeros for that pillar instead of throwing the whole function. (Read-only check first — I'll only touch this if it's currently throwing on RLS errors.)
+Even with the broadcast disabled, add a small guard so a stray event (e.g. token refresh from another tab on older builds) cannot wipe a valid session:
 
-### What I will NOT do
+- In the `onAuthStateChange` handler, ignore events whose `sess?.user.id` differs from the user this tab originally loaded, unless the event is `SIGNED_OUT` triggered locally.
+- Track "this tab's user id" in a ref set when `getSession()` resolves and when the user signs in/out from THIS tab via the login form.
 
-- Won't delete any member, won't touch Maaz, won't touch you@irmacademy.test, won't touch any of the 21 demo accounts.
-- Won't delete `Faizan Muhammad` (the orphan profile with no role) without your explicit go-ahead.
-- Won't reseed — your existing assignments to Maaz stay exactly as they are.
+This is defensive — the broadcast change alone should solve the symptom, but this prevents regressions.
 
-### How to verify after the fix
+### Change 3 — verify sign-out only clears the current tab
 
-1. Refresh /ceo → dashboard loads with stat tiles + pillar flower (no red error screen).
-2. Open the CEO browser tab → confirm sidebar still says "CEO" (because the stray `member` role is gone, the role label can never accidentally flip).
-3. Log in as Maaz (`newtest@irmacademy.test`) → /member → assigned courses still show under "All" / "Not started" exactly as before.
-4. Log in as you@irmacademy.test → /member → still works.
-5. Sign in as CEO → /ceo/courses → "View as member" preview opens the in-app dialog and shows the course (no separate sign-in prompt).
+`signOut()` in `auth.tsx` calls `supabase.auth.signOut()` which by default has `scope: 'local'` in v2 (only this client). Confirm we are not passing `{ scope: 'global' }` anywhere — a global sign-out would invalidate the refresh token used by other tabs and log them all out server-side. A quick grep across `src/` for `signOut(` will confirm. If any call passes `global`, switch it to default/local.
+
+## Alternative (if you'd rather not touch client.ts)
+
+In `src/lib/auth.tsx`, inside the `onAuthStateChange` callback, ignore events that come from another tab:
+
+```ts
+const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
+  // Ignore cross-tab broadcasts — each tab manages its own session.
+  // Only react to events that change THIS tab's session id.
+  const currentId = sessionRef.current?.user.id ?? null;
+  const nextId = sess?.user.id ?? null;
+  if (event !== 'SIGNED_OUT' && currentId && nextId && currentId !== nextId) {
+    return;
+  }
+  // ...existing logic
+});
+```
+
+This is functionally equivalent for the user-visible bug but keeps `client.ts` untouched.
+
+## How to verify
+
+1. Open tab A → log in as CEO → land on `/ceo`.
+2. Open tab B (same window) → log in as Incharge → land on `/incharge`.
+3. Switch back to tab A → should still be on the CEO dashboard, still signed in as CEO.
+4. Open tab C → log in as a member account → land on `/member`.
+5. Switch through A / B / C → each tab keeps its own role, sidebar label, and data. No tab redirects to login.
+6. Sign out in tab B → tabs A and C remain signed in.
+
+## Files touched
+
+- `src/integrations/supabase/client.ts` — add `broadcastChannel: ''` to auth options.
+- `src/lib/auth.tsx` — guard `onAuthStateChange` against foreign user ids; verify no `signOut({ scope: 'global' })` calls anywhere in `src/`.
+
+No database changes, no route changes, no UI changes.
