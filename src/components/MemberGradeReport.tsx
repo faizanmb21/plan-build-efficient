@@ -84,17 +84,6 @@ export function MemberGradeReport({ userId, fullName, franchiseName }: Props) {
       });
 
 
-      const enriched: EnrichedRow[] = (subs ?? []).map((s) => {
-        const l = lessonMap.get(s.lesson_id);
-        return {
-          ...s,
-          lesson_title: l?.title ?? "Lesson",
-          course_title: l?.sections?.courses?.title ?? "—",
-          course_id: l?.sections?.courses?.id ?? "",
-          reviewer_name: s.reviewed_by ? (reviewerMap.get(s.reviewed_by) ?? null) : null,
-        };
-      });
-
       if (!cancelled) {
         setRows(enriched);
         setLoading(false);
