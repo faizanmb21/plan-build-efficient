@@ -244,6 +244,52 @@ function CoursePlayer() {
     if (next) setActiveLessonId(next.id);
   }
 
+  // Pause any playing media (HTML <video> or YouTube/Vimeo iframe) inside the
+  // lesson area. Used when the tab loses focus or inactivity warning fires.
+  const lessonAreaRef = React.useRef<HTMLDivElement | null>(null);
+  const pauseMedia = React.useCallback(() => {
+    const root = lessonAreaRef.current;
+    if (!root) return;
+    root.querySelectorAll("video").forEach((v) => {
+      try {
+        v.pause();
+      } catch {
+        /* noop */
+      }
+    });
+    root.querySelectorAll("iframe").forEach((f) => {
+      // Reload the iframe — works for any provider and stops playback/audio.
+      try {
+        const src = f.src;
+        if (src) f.src = src;
+      } catch {
+        /* noop */
+      }
+    });
+  }, []);
+
+  // Pause when the tab is hidden / window blurred.
+  React.useEffect(() => {
+    const onHide = () => {
+      if (document.hidden) pauseMedia();
+    };
+    const onBlur = () => pauseMedia();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [pauseMedia]);
+
+  // 1-min inactivity → 10s warning → sign out.
+  useInactivityLogout({
+    enabled: !!user,
+    idleMs: 60_000,
+    warnMs: 10_000,
+    onInactive: pauseMedia,
+  });
+
   if (loading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
   }
