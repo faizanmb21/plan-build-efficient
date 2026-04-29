@@ -489,6 +489,17 @@ function MemberHome() {
   );
 }
 
+function Stand({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`mt-0.5 font-display text-xl font-bold tabular-nums ${accent ? "text-accent" : "text-foreground"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
 /* -------------------- Continue learning hero -------------------- */
 
 function ContinueLearningHero({ a }: { a: EnrichedAssignment }) {
