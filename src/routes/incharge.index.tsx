@@ -2,16 +2,35 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ClipboardList, Users, ArrowRight, GraduationCap } from "lucide-react";
-import { CourseGradePie, LETTER_COLORS, type PieSlice } from "@/components/grading/CourseGradePie";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertTriangle,
+  ClipboardList,
+  Users,
+  ArrowRight,
+  GraduationCap,
+  TrendingUp,
+  RefreshCcw,
+} from "lucide-react";
+import { GradePieCard } from "@/components/grading/GradePieCard";
+import {
+  AttentionList,
+  MemberLeaderboard,
+  PillarCoverageBars,
+  type AttentionItem,
+  type MemberRow,
+  type PillarRow,
+} from "@/components/dashboard/ProgressPrimitives";
 import {
   aggregateGrades,
   emptyAggregate,
   type GradedRow,
   type GradeAggregate,
 } from "@/lib/grade-utils";
+import { computeMemberRisk } from "@/lib/progress-signals";
+import { MemberGradeReport } from "@/components/MemberGradeReport";
 
 export const Route = createFileRoute("/incharge/")({
   component: InchargeDashboard,
@@ -44,26 +63,32 @@ interface Member {
   full_name: string | null;
 }
 
-function buildSlices(agg: GradeAggregate): PieSlice[] {
-  return [
-    { name: "A+", value: agg.aPlus, color: LETTER_COLORS["A+"] },
-    { name: "A",  value: agg.a,     color: LETTER_COLORS["A"] },
-    { name: "B",  value: agg.b,     color: LETTER_COLORS["B"] },
-    { name: "C",  value: agg.c,     color: LETTER_COLORS["C"] },
-  ];
+interface LessonShape {
+  id: string;
+  sections: { course_id: string; courses: { id: string; title: string } | null } | null;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function InchargeDashboard() {
-  const { profile, roles } = useAuth();
+  const { profile, roles, user } = useAuth();
+  const [loading, setLoading] = React.useState(true);
   const [members, setMembers] = React.useState<Member[]>([]);
   const [perMember, setPerMember] = React.useState<Record<string, GradeAggregate>>({});
+  const [lastActivity, setLastActivity] = React.useState<Record<string, string | null>>({});
   const [franchiseAgg, setFranchiseAgg] = React.useState<GradeAggregate>(emptyAggregate());
   const [pendingCount, setPendingCount] = React.useState<number>(0);
+  const [oldestPendingDays, setOldestPendingDays] = React.useState<number | null>(null);
+  const [graded7d, setGraded7d] = React.useState(0);
+  const [redos7d, setRedos7d] = React.useState(0);
+  const [pillarRows, setPillarRows] = React.useState<PillarRow[]>([]);
   const [franchiseName, setFranchiseName] = React.useState<string | null>(null);
+  const [drillMember, setDrillMember] = React.useState<Member | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
+      setLoading(true);
       try {
         let franchiseId = profile?.franchise_id ?? null;
         if (!franchiseId && roles.includes("ceo")) {
@@ -83,240 +108,366 @@ function InchargeDashboard() {
             setPendingCount(0);
             setPerMember({});
             setFranchiseAgg(emptyAggregate());
+            setLoading(false);
           }
           return;
         }
 
-        // Pull members + franchise meta in parallel
-        const [{ data: profs }, { data: franchise }, { data: roleRows }] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, full_name")
-            .eq("franchise_id", franchiseId),
-          supabase.from("franchises").select("name").eq("id", franchiseId).maybeSingle(),
-          supabase
-            .from("user_roles")
-            .select("user_id, role")
-            .eq("franchise_id", franchiseId)
-            .eq("role", "member"),
-        ]);
+        const [{ data: profs }, { data: franchise }, { data: roleRows }] =
+          await Promise.all([
+            supabase.from("profiles").select("id, full_name").eq("franchise_id", franchiseId),
+            supabase.from("franchises").select("name").eq("id", franchiseId).maybeSingle(),
+            supabase
+              .from("user_roles")
+              .select("user_id, role")
+              .eq("franchise_id", franchiseId)
+              .eq("role", "member"),
+          ]);
         const memberIdSet = new Set((roleRows ?? []).map((r) => r.user_id));
         const memberList = (profs ?? [])
-          .filter((p) => memberIdSet.has(p.id))
+          .filter((p) => memberIdSet.has(p.id) && p.id !== user?.id)
           .map((p) => ({ id: p.id, full_name: p.full_name })) as Member[];
-        memberList.sort((a, b) =>
-          (a.full_name ?? "").localeCompare(b.full_name ?? ""),
-        );
+        memberList.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""));
         const userIds = memberList.map((m) => m.id);
 
-        // Pending submissions count
-        const { count: pending } = userIds.length
-          ? await supabase
-              .from("submissions")
-              .select("id", { count: "exact", head: true })
-              .eq("status", "pending")
-              .in("user_id", userIds)
-          : { count: 0 };
+        if (userIds.length === 0) {
+          if (!cancelled) {
+            setMembers([]);
+            setPendingCount(0);
+            setPerMember({});
+            setLastActivity({});
+            setFranchiseAgg(emptyAggregate());
+            setPillarRows([]);
+            setFranchiseName(franchise?.name ?? null);
+            setLoading(false);
+          }
+          return;
+        }
 
-        // All graded submissions for these members
-        const { data: subs } = userIds.length
-          ? await supabase
-              .from("submissions")
-              .select(
-                "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-              )
-              .in("user_id", userIds)
-          : { data: [] };
-
-        if (cancelled) return;
+        const [{ data: subs }, { data: sessions }] = await Promise.all([
+          supabase
+            .from("submissions")
+            .select(
+              "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
+            )
+            .in("user_id", userIds),
+          supabase
+            .from("study_sessions")
+            .select("user_id,started_at")
+            .in("user_id", userIds)
+            .order("started_at", { ascending: false })
+            .limit(2000),
+        ]);
 
         const allRows = (subs ?? []) as GradedRow[];
+
+        // Pillar lookup for graded submissions
+        const lessonIds = Array.from(
+          new Set(allRows.filter((r) => r.letter_grade).map((r) => r.lesson_id)),
+        );
+        const { data: lessons } = lessonIds.length
+          ? await supabase
+              .from("lessons")
+              .select("id,sections(course_id,courses(id,title))")
+              .in("id", lessonIds)
+          : { data: [] as unknown[] };
+        const lessonMap = new Map<string, LessonShape>();
+        (lessons as LessonShape[] | null | undefined)?.forEach((l) => lessonMap.set(l.id, l));
+
+        // Per-member submissions + last activity
         const byMember: Record<string, GradedRow[]> = {};
         for (const m of memberList) byMember[m.id] = [];
-        for (const r of allRows) {
-          if (byMember[r.user_id]) byMember[r.user_id].push(r);
-        }
+        for (const r of allRows) byMember[r.user_id]?.push(r);
+
         const aggMap: Record<string, GradeAggregate> = {};
         for (const m of memberList) aggMap[m.id] = aggregateGrades(byMember[m.id] ?? []);
 
+        const lastByUser: Record<string, string | null> = {};
+        for (const m of memberList) lastByUser[m.id] = null;
+        for (const s of (sessions ?? []) as { user_id: string; started_at: string }[]) {
+          const cur = lastByUser[s.user_id];
+          if (!cur || new Date(s.started_at) > new Date(cur)) {
+            lastByUser[s.user_id] = s.started_at;
+          }
+        }
+        // Use the latest of submission or session as last activity
+        for (const m of memberList) {
+          const subTimes = (byMember[m.id] ?? [])
+            .map((r) => r.reviewed_at ?? r.created_at)
+            .filter(Boolean) as string[];
+          const subMax = subTimes.length
+            ? subTimes.reduce((a, b) => (new Date(a) > new Date(b) ? a : b))
+            : null;
+          const sessMax = lastByUser[m.id];
+          lastByUser[m.id] =
+            subMax && sessMax
+              ? new Date(subMax) > new Date(sessMax)
+                ? subMax
+                : sessMax
+              : subMax ?? sessMax ?? null;
+        }
+
+        // This week stats
+        const sevenAgo = Date.now() - 7 * DAY_MS;
+        let g7 = 0;
+        let r7 = 0;
+        let oldestPending: number | null = null;
+        for (const r of allRows) {
+          if (r.status === "pending") {
+            const d = Math.floor((Date.now() - new Date(r.created_at).getTime()) / DAY_MS);
+            if (oldestPending === null || d > oldestPending) oldestPending = d;
+          } else if (r.reviewed_at) {
+            const t = new Date(r.reviewed_at).getTime();
+            if (t >= sevenAgo) {
+              g7++;
+              if ((r.letter_grade ?? "").trim() === "C") r7++;
+            }
+          }
+        }
+
+        // Pillar rows
+        const pillarMap = new Map<string, { title: string; rows: GradedRow[] }>();
+        for (const r of allRows) {
+          if (!r.letter_grade) continue;
+          const l = lessonMap.get(r.lesson_id);
+          const cid = l?.sections?.courses?.id;
+          const ctitle = l?.sections?.courses?.title;
+          if (!cid || !ctitle) continue;
+          const cur = pillarMap.get(cid) ?? { title: ctitle, rows: [] };
+          cur.rows.push(r);
+          pillarMap.set(cid, cur);
+        }
+        const pillars: PillarRow[] = Array.from(pillarMap.entries()).map(([courseId, v]) => ({
+          courseId,
+          title: v.title,
+          agg: aggregateGrades(v.rows),
+        }));
+
+        const pendingTotal = allRows.filter((r) => r.status === "pending").length;
+
+        if (cancelled) return;
         setMembers(memberList);
-        setPendingCount(pending ?? 0);
-        setFranchiseName(franchise?.name ?? null);
         setPerMember(aggMap);
+        setLastActivity(lastByUser);
         setFranchiseAgg(aggregateGrades(allRows));
+        setPendingCount(pendingTotal);
+        setOldestPendingDays(oldestPending);
+        setGraded7d(g7);
+        setRedos7d(r7);
+        setPillarRows(pillars);
+        setFranchiseName(franchise?.name ?? null);
       } catch (e) {
         console.error("Incharge dashboard failed", e);
-        if (!cancelled) {
-          setPerMember({});
-          setFranchiseAgg(emptyAggregate());
-        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [profile?.franchise_id, roles]);
+  }, [profile?.franchise_id, roles, user?.id]);
 
-  const franchiseSlices = buildSlices(franchiseAgg);
+  const memberRows: MemberRow[] = members.map((m) => {
+    const agg = perMember[m.id] ?? emptyAggregate();
+    const lastAct = lastActivity[m.id] ?? null;
+    return {
+      userId: m.id,
+      fullName: m.full_name,
+      agg,
+      lastActivityAt: lastAct,
+      signal: computeMemberRisk(agg, lastAct),
+    };
+  });
+
+  const attentionItems: AttentionItem[] = memberRows.map((r) => ({
+    userId: r.userId,
+    fullName: r.fullName,
+    agg: r.agg,
+    signal: r.signal,
+    onView: () => setDrillMember({ id: r.userId, full_name: r.fullName }),
+  }));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <header>
         <h1 className="font-display text-3xl font-bold tracking-tight">
           {profile?.full_name?.split(" ")[0] ?? "Incharge"}'s franchise
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Grade distribution across {franchiseName ?? "your franchise"}—each pie shows the
-          A+ / A / B / C mix for one member.
+          Live progress review for {franchiseName ?? "your franchise"}.
         </p>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatTile
-          label="Team members"
-          value={members.length}
-          icon={Users}
-          gradient="from-[oklch(0.55_0.21_268)] to-[oklch(0.55_0.21_290)]"
-        />
+      {/* Hero strip */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile label="Members" value={members.length} icon={Users} />
         <StatTile
           label="Pending reviews"
           value={pendingCount}
           icon={ClipboardList}
           to="/incharge/reviews"
-          gradient="from-[oklch(0.78_0.16_75)] to-[oklch(0.62_0.20_25)]"
+          tone={pendingCount > 0 ? "amber" : "default"}
         />
         <StatTile
-          label="Graded this franchise"
-          value={franchiseAgg.total}
+          label="Avg %"
+          value={franchiseAgg.total > 0 ? `${franchiseAgg.averagePercent}%` : "—"}
           icon={GraduationCap}
-          gradient="from-[oklch(0.62_0.18_145)] to-[oklch(0.55_0.18_205)]"
+        />
+        <StatTile
+          label="Pass rate"
+          value={franchiseAgg.total > 0 ? `${franchiseAgg.passRate}%` : "—"}
+          icon={TrendingUp}
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="font-display text-xl">Franchise grades</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {franchiseAgg.total} graded submission{franchiseAgg.total === 1 ? "" : "s"}
-                {franchiseAgg.total > 0 && (
-                  <> · avg {franchiseAgg.averagePercent}% · pass rate {franchiseAgg.passRate}%</>
-                )}
-              </p>
-            </div>
-            <LegendRow />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="mx-auto max-w-sm">
-            <CourseGradePie
-              data={franchiseSlices}
-              centerLabel={`${franchiseAgg.averagePercent}%`}
-              centerSub="avg score"
-              height={260}
+      {/* Donut + this week */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Franchise grades</CardTitle>
+            <CardDescription>
+              A+ 90% · A 85% · B 75% · C means redo
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-center pt-0">
+            <GradePieCard agg={franchiseAgg} size={240} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">This week</CardTitle>
+            <CardDescription>Last 7 days of grading activity.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            <WeekRow label="Submissions graded" value={graded7d} />
+            <WeekRow
+              label="Redos issued"
+              value={redos7d}
+              tone={redos7d > 0 ? "rose" : "default"}
+              icon={RefreshCcw}
             />
-          </div>
-        </CardContent>
-      </Card>
+            <WeekRow
+              label="Pending now"
+              value={pendingCount}
+              suffix={
+                oldestPendingDays !== null
+                  ? `· oldest ${oldestPendingDays}d`
+                  : undefined
+              }
+              tone={
+                oldestPendingDays !== null && oldestPendingDays >= 3 ? "rose" : "amber"
+              }
+            />
+            <div className="pt-2">
+              <Button asChild variant="outline" size="sm" className="w-full">
+                <Link to="/incharge/reviews">
+                  Open review queue <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl font-semibold">Per-member grades</h2>
-          <LegendRow />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {members.map((m) => {
-            const agg = perMember[m.id] ?? emptyAggregate();
-            const slices = buildSlices(agg);
-            return (
-              <Card key={m.id} className="hover-lift">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm font-medium">
-                    {m.full_name ?? "Unnamed member"}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {agg.total === 0
-                      ? "No grades yet"
-                      : `${agg.total} graded · avg ${agg.averagePercent}%`}
-                  </p>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <CourseGradePie
-                    data={slices}
-                    centerLabel={agg.total === 0 ? "—" : `${agg.averagePercent}%`}
-                    centerSub={agg.total === 0 ? "no data" : "avg"}
-                    height={180}
-                  />
-                </CardContent>
-              </Card>
-            );
-          })}
-          {members.length === 0 && (
-            <Card className="sm:col-span-2 lg:col-span-3">
-              <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                No members in your franchise yet.
-              </CardContent>
-            </Card>
+      {/* Attention */}
+      <AttentionList items={attentionItems} />
+
+      {/* Leaderboard */}
+      <MemberLeaderboard
+        rows={memberRows}
+        onView={(uid) => {
+          const m = members.find((mm) => mm.id === uid);
+          if (m) setDrillMember(m);
+        }}
+        emptyHint={loading ? "Loading members…" : "No members in your franchise yet."}
+      />
+
+      {/* Pillar coverage */}
+      <PillarCoverageBars rows={pillarRows} />
+
+      <Dialog open={!!drillMember} onOpenChange={(o) => !o && setDrillMember(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Member grade report</DialogTitle>
+          </DialogHeader>
+          {drillMember && (
+            <MemberGradeReport
+              userId={drillMember.id}
+              fullName={drillMember.full_name}
+              franchiseName={franchiseName}
+            />
           )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function LegendRow() {
-  const items: { letter: string }[] = [
-    { letter: "A+" },
-    { letter: "A" },
-    { letter: "B" },
-    { letter: "C" },
-  ];
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-      {items.map((i) => (
-        <span key={i.letter} className="inline-flex items-center gap-1.5">
-          <span
-            className="inline-block h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: LETTER_COLORS[i.letter] }}
-          />
-          {i.letter}
-        </span>
-      ))}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function StatTile({
-  to,
   label,
   value,
   icon: Icon,
-  gradient,
+  to,
+  tone,
 }: {
-  to?: string;
   label: string;
-  value: number;
+  value: number | string;
   icon: React.ComponentType<{ className?: string }>;
-  gradient: string;
+  to?: string;
+  tone?: "default" | "amber" | "rose";
 }) {
+  const toneCls =
+    tone === "amber"
+      ? "text-amber-300"
+      : tone === "rose"
+        ? "text-rose-300"
+        : "text-foreground";
   const inner = (
-    <Card className="hover-lift relative overflow-hidden border-border/60">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between">
-          <div
-            className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-sm`}
-          >
-            <Icon className="h-5 w-5" />
-          </div>
-          {to && <ArrowRight className="h-4 w-4 text-muted-foreground/40" />}
+    <Card className="hover-lift">
+      <CardContent className="flex items-center justify-between p-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className={`mt-0.5 font-display text-2xl font-bold tabular-nums ${toneCls}`}>
+            {value}
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="font-display text-3xl font-bold tracking-tight">{value}</div>
-        <div className="mt-0.5 text-sm text-muted-foreground">{label}</div>
+        <Icon className="h-5 w-5 text-muted-foreground" />
       </CardContent>
     </Card>
   );
-  return to ? <Link to={to} className="block">{inner}</Link> : inner;
+  return to ? <Link to={to}>{inner}</Link> : inner;
+}
+
+function WeekRow({
+  label,
+  value,
+  suffix,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: number;
+  suffix?: string;
+  tone?: "default" | "amber" | "rose";
+  icon?: React.ComponentType<{ className?: string }>;
+}) {
+  const toneCls =
+    tone === "amber"
+      ? "text-amber-400"
+      : tone === "rose"
+        ? "text-rose-400"
+        : "text-foreground";
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+      <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        {Icon && <Icon className="h-3.5 w-3.5" />}
+        {label}
+      </span>
+      <span className="text-sm tabular-nums">
+        <span className={`font-semibold ${toneCls}`}>{value}</span>
+        {suffix && <span className="ml-1.5 text-xs text-muted-foreground">{suffix}</span>}
+      </span>
+    </div>
+  );
 }
