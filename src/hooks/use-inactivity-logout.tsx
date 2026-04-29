@@ -102,21 +102,11 @@ export function useInactivityLogout({
       else reset();
     };
 
-    const onVisibility = () => {
-      if (document.hidden) {
-        // Tab hidden = treat as inactive immediately.
-        if (!warningOpen.current) triggerWarning();
-      } else {
-        reset();
-      }
-    };
-
     window.addEventListener("mousemove", onActivity, { passive: true });
     window.addEventListener("scroll", onActivity, { passive: true });
     window.addEventListener("keydown", onPointerOrKey);
     window.addEventListener("click", onPointerOrKey);
     window.addEventListener("touchstart", onPointerOrKey, { passive: true });
-    document.addEventListener("visibilitychange", onVisibility);
 
     reset();
 
@@ -126,7 +116,6 @@ export function useInactivityLogout({
       window.removeEventListener("keydown", onPointerOrKey);
       window.removeEventListener("click", onPointerOrKey);
       window.removeEventListener("touchstart", onPointerOrKey);
-      document.removeEventListener("visibilitychange", onVisibility);
       clearTimers();
       toast.dismiss("inactivity-warn");
       warningOpen.current = false;
