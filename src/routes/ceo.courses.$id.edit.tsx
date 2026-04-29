@@ -1503,7 +1503,7 @@ function AddLessonDialog({
             <div className="space-y-2 rounded-md border bg-muted/30 p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">Attach a tech-test / project</p>
+                  <p className="text-sm font-medium">Attach an assignment</p>
                   <p className="text-xs text-muted-foreground">
                     Optional. If added, members must submit it for this lesson to count as complete.
                   </p>
@@ -1934,7 +1934,7 @@ function LessonEditorDialog({
             <div className="space-y-2 rounded-md border bg-muted/30 p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">Attached tech-test / project</p>
+                  <p className="text-sm font-medium">Attached assignment</p>
                   <p className="text-xs text-muted-foreground">
                     Optional. When attached, members must submit it for this lesson to count as complete.
                   </p>

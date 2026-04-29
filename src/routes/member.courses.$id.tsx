@@ -366,7 +366,7 @@ function CoursePlayer() {
                     first to unlock this lesson.
                     {blockingLesson?.content?.assignment?.brief ||
                     blockingLesson?.type === "practical"
-                      ? " Your tech-test must be approved by your incharge."
+                      ? " Your assignment must be approved by your incharge."
                       : ""}
                   </p>
                   {blockingLesson && (
@@ -487,7 +487,7 @@ function LessonView({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div>
               <p className="font-medium text-foreground">
-                Tech-test required to unlock the next lesson
+                Assignment required to unlock the next lesson
               </p>
               <p className="text-muted-foreground">
                 Watch the video below, then upload your submission. Your incharge must
@@ -499,7 +499,7 @@ function LessonView({
 
         {hasAssignment && (
           <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
-            <p className="text-sm font-semibold">📋 Tech-test / project submission</p>
+            <p className="text-sm font-semibold">📋 Assignment submission</p>
             <PracticalSubmit
               lessonId={lesson.id}
               brief={lesson.content.assignment.brief}
