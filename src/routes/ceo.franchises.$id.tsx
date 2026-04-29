@@ -329,13 +329,15 @@ function FranchiseDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Franchise mastery</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-accent" /> Franchise grades
+          </CardTitle>
           <CardDescription>
-            12-pillar progress averaged across this franchise's members.
+            Letter-grade mix across this franchise's members. A+ 90% · A 85% · B 75% · C means redo.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
-          <PillarFlower scores={orgScores} size={320} showLegend />
+          <GradePieCard agg={orgAgg} size={280} />
         </CardContent>
       </Card>
 
@@ -387,7 +389,7 @@ function FranchiseDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-center">
-                    <PillarFlower scores={m.scores} size={150} showLabels={false} />
+                    <GradePieCard agg={m.gradeAgg} size={140} showStats />
                   </div>
 
                   {/* Course progress */}
