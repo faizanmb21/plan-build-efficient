@@ -183,6 +183,45 @@ export function MemberGradeReport({ userId, fullName, franchiseName }: Props) {
         <DistTile label="Pending" count={agg.pending} className="text-muted-foreground" />
       </div>
 
+      {/* Donut visualisations */}
+      {(agg.total > 0 || perCourse.length > 0) && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Card className="bg-white/5 border-white/10">
+            <CardContent className="p-3">
+              <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+                Letter distribution
+              </div>
+              <CourseGradePie
+                data={[
+                  { name: "A+", value: agg.aPlus, color: LETTER_COLORS["A+"] },
+                  { name: "A", value: agg.a, color: LETTER_COLORS["A"] },
+                  { name: "B", value: agg.b, color: LETTER_COLORS["B"] },
+                  { name: "C / Redo", value: agg.c, color: LETTER_COLORS["C"] },
+                ]}
+                centerLabel={`${agg.averagePercent}%`}
+                centerSub="overall avg"
+              />
+            </CardContent>
+          </Card>
+          <Card className="bg-white/5 border-white/10">
+            <CardContent className="p-3">
+              <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+                Average % by course
+              </div>
+              <CourseGradePie
+                data={perCourse.map((c, i) => ({
+                  name: c.course_title,
+                  value: c.agg.averagePercent,
+                  color: courseColor(i),
+                }))}
+                centerLabel={`${perCourse.length}`}
+                centerSub="courses graded"
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Per-course breakdown */}
       <div>
         <h3 className="mb-2 text-sm font-medium text-muted-foreground">Per-course breakdown</h3>
