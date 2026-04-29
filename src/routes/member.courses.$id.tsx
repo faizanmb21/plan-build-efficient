@@ -268,20 +268,6 @@ function CoursePlayer() {
     });
   }, []);
 
-  // Pause when the tab is hidden / window blurred.
-  React.useEffect(() => {
-    const onHide = () => {
-      if (document.hidden) pauseMedia();
-    };
-    const onBlur = () => pauseMedia();
-    document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, [pauseMedia]);
-
   // 1-min inactivity → 10s warning → sign out.
   useInactivityLogout({
     enabled: !!user,
