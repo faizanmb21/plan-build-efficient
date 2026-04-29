@@ -22,9 +22,10 @@ import {
   Trophy,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import { PillarFlower } from "@/components/PillarFlower";
-import { getPillarScoresForUsers } from "@/lib/pillar-data";
-import type { PillarScores } from "@/lib/pillars";
+import { GradePieCard } from "@/components/grading/GradePieCard";
+import { fetchAggregateForUser } from "@/lib/grade-summary";
+import type { GradeAggregate } from "@/lib/grade-utils";
+import { emptyAggregate } from "@/lib/grade-utils";
 
 export const Route = createFileRoute("/member/")({
   validateSearch: (search: Record<string, unknown>): { previewMember?: string } =>
@@ -65,14 +66,14 @@ function MemberHome() {
   const [loading, setLoading] = React.useState(true);
   const [assignments, setAssignments] = React.useState<AssignmentRow[]>([]);
   const [stats, setStats] = React.useState<Record<string, CourseStat>>({});
-  const [pillarScores, setPillarScores] = React.useState<PillarScores | null>(null);
+  const [gradeAgg, setGradeAgg] = React.useState<GradeAggregate>(emptyAggregate());
   const [hoursStudied, setHoursStudied] = React.useState(0);
   const [streakDays, setStreakDays] = React.useState(0);
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     if (!effectiveUserId) return;
-    getPillarScoresForUsers([effectiveUserId]).then(setPillarScores);
+    fetchAggregateForUser(effectiveUserId).then(setGradeAgg);
   }, [effectiveUserId]);
 
   React.useEffect(() => {
@@ -417,25 +418,19 @@ function MemberHome() {
             </Card>
           )}
 
-          {/* Skill flower compact */}
+          {/* My grades */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Sparkles className="h-4 w-4" />
-                Skill mastery
+                <Trophy className="h-4 w-4" />
+                My grades
               </CardTitle>
               <CardDescription className="text-[11px]">
-                12 IRM Academy pillars
+                A+ 90% · A 85% · B 75% · C means redo
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-3 pt-0">
-              {pillarScores ? (
-                <PillarFlower scores={pillarScores} size={220} />
-              ) : (
-                <div className="flex h-[220px] w-[220px] items-center justify-center text-xs text-muted-foreground">
-                  Loading…
-                </div>
-              )}
+              <GradePieCard agg={gradeAgg} size={200} />
               <Button asChild variant="ghost" size="sm" className="w-full">
                 <Link to="/member/grades">
                   View grade report

@@ -44,9 +44,9 @@ import {
   Info,
 } from "lucide-react";
 import { toast } from "sonner";
-import { PillarFlower } from "@/components/PillarFlower";
-import { getPillarScoresForUsers } from "@/lib/pillar-data";
-import type { PillarScores } from "@/lib/pillars";
+import { GradePieCard } from "@/components/grading/GradePieCard";
+import { fetchGradeSummaries, combineAggregates } from "@/lib/grade-summary";
+import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/franchises/")({
@@ -87,7 +87,7 @@ function FranchisesPage() {
   const [members, setMembers] = React.useState<MemberRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [showArchived, setShowArchived] = React.useState(false);
-  const [scoresByFranchise, setScoresByFranchise] = React.useState<Record<string, PillarScores>>({});
+  const [aggsByFranchise, setAggsByFranchise] = React.useState<Record<string, GradeAggregate>>({});
   const [franchiseOpen, setFranchiseOpen] = React.useState(false);
   const [inviteOpen, setInviteOpen] = React.useState(false);
 
@@ -115,16 +115,27 @@ function FranchisesPage() {
     setMembers(memberList);
     setLoading(false);
 
-    const entries = await Promise.all(
-      allF
-        .filter((fr) => !fr.archived_at)
-        .map(async (fr) => {
-          const ids = memberList.filter((m) => m.franchise_id === fr.id).map((m) => m.id);
-          return [fr.id, await getPillarScoresForUsers(ids)] as const;
-        }),
+    const memberRoleSet = new Set(
+      ((r.data as { user_id: string; role: string }[]) ?? [])
+        .filter((x) => x.role === "member")
+        .map((x) => x.user_id),
     );
+    const allMemberIds = memberList
+      .filter((m) => memberRoleSet.has(m.id))
+      .map((m) => m.id);
+    const summaries = await fetchGradeSummaries(allMemberIds);
 
-    setScoresByFranchise(Object.fromEntries(entries));
+    const entries = allF
+      .filter((fr) => !fr.archived_at)
+      .map((fr) => {
+        const ids = memberList
+          .filter((m) => m.franchise_id === fr.id && memberRoleSet.has(m.id))
+          .map((m) => m.id);
+        const aggs = ids.map((id) => summaries.get(id) ?? emptyAggregate());
+        return [fr.id, combineAggregates(aggs)] as const;
+      });
+
+    setAggsByFranchise(Object.fromEntries(entries));
   }, []);
 
   React.useEffect(() => {
@@ -245,7 +256,7 @@ function FranchisesPage() {
               const memberCount = team.filter((m) => m.role === "member").length;
               const incharge =
                 team.find((m) => m.id === f.manager_id) ?? team.find((m) => m.role === "incharge");
-              const scores = scoresByFranchise[f.id];
+              const agg = aggsByFranchise[f.id];
               const isArchived = !!f.archived_at;
               const purgeReady =
                 isArchived &&
@@ -268,9 +279,9 @@ function FranchisesPage() {
                     )}
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm">
-                    {!isArchived && scores && (
+                    {!isArchived && agg && (
                       <div className="flex justify-center">
-                        <PillarFlower scores={scores} size={180} showLabels={false} />
+                        <GradePieCard agg={agg} size={150} showStats={false} />
                       </div>
                     )}
 

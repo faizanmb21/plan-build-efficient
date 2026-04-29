@@ -27,10 +27,11 @@ import {
   Radio,
 } from "lucide-react";
 import { toast } from "sonner";
-import { PillarFlower } from "@/components/PillarFlower";
+import { GradePieCard } from "@/components/grading/GradePieCard";
+import { fetchGradeSummaries, combineAggregates } from "@/lib/grade-summary";
+import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { GraduationCap } from "lucide-react";
-import { PILLARS, type PillarScores } from "@/lib/pillars";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/franchises/$id")({
@@ -63,11 +64,9 @@ interface MemberDetail {
   phone: string | null;
   avatar_url: string | null;
   role: "ceo" | "incharge" | "member" | undefined;
-  scores: PillarScores;
+  gradeAgg: GradeAggregate;
   stats: MemberStats;
 }
-
-const EMPTY_SCORES: PillarScores = PILLARS.map(() => 0) as PillarScores;
 
 function fmtTime(sec: number): string {
   const h = Math.floor(sec / 3600);
@@ -81,7 +80,7 @@ function FranchiseDetailPage() {
   const [franchise, setFranchise] = React.useState<Franchise | null>(null);
   const [manager, setManager] = React.useState<MemberDetail | null>(null);
   const [members, setMembers] = React.useState<MemberDetail[]>([]);
-  const [orgScores, setOrgScores] = React.useState<PillarScores>(EMPTY_SCORES);
+  const [orgAgg, setOrgAgg] = React.useState<GradeAggregate>(emptyAggregate());
   const [loading, setLoading] = React.useState(true);
   const [snapMember, setSnapMember] = React.useState<MemberDetail | null>(null);
   const [gradeMember, setGradeMember] = React.useState<MemberDetail | null>(null);
@@ -120,17 +119,14 @@ function FranchiseDetailPage() {
       }[] | null) ?? [];
     const memberIds = profileRows.filter((p) => roleMap.get(p.id) === "member").map((p) => p.id);
 
-    // 2. Resolve the 12 pillar courses + their lessons
-    const titles = PILLARS.map((p) => p.title);
+    // 2. All published courses + their lessons (used for "Started/Done" tiles)
     const { data: coursesData } = await supabase
       .from("courses")
-      .select("id, title")
-      .in("title", titles);
-    const courseList = (coursesData as { id: string; title: string }[] | null) ?? [];
-    const courseIdByPillar = PILLARS.map(
-      (p) => courseList.find((c) => c.title === p.title)?.id,
+      .select("id")
+      .eq("status", "published");
+    const courseIds = ((coursesData as { id: string }[] | null) ?? []).map(
+      (c) => c.id,
     );
-    const courseIds = courseIdByPillar.filter((x): x is string => Boolean(x));
 
     const lessonsByCourse = new Map<string, string[]>();
     let allLessonIds: string[] = [];
@@ -150,7 +146,7 @@ function FranchiseDetailPage() {
       allLessonIds = Array.from(lessonsByCourse.values()).flat();
     }
 
-    // 3. Lesson progress + sessions + snapshots for ALL members in batched queries
+    // 3. Lesson progress + sessions + snapshots + grade summaries (parallel)
     const completedByUser = new Map<string, Set<string>>();
     const lastActiveByUser = new Map<string, string>();
     const activeTodayByUser = new Map<string, number>();
@@ -158,9 +154,10 @@ function FranchiseDetailPage() {
     const liveNowByUser = new Set<string>();
     const lastSeenByUser = new Map<string, string>();
     const snapsTodayByUser = new Map<string, number>();
+    let aggsByUser = new Map<string, GradeAggregate>();
 
     if (memberIds.length > 0) {
-      const [progressRes, sessionsRes, snapsRes] = await Promise.all([
+      const [progressRes, sessionsRes, snapsRes, gradeMap] = await Promise.all([
         allLessonIds.length > 0
           ? supabase
               .from("lesson_progress")
@@ -178,7 +175,9 @@ function FranchiseDetailPage() {
           .select("user_id", { count: "exact" })
           .in("user_id", memberIds)
           .gte("captured_at", dayStart.toISOString()),
+        fetchGradeSummaries(memberIds),
       ]);
+      aggsByUser = gradeMap;
 
       (progressRes.data ?? []).forEach((p) => {
         const ts = p.completed_at ?? p.updated_at;
@@ -211,18 +210,7 @@ function FranchiseDetailPage() {
       });
     }
 
-    // 4. Compute per-member scores + activity stats
-    function scoresForUser(uid: string): PillarScores {
-      const done = completedByUser.get(uid) ?? new Set<string>();
-      return PILLARS.map((_, idx) => {
-        const cid = courseIdByPillar[idx];
-        if (!cid) return 0;
-        const lids = lessonsByCourse.get(cid) ?? [];
-        if (lids.length === 0) return 0;
-        const completed = lids.filter((lid) => done.has(lid)).length;
-        return completed / lids.length;
-      }) as PillarScores;
-    }
+    // 4. Compute per-member activity stats
     function statsForUser(uid: string): MemberStats {
       const done = completedByUser.get(uid) ?? new Set<string>();
       let started = 0;
@@ -252,7 +240,7 @@ function FranchiseDetailPage() {
       phone: p.phone,
       avatar_url: p.avatar_url,
       role: roleMap.get(p.id),
-      scores: scoresForUser(p.id),
+      gradeAgg: aggsByUser.get(p.id) ?? emptyAggregate(),
       stats: statsForUser(p.id),
     }));
 
@@ -264,15 +252,7 @@ function FranchiseDetailPage() {
     const onlyMembers = mList.filter((m) => m.role === "member");
     setMembers(onlyMembers);
 
-    if (onlyMembers.length === 0) {
-      setOrgScores(EMPTY_SCORES);
-    } else {
-      const summed = PILLARS.map((_, idx) => {
-        const sum = onlyMembers.reduce((acc, m) => acc + (m.scores[idx] ?? 0), 0);
-        return sum / onlyMembers.length;
-      }) as PillarScores;
-      setOrgScores(summed);
-    }
+    setOrgAgg(combineAggregates(onlyMembers.map((m) => m.gradeAgg)));
     setLoading(false);
   }, [id]);
 
@@ -349,13 +329,15 @@ function FranchiseDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Franchise mastery</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-accent" /> Franchise grades
+          </CardTitle>
           <CardDescription>
-            12-pillar progress averaged across this franchise's members.
+            Letter-grade mix across this franchise's members. A+ 90% · A 85% · B 75% · C means redo.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
-          <PillarFlower scores={orgScores} size={320} showLegend />
+          <GradePieCard agg={orgAgg} size={280} />
         </CardContent>
       </Card>
 
@@ -407,7 +389,7 @@ function FranchiseDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-center">
-                    <PillarFlower scores={m.scores} size={150} showLabels={false} />
+                    <GradePieCard agg={m.gradeAgg} size={140} showStats />
                   </div>
 
                   {/* Course progress */}
