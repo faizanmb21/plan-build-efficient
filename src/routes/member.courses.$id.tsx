@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
+import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
 
 export const Route = createFileRoute("/member/courses/$id")({
   component: CoursePlayer,
@@ -243,6 +244,52 @@ function CoursePlayer() {
     if (next) setActiveLessonId(next.id);
   }
 
+  // Pause any playing media (HTML <video> or YouTube/Vimeo iframe) inside the
+  // lesson area. Used when the tab loses focus or inactivity warning fires.
+  const lessonAreaRef = React.useRef<HTMLDivElement | null>(null);
+  const pauseMedia = React.useCallback(() => {
+    const root = lessonAreaRef.current;
+    if (!root) return;
+    root.querySelectorAll("video").forEach((v) => {
+      try {
+        v.pause();
+      } catch {
+        /* noop */
+      }
+    });
+    root.querySelectorAll("iframe").forEach((f) => {
+      // Reload the iframe — works for any provider and stops playback/audio.
+      try {
+        const src = f.src;
+        if (src) f.src = src;
+      } catch {
+        /* noop */
+      }
+    });
+  }, []);
+
+  // Pause when the tab is hidden / window blurred.
+  React.useEffect(() => {
+    const onHide = () => {
+      if (document.hidden) pauseMedia();
+    };
+    const onBlur = () => pauseMedia();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [pauseMedia]);
+
+  // 1-min inactivity → 10s warning → sign out.
+  useInactivityLogout({
+    enabled: !!user,
+    idleMs: 60_000,
+    warnMs: 10_000,
+    onInactive: pauseMedia,
+  });
+
   if (loading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
   }
@@ -304,7 +351,7 @@ function CoursePlayer() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="order-2 lg:order-1">
+        <div ref={lessonAreaRef} className="order-2 lg:order-1">
           {activeLesson ? (
             activeLocked ? (
               <Card className="border-amber-500/40 bg-amber-500/5">
@@ -319,7 +366,7 @@ function CoursePlayer() {
                     first to unlock this lesson.
                     {blockingLesson?.content?.assignment?.brief ||
                     blockingLesson?.type === "practical"
-                      ? " Your tech-test must be approved by your incharge."
+                      ? " Your assignment must be approved by your incharge."
                       : ""}
                   </p>
                   {blockingLesson && (
@@ -440,7 +487,7 @@ function LessonView({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div>
               <p className="font-medium text-foreground">
-                Tech-test required to unlock the next lesson
+                Assignment required to unlock the next lesson
               </p>
               <p className="text-muted-foreground">
                 Watch the video below, then upload your submission. Your incharge must
@@ -452,7 +499,7 @@ function LessonView({
 
         {hasAssignment && (
           <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
-            <p className="text-sm font-semibold">📋 Tech-test / project submission</p>
+            <p className="text-sm font-semibold">📋 Assignment submission</p>
             <PracticalSubmit
               lessonId={lesson.id}
               brief={lesson.content.assignment.brief}
