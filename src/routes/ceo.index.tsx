@@ -66,18 +66,52 @@ async function fetchStats(): Promise<Stats> {
   };
 }
 
-async function fetchOrgScores(): Promise<PillarScores> {
+interface OrgPerformance {
+  org: GradeAggregate;
+  perFranchise: Array<{ id: string; name: string; agg: GradeAggregate; memberCount: number }>;
+}
+
+async function fetchOrgPerformance(): Promise<OrgPerformance> {
   try {
-    const { data: memberRoles } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "member");
-    const userIds = (memberRoles ?? []).map((r) => r.user_id);
-    return await getPillarScoresForUsers(userIds);
+    const [{ data: franchises }, { data: profiles }, { data: memberRoles }] =
+      await Promise.all([
+        supabase
+          .from("franchises")
+          .select("id,name")
+          .is("archived_at", null)
+          .order("name"),
+        supabase.from("profiles").select("id,franchise_id"),
+        supabase.from("user_roles").select("user_id,role"),
+      ]);
+
+    const memberSet = new Set(
+      (memberRoles ?? [])
+        .filter((r) => r.role === "member")
+        .map((r) => r.user_id),
+    );
+    const allMemberIds = (profiles ?? [])
+      .map((p) => p.id)
+      .filter((id) => memberSet.has(id));
+    const summaries = await fetchGradeSummaries(allMemberIds);
+
+    const perFranchise = (franchises ?? []).map((f) => {
+      const ids = (profiles ?? [])
+        .filter((p) => p.franchise_id === f.id && memberSet.has(p.id))
+        .map((p) => p.id);
+      const aggs = ids.map((id) => summaries.get(id) ?? emptyAggregate());
+      return {
+        id: f.id,
+        name: f.name,
+        agg: combineAggregates(aggs),
+        memberCount: ids.length,
+      };
+    });
+
+    const org = combineAggregates(summaries.values());
+    return { org, perFranchise };
   } catch (e) {
-    console.error("fetchOrgScores failed", e);
-    // Return empty scores rather than throwing — keeps the dashboard alive.
-    return Array.from({ length: 12 }, () => 0) as PillarScores;
+    console.error("fetchOrgPerformance failed", e);
+    return { org: emptyAggregate(), perFranchise: [] };
   }
 }
 
