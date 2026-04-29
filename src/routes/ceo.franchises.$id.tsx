@@ -27,10 +27,11 @@ import {
   Radio,
 } from "lucide-react";
 import { toast } from "sonner";
-import { PillarFlower } from "@/components/PillarFlower";
+import { GradePieCard } from "@/components/grading/GradePieCard";
+import { fetchGradeSummaries, combineAggregates } from "@/lib/grade-summary";
+import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { GraduationCap } from "lucide-react";
-import { PILLARS, type PillarScores } from "@/lib/pillars";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/franchises/$id")({
@@ -63,11 +64,9 @@ interface MemberDetail {
   phone: string | null;
   avatar_url: string | null;
   role: "ceo" | "incharge" | "member" | undefined;
-  scores: PillarScores;
+  gradeAgg: GradeAggregate;
   stats: MemberStats;
 }
-
-const EMPTY_SCORES: PillarScores = PILLARS.map(() => 0) as PillarScores;
 
 function fmtTime(sec: number): string {
   const h = Math.floor(sec / 3600);
