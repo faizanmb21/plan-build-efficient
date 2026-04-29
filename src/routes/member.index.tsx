@@ -67,6 +67,7 @@ function MemberHome() {
   const [assignments, setAssignments] = React.useState<AssignmentRow[]>([]);
   const [stats, setStats] = React.useState<Record<string, CourseStat>>({});
   const [gradeAgg, setGradeAgg] = React.useState<GradeAggregate>(emptyAggregate());
+  const [peer, setPeer] = React.useState<{ franchiseAvg: number; rank: number | null; total: number } | null>(null);
   const [hoursStudied, setHoursStudied] = React.useState(0);
   const [streakDays, setStreakDays] = React.useState(0);
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
@@ -75,6 +76,38 @@ function MemberHome() {
     if (!effectiveUserId) return;
     fetchAggregateForUser(effectiveUserId).then(setGradeAgg);
   }, [effectiveUserId]);
+
+  React.useEffect(() => {
+    if (!effectiveUserId || !profile?.franchise_id) {
+      setPeer(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data: peers } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("franchise_id", profile.franchise_id);
+        const ids = (peers ?? []).map((p) => p.id);
+        if (ids.length === 0) return;
+        const summaries = await fetchGradeSummaries(ids);
+        const myAgg = summaries.get(effectiveUserId) ?? emptyAggregate();
+        const franchiseAgg = combineAggregates(summaries.values());
+        const ranked = ids
+          .map((id) => ({ id, avg: (summaries.get(id) ?? emptyAggregate()).averagePercent }))
+          .filter((r) => r.avg > 0)
+          .sort((a, b) => b.avg - a.avg);
+        const idx = ranked.findIndex((r) => r.id === effectiveUserId);
+        setPeer({
+          franchiseAvg: franchiseAgg.averagePercent,
+          rank: idx >= 0 && myAgg.total > 0 ? idx + 1 : null,
+          total: ranked.length,
+        });
+      } catch (e) {
+        console.error("peer comparison failed", e);
+      }
+    })();
+  }, [effectiveUserId, profile?.franchise_id]);
 
   React.useEffect(() => {
     if (!effectiveUserId) return;
