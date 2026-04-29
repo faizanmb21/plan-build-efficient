@@ -49,8 +49,15 @@ export function useInactivityLogout({
       logoutTimer.current = null;
     };
 
-    const reset = () => {
-      lastActivity.current = Date.now();
+    let lastReset = 0;
+    const reset = (force = false) => {
+      const now = Date.now();
+      // Throttle passive resets to once per second to avoid timer thrash
+      // when mousemove/scroll fire continuously. An explicit interaction
+      // (keydown/click/touch) or warning-dismiss passes force=true.
+      if (!force && !warningOpen.current && now - lastReset < 1000) return;
+      lastReset = now;
+      lastActivity.current = now;
       if (warningOpen.current) {
         warningOpen.current = false;
         toast.dismiss("inactivity-warn");
@@ -72,7 +79,7 @@ export function useInactivityLogout({
         duration: warnMs,
         action: {
           label: "Stay signed in",
-          onClick: () => reset(),
+          onClick: () => reset(true),
         },
       });
       logoutTimer.current = window.setTimeout(doLogout, warnMs);
@@ -81,7 +88,9 @@ export function useInactivityLogout({
     const doLogout = async () => {
       warningOpen.current = false;
       try {
-        await supabase.auth.signOut();
+        // scope: "local" -> only this tab is signed out. Other tabs/roles
+        // (e.g. CEO in another tab) keep their session.
+        await supabase.auth.signOut({ scope: "local" });
       } catch {
         /* noop */
       }
@@ -90,16 +99,14 @@ export function useInactivityLogout({
     };
 
     const onActivity = () => {
-      // While the warning is showing, only an explicit click on "Stay signed in"
-      // counts. Passive mouse drift should NOT cancel — but a real interaction
-      // (keydown/click/touch) should.
+      // Passive movement (mousemove/scroll) — throttled, ignored while warning shown
       if (warningOpen.current) return;
       reset();
     };
 
     const onPointerOrKey = () => {
-      if (warningOpen.current) reset();
-      else reset();
+      // Real interaction — always counts, bypasses throttle
+      reset(true);
     };
 
     window.addEventListener("mousemove", onActivity, { passive: true });
@@ -108,7 +115,7 @@ export function useInactivityLogout({
     window.addEventListener("click", onPointerOrKey);
     window.addEventListener("touchstart", onPointerOrKey, { passive: true });
 
-    reset();
+    reset(true);
 
     return () => {
       window.removeEventListener("mousemove", onActivity);

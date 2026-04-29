@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 import { useAuth, homeForRole } from "@/lib/auth";
 import { GraduationCap } from "lucide-react";
-import { ClaimCeoCard } from "./ceo.index";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -12,7 +11,7 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const navigate = useNavigate();
-  const { loading, session, primaryRole, roles, refresh, signOut } = useAuth();
+  const { loading, session, primaryRole, roles, signOut } = useAuth();
 
   React.useEffect(() => {
     if (loading) return;
@@ -41,7 +40,7 @@ function Index() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/5 via-background to-accent/5 p-4">
         <div className="w-full max-w-md space-y-4">
-          <ClaimCeoCard onClaimed={() => refresh().then(() => navigate({ to: "/ceo" }))} />
+          
           <Card>
             <CardHeader>
               <CardTitle>Waiting for an invite</CardTitle>
