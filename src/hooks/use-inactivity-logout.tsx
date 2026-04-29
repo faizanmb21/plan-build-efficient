@@ -49,8 +49,15 @@ export function useInactivityLogout({
       logoutTimer.current = null;
     };
 
-    const reset = () => {
-      lastActivity.current = Date.now();
+    let lastReset = 0;
+    const reset = (force = false) => {
+      const now = Date.now();
+      // Throttle passive resets to once per second to avoid timer thrash
+      // when mousemove/scroll fire continuously. An explicit interaction
+      // (keydown/click/touch) or warning-dismiss passes force=true.
+      if (!force && !warningOpen.current && now - lastReset < 1000) return;
+      lastReset = now;
+      lastActivity.current = now;
       if (warningOpen.current) {
         warningOpen.current = false;
         toast.dismiss("inactivity-warn");
