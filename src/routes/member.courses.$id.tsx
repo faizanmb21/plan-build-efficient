@@ -351,7 +351,7 @@ function CoursePlayer() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="order-2 lg:order-1">
+        <div ref={lessonAreaRef} className="order-2 lg:order-1">
           {activeLesson ? (
             activeLocked ? (
               <Card className="border-amber-500/40 bg-amber-500/5">
