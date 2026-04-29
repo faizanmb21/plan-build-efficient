@@ -11,7 +11,7 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const navigate = useNavigate();
-  const { loading, session, primaryRole, roles, refresh, signOut } = useAuth();
+  const { loading, session, primaryRole, roles, signOut } = useAuth();
 
   React.useEffect(() => {
     if (loading) return;
