@@ -279,6 +279,17 @@ function MemberHome() {
         )}
       </header>
 
+      {gradeAgg.total > 0 && peer && (
+        <Card className="border-accent/20 bg-gradient-to-br from-accent/[0.04] to-primary/[0.04]">
+          <CardContent className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
+            <Stand label="Your avg" value={`${gradeAgg.averagePercent}%`} accent />
+            <Stand label="Franchise avg" value={`${peer.franchiseAvg}%`} />
+            <Stand label="Your rank" value={peer.rank ? `${peer.rank} of ${peer.total}` : "—"} />
+            <Stand label="Pass rate" value={`${gradeAgg.passRate}%`} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Two-column layout: main + rail */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* ======== MAIN COLUMN ======== */}
