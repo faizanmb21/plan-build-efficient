@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Download, Search, GraduationCap } from "lucide-react";
+import { Loader2, Download, Search, GraduationCap, FileSpreadsheet } from "lucide-react";
 import {
   aggregateGrades,
   toCsv,
@@ -33,6 +33,8 @@ import {
   type GradeAggregate,
 } from "@/lib/grade-utils";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
+import { CourseGradePie, courseColor } from "@/components/grading/CourseGradePie";
+import { buildGradesWorkbook, downloadGradesWorkbook } from "@/lib/grade-export";
 
 export const Route = createFileRoute("/ceo/grades")({
   component: GradesHub,
@@ -49,6 +51,7 @@ interface Franchise {
 }
 interface LessonShape {
   id: string;
+  title: string;
   sections: { course_id: string; courses: { id: string; title: string } | null } | null;
 }
 
@@ -59,6 +62,8 @@ function GradesHub() {
   const [franchises, setFranchises] = React.useState<Franchise[]>([]);
   const [lessonMap, setLessonMap] = React.useState<Map<string, LessonShape>>(new Map());
   const [memberRoleIds, setMemberRoleIds] = React.useState<Set<string>>(new Set());
+  const [inchargeRoleIds, setInchargeRoleIds] = React.useState<Set<string>>(new Set());
+  const [reviewerNames, setReviewerNames] = React.useState<Map<string, string | null>>(new Map());
 
   const [search, setSearch] = React.useState("");
   const [franchiseFilter, setFranchiseFilter] = React.useState<string>("all");
@@ -76,25 +81,36 @@ function GradesHub() {
           .order("reviewed_at", { ascending: false, nullsFirst: false }),
         supabase.from("profiles").select("id,full_name,franchise_id"),
         supabase.from("franchises").select("id,name").is("archived_at", null),
-        supabase.from("user_roles").select("user_id,role").eq("role", "member"),
+        supabase.from("user_roles").select("user_id,role").in("role", ["member", "incharge"]),
       ]);
 
       const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
       const { data: lessons } = lessonIds.length
         ? await supabase
             .from("lessons")
-            .select("id,sections(course_id,courses(id,title))")
+            .select("id,title,sections(course_id,courses(id,title))")
             .in("id", lessonIds)
         : { data: [] as unknown[] };
 
       const lm = new Map<string, LessonShape>();
       (lessons as LessonShape[] | null | undefined)?.forEach((l) => lm.set(l.id, l));
 
+      const memberIds = new Set<string>();
+      const inchargeIds = new Set<string>();
+      (roles ?? []).forEach((r) => {
+        if (r.role === "member") memberIds.add(r.user_id);
+        else if (r.role === "incharge") inchargeIds.add(r.user_id);
+      });
+      const profMap = new Map<string, string | null>();
+      (profs ?? []).forEach((p) => profMap.set(p.id, p.full_name));
+
       setSubmissions((subs ?? []) as GradedRow[]);
       setProfiles((profs ?? []) as Profile[]);
       setFranchises((frs ?? []) as Franchise[]);
       setLessonMap(lm);
-      setMemberRoleIds(new Set((roles ?? []).map((r) => r.user_id)));
+      setMemberRoleIds(memberIds);
+      setInchargeRoleIds(inchargeIds);
+      setReviewerNames(profMap);
       setLoading(false);
     })();
   }, []);
