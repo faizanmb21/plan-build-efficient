@@ -13,6 +13,7 @@ import {
   type GradedRow,
   type GradeAggregate,
 } from "@/lib/grade-utils";
+import { CourseGradePie, LETTER_COLORS, courseColor } from "@/components/grading/CourseGradePie";
 
 interface Props {
   userId: string;
