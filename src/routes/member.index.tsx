@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { GradePieCard } from "@/components/grading/GradePieCard";
-import { fetchAggregateForUser } from "@/lib/grade-summary";
+import { fetchAggregateForUser, fetchGradeSummaries, combineAggregates } from "@/lib/grade-summary";
 import type { GradeAggregate } from "@/lib/grade-utils";
 import { emptyAggregate } from "@/lib/grade-utils";
 
