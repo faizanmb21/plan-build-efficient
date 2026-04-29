@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 import { useAuth, homeForRole } from "@/lib/auth";
 import { GraduationCap } from "lucide-react";
-import { ClaimCeoCard } from "./ceo.index";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
