@@ -85,7 +85,8 @@ export function useInactivityLogout({
       } catch {
         /* noop */
       }
-      navigate({ to: "/login", search: { reason: "inactive" } as never });
+      toast.error("Signed out due to inactivity.");
+      navigate({ to: "/login" });
     };
 
     const onActivity = () => {
