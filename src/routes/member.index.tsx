@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { GradePieCard } from "@/components/grading/GradePieCard";
-import { fetchAggregateForUser } from "@/lib/grade-summary";
+import { fetchAggregateForUser, fetchGradeSummaries, combineAggregates } from "@/lib/grade-summary";
 import type { GradeAggregate } from "@/lib/grade-utils";
 import { emptyAggregate } from "@/lib/grade-utils";
 
@@ -67,6 +67,7 @@ function MemberHome() {
   const [assignments, setAssignments] = React.useState<AssignmentRow[]>([]);
   const [stats, setStats] = React.useState<Record<string, CourseStat>>({});
   const [gradeAgg, setGradeAgg] = React.useState<GradeAggregate>(emptyAggregate());
+  const [peer, setPeer] = React.useState<{ franchiseAvg: number; rank: number | null; total: number } | null>(null);
   const [hoursStudied, setHoursStudied] = React.useState(0);
   const [streakDays, setStreakDays] = React.useState(0);
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
@@ -75,6 +76,38 @@ function MemberHome() {
     if (!effectiveUserId) return;
     fetchAggregateForUser(effectiveUserId).then(setGradeAgg);
   }, [effectiveUserId]);
+
+  React.useEffect(() => {
+    if (!effectiveUserId || !profile?.franchise_id) {
+      setPeer(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data: peers } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("franchise_id", profile.franchise_id!);
+        const ids = (peers ?? []).map((p) => p.id);
+        if (ids.length === 0) return;
+        const summaries = await fetchGradeSummaries(ids);
+        const myAgg = summaries.get(effectiveUserId) ?? emptyAggregate();
+        const franchiseAgg = combineAggregates(summaries.values());
+        const ranked = ids
+          .map((id) => ({ id, avg: (summaries.get(id) ?? emptyAggregate()).averagePercent }))
+          .filter((r) => r.avg > 0)
+          .sort((a, b) => b.avg - a.avg);
+        const idx = ranked.findIndex((r) => r.id === effectiveUserId);
+        setPeer({
+          franchiseAvg: franchiseAgg.averagePercent,
+          rank: idx >= 0 && myAgg.total > 0 ? idx + 1 : null,
+          total: ranked.length,
+        });
+      } catch (e) {
+        console.error("peer comparison failed", e);
+      }
+    })();
+  }, [effectiveUserId, profile?.franchise_id]);
 
   React.useEffect(() => {
     if (!effectiveUserId) return;
@@ -245,6 +278,17 @@ function MemberHome() {
           </Badge>
         )}
       </header>
+
+      {gradeAgg.total > 0 && peer && (
+        <Card className="border-accent/20 bg-gradient-to-br from-accent/[0.04] to-primary/[0.04]">
+          <CardContent className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
+            <Stand label="Your avg" value={`${gradeAgg.averagePercent}%`} accent />
+            <Stand label="Franchise avg" value={`${peer.franchiseAvg}%`} />
+            <Stand label="Your rank" value={peer.rank ? `${peer.rank} of ${peer.total}` : "—"} />
+            <Stand label="Pass rate" value={`${gradeAgg.passRate}%`} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Two-column layout: main + rail */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -441,6 +485,17 @@ function MemberHome() {
           </Card>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function Stand({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`mt-0.5 font-display text-xl font-bold tabular-nums ${accent ? "text-accent" : "text-foreground"}`}>
+        {value}
+      </p>
     </div>
   );
 }
