@@ -105,8 +105,8 @@ export function useInactivityLogout({
     };
 
     const onPointerOrKey = () => {
-      if (warningOpen.current) reset();
-      else reset();
+      // Real interaction — always counts, bypasses throttle
+      reset(true);
     };
 
     window.addEventListener("mousemove", onActivity, { passive: true });
@@ -115,7 +115,7 @@ export function useInactivityLogout({
     window.addEventListener("click", onPointerOrKey);
     window.addEventListener("touchstart", onPointerOrKey, { passive: true });
 
-    reset();
+    reset(true);
 
     return () => {
       window.removeEventListener("mousemove", onActivity);
