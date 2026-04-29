@@ -281,6 +281,25 @@ function GradesHub() {
     downloadCsv("grades-by-course.csv", csv);
   }
 
+  function exportFullReport() {
+    const wb = buildGradesWorkbook({
+      profiles,
+      franchises,
+      memberRoleIds,
+      inchargeRoleIds,
+      submissions,
+      lessonMap,
+      reviewerNames,
+    });
+    downloadGradesWorkbook(wb);
+  }
+
+  // Org-wide aggregate across all members
+  const cohortAgg = React.useMemo(() => {
+    const memberSubs = submissions.filter((s) => memberRoleIds.has(s.user_id));
+    return aggregateGrades(memberSubs);
+  }, [submissions, memberRoleIds]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -295,13 +314,37 @@ function GradesHub() {
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
           <GraduationCap className="h-5 w-5" />
         </div>
-        <div>
-          <h1 className="text-2xl font-semibold">Grading overview</h1>
-          <p className="text-sm text-muted-foreground">
-            Letter grades across the academy. Drill into any member, franchise, or pillar.
-          </p>
-        </div>
+        <div className="flex-1" />
+        <Button onClick={exportFullReport} className="gap-2">
+          <FileSpreadsheet className="h-4 w-4" /> Export full report (.xlsx)
+        </Button>
       </div>
+
+      {/* Cohort overview donut */}
+      <Card className="bg-white/5 border-white/10">
+        <CardHeader>
+          <CardTitle className="text-base">Cohort overview</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <CourseGradePie
+              data={courseRows.map((c, i) => ({
+                name: c.course_title,
+                value: c.agg.averagePercent,
+                color: courseColor(i),
+              }))}
+              centerLabel={`${cohortAgg.averagePercent}%`}
+              centerSub="overall avg"
+            />
+            <div className="grid grid-cols-2 gap-2 self-center">
+              <Stat label="Members graded" value={String(new Set(submissions.filter(s => memberRoleIds.has(s.user_id) && s.letter_grade).map(s => s.user_id)).size)} />
+              <Stat label="Total graded" value={String(cohortAgg.total)} />
+              <Stat label="Pass rate" value={`${cohortAgg.passRate}%`} />
+              <Stat label="Redo rate" value={`${cohortAgg.redoRate}%`} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="members">
         <TabsList>
