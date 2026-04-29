@@ -268,11 +268,11 @@ function CoursePlayer() {
     });
   }, []);
 
-  // 1-min inactivity → 10s warning → sign out.
+  // 3-min inactivity → 30s warning → sign out.
   useInactivityLogout({
     enabled: !!user,
-    idleMs: 60_000,
-    warnMs: 10_000,
+    idleMs: 180_000,
+    warnMs: 30_000,
     onInactive: pauseMedia,
   });
 
