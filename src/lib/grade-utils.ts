@@ -3,9 +3,9 @@
 export type LetterGrade = "A+" | "A" | "B" | "C";
 
 export const LETTER_TO_PERCENT: Record<LetterGrade, number> = {
-  "A+": 100,
-  A: 80,
-  B: 60,
+  "A+": 90,
+  A: 85,
+  B: 75,
   C: 0,
 };
 
@@ -70,7 +70,7 @@ export function aggregateGrades(rows: GradedRow[]): GradeAggregate {
 
     agg.total++;
     const pct =
-      letter === "A+" ? 100 : letter === "A" ? 80 : letter === "B" ? 60 : 0;
+      letter === "A+" ? 90 : letter === "A" ? 85 : letter === "B" ? 75 : 0;
     percentSum += pct;
     percentCount++;
 

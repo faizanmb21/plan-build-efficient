@@ -33,9 +33,9 @@ export type LessonSubmission = {
 
 type LetterGrade = "A+" | "A" | "B" | "C";
 const LETTER_GRADE_MAP: Record<LetterGrade, { numeric: number; status: "approved" | "revision"; label: string }> = {
-  "A+": { numeric: 100, status: "approved", label: "A+ — Exceptional (100%)" },
-  A: { numeric: 80, status: "approved", label: "A — Pass (80%)" },
-  B: { numeric: 60, status: "approved", label: "B — Pass (60%)" },
+  "A+": { numeric: 90, status: "approved", label: "A+ — Exceptional (90%)" },
+  A: { numeric: 85, status: "approved", label: "A — Strong pass (85%)" },
+  B: { numeric: 75, status: "approved", label: "B — Pass (75%)" },
   C: { numeric: 0, status: "revision", label: "C — Redo required" },
 };
 
@@ -277,7 +277,7 @@ export function LessonReviewDialog({
                         onClick={() => {
                           const s = aiReview.score;
                           const suggested: LetterGrade =
-                            s >= 95 ? "A+" : s >= 75 ? "A" : s >= 55 ? "B" : "C";
+                            s >= 88 ? "A+" : s >= 80 ? "A" : s >= 70 ? "B" : "C";
                           setLetter(suggested);
                           setFeedback(aiReview.comments);
                         }}

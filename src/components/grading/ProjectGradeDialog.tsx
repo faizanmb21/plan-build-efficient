@@ -30,9 +30,9 @@ export type ProjectSubmission = {
 };
 
 const LETTER_MAP: Record<LetterGrade, { numeric: number; status: "approved" | "revision" }> = {
-  "A+": { numeric: 100, status: "approved" },
-  A: { numeric: 80, status: "approved" },
-  B: { numeric: 60, status: "approved" },
+  "A+": { numeric: 90, status: "approved" },
+  A: { numeric: 85, status: "approved" },
+  B: { numeric: 75, status: "approved" },
   C: { numeric: 0, status: "revision" },
 };
 

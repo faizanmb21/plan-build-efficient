@@ -1,36 +1,87 @@
-## Issues to fix
+## Goal
 
-### 1. Inactivity sign-out kicks the CEO out too (cross-tab logout)
+Three changes to the grading system:
+1. Re-map letter grades to new percentages (A+=90, A=85, B=75, C=0/redo).
+2. Show per-course performance as a pie/donut chart for each member (member view) and a complete center for the CEO.
+3. Add a "normal template" report export covering all members and incharges with their grades.
 
-What's happening: even though each tab uses its own `sessionStorage` session (`tab-storage.ts`), Supabase's `signOut()` defaults to `scope: 'global'`. That revokes the user's refresh token on the server, so the OTHER tab (CEO) immediately gets `SIGNED_OUT` on its next token refresh and is bounced to /login.
+---
 
-Fix: in `src/hooks/use-inactivity-logout.tsx`, call `supabase.auth.signOut({ scope: 'local' })` instead. This clears only the current tab's session — no other tab/role is affected. The member tab still goes to /login as expected.
+## 1. New grade scale
 
-### 2. "Claim CEO" card appears on the logout / in-between screen
+Currently: A+=100, A=80, B=60, C=0.
+New: **A+=90, A=85, B=75, C=0 (redo)**.
 
-What's happening: `src/routes/index.tsx` shows the `ClaimCeoCard` whenever a user is authenticated but has no roles. During the brief window after sign-out (session cleared, roles array still being reset, or a stale user with no role row) this card flashes. The user wants it gone entirely.
+Update the single source of truth + duplicates:
+- `src/lib/grade-utils.ts` — `LETTER_TO_PERCENT` and the inline ternary inside `aggregateGrades`.
+- `src/components/grading/LessonReviewDialog.tsx` — `LETTER_GRADE_MAP` numeric values + label text + the AI-suggested mapping (`s >= ? "A+" : ...`) thresholds.
+- `src/components/grading/ProjectGradeDialog.tsx` — `LETTER_MAP` numeric values.
 
-Fix: remove the `ClaimCeoCard` rendering from `src/routes/index.tsx`. If a logged-in user has no role, just show the "Waiting for an invite" card with a Sign out button — no CEO claim option. (The `ClaimCeoCard` export stays in `ceo.index.tsx` so nothing else breaks; we simply stop rendering it on the index gateway.)
+Historical submissions keep their old `grade` values (won't retroactively change). New gradings use the new scale. Aggregates (averagePercent, passRate) automatically use the new mapping going forward via `letter_grade`.
 
-### 3. Lag when switching browser tabs
+---
 
-What's happening: every tab has the inactivity hook running and other listeners. Combined with React Query refetch behavior, tab-switching can stutter. Two cheap wins:
+## 2. Pie/donut charts (per-course breakdown)
 
-- Inactivity hook listeners use `mousemove` + `scroll` on `window` with no throttle — they fire hundreds of times during normal use. Throttle the activity-reset to once every ~1000ms so React state/timers aren't poked constantly.
-- The hook also runs on EVERY page when enabled. Confirm it's only mounted on the lesson player route (it already is — `member.courses.$id.tsx`). Keep that scope; do not add it elsewhere.
+`recharts` is already installed.
 
-Throttle implementation: store `lastActivity.current` and bail out of `reset()` if the previous reset ran less than 1000ms ago AND the warning isn't open. This keeps the timer accurate (still resets every second of activity) without thrashing.
+**New component**: `src/components/grading/CourseGradePie.tsx`
+- Donut chart showing distribution of A+/A/B/C counts per course OR average % per course.
+- Two modes via prop: `mode: "distribution"` (slices = letters) or `mode: "courses"` (slices = course averages with course title labels).
+- Color tokens: emerald (A+), sky (A), amber (B), rose (C) — match existing `letterColorClass`.
 
-## Files to edit
+**Member view** — `src/components/MemberGradeReport.tsx` (also rendered inside member.grades.tsx and ceo drill-in):
+- Above the existing "Per-course breakdown" cards, add a 2-column grid:
+  - Left: donut of overall letter distribution.
+  - Right: donut of average % by course (one slice per course).
+- Center label of donut shows total avg % (the "complete center").
 
-- `src/hooks/use-inactivity-logout.tsx`
-  - Change `supabase.auth.signOut()` → `supabase.auth.signOut({ scope: 'local' })`
-  - Add 1s throttle inside `reset()` for passive events (mousemove/scroll); keep keydown/click/touch immediate.
-- `src/routes/index.tsx`
-  - Remove `<ClaimCeoCard …/>` and its import; keep only the "Waiting for an invite" card for the no-role state.
+**CEO view** — `src/routes/ceo.grades.tsx`:
+- In the existing Overview tab add a "Cohort overview" donut: average % per course across all members, with a center showing org-wide average.
+- Drill-in dialog already uses `MemberGradeReport`, so member donuts appear there for free.
 
-## Out of scope
+---
 
-- No DB/migration changes.
-- No changes to the 3-min idle / 30s warning timing (kept as you set it).
-- No change to the per-tab session storage adapter — it already works; the bug was the global sign-out scope undoing it.
+## 3. Report export template (all members + incharges with grades)
+
+**Approach**: Add Excel (.xlsx) export using `xlsx` (SheetJS) — install via `bun add xlsx`. CSV export already exists per-member; this is a roll-up.
+
+**New route**: `src/routes/ceo.grades.report.tsx` already exists for printable; we'll add an "Export full report" button on `ceo.grades.tsx` that generates a multi-sheet workbook:
+
+Sheets:
+1. **Summary** — one row per person (members + incharges): Name, Role, Franchise, Total Graded, Avg %, Pass %, A+/A/B/C counts, Last Graded.
+2. **Members - Detail** — one row per submission for every member: Member, Franchise, Course, Lesson, Letter, %, Status, Reviewer, Submitted, Graded, Feedback.
+3. **By Course** — pivot: rows = members, columns = courses, cells = avg % (with overall column).
+4. **Incharges** — list of incharges with their franchise, member count, franchise avg %, pass rate.
+
+Filename: `grades-report-YYYY-MM-DD.xlsx`.
+
+Also keep current per-member CSV export untouched.
+
+A matching PDF "printable" version stays available via the existing `/ceo/grades/report` route — we'll add a "Download PDF" affordance that just uses the browser print dialog (already in place).
+
+---
+
+## Files to change/create
+
+Modify:
+- `src/lib/grade-utils.ts` (scale + helper for chart data)
+- `src/components/grading/LessonReviewDialog.tsx` (scale + labels)
+- `src/components/grading/ProjectGradeDialog.tsx` (scale)
+- `src/components/MemberGradeReport.tsx` (add donuts)
+- `src/routes/ceo.grades.tsx` (cohort donut + export button)
+
+Create:
+- `src/components/grading/CourseGradePie.tsx`
+- `src/lib/grade-export.ts` (workbook builder)
+
+Install:
+- `xlsx`
+
+No DB migrations. Old `grade` numeric values on past submissions stay as-is; new ones use the new scale.
+
+---
+
+## Open question
+
+Should past submissions be **retroactively re-scored** to the new scale (UPDATE submissions SET grade = new_value WHERE letter_grade = ...)? I'd default to **no** (preserve audit history) unless you confirm yes — let me know in the approval.

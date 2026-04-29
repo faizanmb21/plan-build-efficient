@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Download, Search, GraduationCap } from "lucide-react";
+import { Loader2, Download, Search, GraduationCap, FileSpreadsheet } from "lucide-react";
 import {
   aggregateGrades,
   toCsv,
@@ -33,6 +33,8 @@ import {
   type GradeAggregate,
 } from "@/lib/grade-utils";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
+import { CourseGradePie, courseColor } from "@/components/grading/CourseGradePie";
+import { buildGradesWorkbook, downloadGradesWorkbook } from "@/lib/grade-export";
 
 export const Route = createFileRoute("/ceo/grades")({
   component: GradesHub,
@@ -49,6 +51,7 @@ interface Franchise {
 }
 interface LessonShape {
   id: string;
+  title: string;
   sections: { course_id: string; courses: { id: string; title: string } | null } | null;
 }
 
@@ -59,6 +62,8 @@ function GradesHub() {
   const [franchises, setFranchises] = React.useState<Franchise[]>([]);
   const [lessonMap, setLessonMap] = React.useState<Map<string, LessonShape>>(new Map());
   const [memberRoleIds, setMemberRoleIds] = React.useState<Set<string>>(new Set());
+  const [inchargeRoleIds, setInchargeRoleIds] = React.useState<Set<string>>(new Set());
+  const [reviewerNames, setReviewerNames] = React.useState<Map<string, string | null>>(new Map());
 
   const [search, setSearch] = React.useState("");
   const [franchiseFilter, setFranchiseFilter] = React.useState<string>("all");
@@ -76,25 +81,36 @@ function GradesHub() {
           .order("reviewed_at", { ascending: false, nullsFirst: false }),
         supabase.from("profiles").select("id,full_name,franchise_id"),
         supabase.from("franchises").select("id,name").is("archived_at", null),
-        supabase.from("user_roles").select("user_id,role").eq("role", "member"),
+        supabase.from("user_roles").select("user_id,role").in("role", ["member", "incharge"]),
       ]);
 
       const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
       const { data: lessons } = lessonIds.length
         ? await supabase
             .from("lessons")
-            .select("id,sections(course_id,courses(id,title))")
+            .select("id,title,sections(course_id,courses(id,title))")
             .in("id", lessonIds)
         : { data: [] as unknown[] };
 
       const lm = new Map<string, LessonShape>();
       (lessons as LessonShape[] | null | undefined)?.forEach((l) => lm.set(l.id, l));
 
+      const memberIds = new Set<string>();
+      const inchargeIds = new Set<string>();
+      (roles ?? []).forEach((r) => {
+        if (r.role === "member") memberIds.add(r.user_id);
+        else if (r.role === "incharge") inchargeIds.add(r.user_id);
+      });
+      const profMap = new Map<string, string | null>();
+      (profs ?? []).forEach((p) => profMap.set(p.id, p.full_name));
+
       setSubmissions((subs ?? []) as GradedRow[]);
       setProfiles((profs ?? []) as Profile[]);
       setFranchises((frs ?? []) as Franchise[]);
       setLessonMap(lm);
-      setMemberRoleIds(new Set((roles ?? []).map((r) => r.user_id)));
+      setMemberRoleIds(memberIds);
+      setInchargeRoleIds(inchargeIds);
+      setReviewerNames(profMap);
       setLoading(false);
     })();
   }, []);
@@ -265,6 +281,25 @@ function GradesHub() {
     downloadCsv("grades-by-course.csv", csv);
   }
 
+  function exportFullReport() {
+    const wb = buildGradesWorkbook({
+      profiles,
+      franchises,
+      memberRoleIds,
+      inchargeRoleIds,
+      submissions,
+      lessonMap,
+      reviewerNames,
+    });
+    downloadGradesWorkbook(wb);
+  }
+
+  // Org-wide aggregate across all members
+  const cohortAgg = React.useMemo(() => {
+    const memberSubs = submissions.filter((s) => memberRoleIds.has(s.user_id));
+    return aggregateGrades(memberSubs);
+  }, [submissions, memberRoleIds]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -279,13 +314,42 @@ function GradesHub() {
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
           <GraduationCap className="h-5 w-5" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-semibold">Grading overview</h1>
           <p className="text-sm text-muted-foreground">
             Letter grades across the academy. Drill into any member, franchise, or pillar.
           </p>
         </div>
+        <Button onClick={exportFullReport} className="gap-2">
+          <FileSpreadsheet className="h-4 w-4" /> Export full report (.xlsx)
+        </Button>
       </div>
+
+      {/* Cohort overview donut */}
+      <Card className="bg-white/5 border-white/10">
+        <CardHeader>
+          <CardTitle className="text-base">Cohort overview</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <CourseGradePie
+              data={courseRows.map((c, i) => ({
+                name: c.course_title,
+                value: c.agg.averagePercent,
+                color: courseColor(i),
+              }))}
+              centerLabel={`${cohortAgg.averagePercent}%`}
+              centerSub="overall avg"
+            />
+            <div className="grid grid-cols-2 gap-2 self-center">
+              <Stat label="Members graded" value={String(new Set(submissions.filter(s => memberRoleIds.has(s.user_id) && s.letter_grade).map(s => s.user_id)).size)} />
+              <Stat label="Total graded" value={String(cohortAgg.total)} />
+              <Stat label="Pass rate" value={`${cohortAgg.passRate}%`} />
+              <Stat label="Redo rate" value={`${cohortAgg.redoRate}%`} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="members">
         <TabsList>
@@ -500,6 +564,15 @@ function Distribution({ agg }: { agg: GradeAggregate }) {
         <Badge variant="outline" className={letterColorClass("B")}>{agg.b}</Badge>
         <Badge variant="outline" className={letterColorClass("C")}>{agg.c}</Badge>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+      <div className="text-xl font-semibold tabular-nums">{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
     </div>
   );
 }
