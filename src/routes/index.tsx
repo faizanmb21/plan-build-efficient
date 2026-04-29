@@ -40,7 +40,7 @@ function Index() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/5 via-background to-accent/5 p-4">
         <div className="w-full max-w-md space-y-4">
-          <ClaimCeoCard onClaimed={() => refresh().then(() => navigate({ to: "/ceo" }))} />
+          
           <Card>
             <CardHeader>
               <CardTitle>Waiting for an invite</CardTitle>
