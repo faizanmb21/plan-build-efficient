@@ -567,3 +567,12 @@ function Distribution({ agg }: { agg: GradeAggregate }) {
     </div>
   );
 }
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+      <div className="text-xl font-semibold tabular-nums">{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+    </div>
+  );
+}
