@@ -5,11 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, BookOpen, Users, FileCheck, Sparkles, ArrowRight, AlertTriangle } from "lucide-react";
+import { Building2, BookOpen, Users, FileCheck, Sparkles, ArrowRight, AlertTriangle, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
-import { PillarFlower } from "@/components/PillarFlower";
-import { getPillarScoresForUsers } from "@/lib/pillar-data";
-import type { PillarScores } from "@/lib/pillars";
+import { GradePieCard } from "@/components/grading/GradePieCard";
+import { fetchGradeSummaries, combineAggregates } from "@/lib/grade-summary";
+import type { GradeAggregate } from "@/lib/grade-utils";
+import { emptyAggregate } from "@/lib/grade-utils";
 
 export const Route = createFileRoute("/ceo/")({
   component: CeoDashboard,
