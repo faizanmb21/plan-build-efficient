@@ -314,7 +314,12 @@ function GradesHub() {
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
           <GraduationCap className="h-5 w-5" />
         </div>
-        <div className="flex-1" />
+        <div className="flex-1">
+          <h1 className="text-2xl font-semibold">Grading overview</h1>
+          <p className="text-sm text-muted-foreground">
+            Letter grades across the academy. Drill into any member, franchise, or pillar.
+          </p>
+        </div>
         <Button onClick={exportFullReport} className="gap-2">
           <FileSpreadsheet className="h-4 w-4" /> Export full report (.xlsx)
         </Button>
