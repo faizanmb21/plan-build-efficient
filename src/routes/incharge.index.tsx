@@ -4,10 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ClipboardList, Users, ArrowRight } from "lucide-react";
-import { PillarFlower } from "@/components/PillarFlower";
-import { getPillarScoresForUsers } from "@/lib/pillar-data";
-import type { PillarScores } from "@/lib/pillars";
+import { AlertTriangle, ClipboardList, Users, ArrowRight, GraduationCap } from "lucide-react";
+import { CourseGradePie, LETTER_COLORS, type PieSlice } from "@/components/grading/CourseGradePie";
+import {
+  aggregateGrades,
+  emptyAggregate,
+  type GradedRow,
+  type GradeAggregate,
+} from "@/lib/grade-utils";
 
 export const Route = createFileRoute("/incharge/")({
   component: InchargeDashboard,
@@ -40,11 +44,20 @@ interface Member {
   full_name: string | null;
 }
 
+function buildSlices(agg: GradeAggregate): PieSlice[] {
+  return [
+    { name: "A+", value: agg.aPlus, color: LETTER_COLORS["A+"] },
+    { name: "A",  value: agg.a,     color: LETTER_COLORS["A"] },
+    { name: "B",  value: agg.b,     color: LETTER_COLORS["B"] },
+    { name: "C",  value: agg.c,     color: LETTER_COLORS["C"] },
+  ];
+}
+
 function InchargeDashboard() {
   const { profile, roles } = useAuth();
   const [members, setMembers] = React.useState<Member[]>([]);
-  const [franchiseScores, setFranchiseScores] = React.useState<PillarScores | null>(null);
-  const [perMember, setPerMember] = React.useState<Record<string, PillarScores>>({});
+  const [perMember, setPerMember] = React.useState<Record<string, GradeAggregate>>({});
+  const [franchiseAgg, setFranchiseAgg] = React.useState<GradeAggregate>(emptyAggregate());
   const [pendingCount, setPendingCount] = React.useState<number>(0);
   const [franchiseName, setFranchiseName] = React.useState<string | null>(null);
 
@@ -68,48 +81,74 @@ function InchargeDashboard() {
           if (!cancelled) {
             setMembers([]);
             setPendingCount(0);
-            setFranchiseScores(Array.from({ length: 12 }, () => 0) as PillarScores);
             setPerMember({});
+            setFranchiseAgg(emptyAggregate());
           }
           return;
         }
 
-      const [{ data: profs }, { data: franchise }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, full_name")
-          .eq("franchise_id", franchiseId),
-        supabase.from("franchises").select("name").eq("id", franchiseId).maybeSingle(),
-      ]);
-      const memberList = (profs ?? []) as Member[];
-      const userIds = memberList.map((m) => m.id);
-      const { count: pending } = userIds.length
-        ? await supabase
-            .from("submissions")
-            .select("id", { count: "exact", head: true })
-            .eq("status", "pending")
-            .in("user_id", userIds)
-        : { count: 0 };
-      if (cancelled) return;
-      setMembers(memberList);
-      setPendingCount(pending ?? 0);
-      setFranchiseName(franchise?.name ?? franchiseName);
+        // Pull members + franchise meta in parallel
+        const [{ data: profs }, { data: franchise }, { data: roleRows }] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, full_name")
+            .eq("franchise_id", franchiseId),
+          supabase.from("franchises").select("name").eq("id", franchiseId).maybeSingle(),
+          supabase
+            .from("user_roles")
+            .select("user_id, role")
+            .eq("franchise_id", franchiseId)
+            .eq("role", "member"),
+        ]);
+        const memberIdSet = new Set((roleRows ?? []).map((r) => r.user_id));
+        const memberList = (profs ?? [])
+          .filter((p) => memberIdSet.has(p.id))
+          .map((p) => ({ id: p.id, full_name: p.full_name })) as Member[];
+        memberList.sort((a, b) =>
+          (a.full_name ?? "").localeCompare(b.full_name ?? ""),
+        );
+        const userIds = memberList.map((m) => m.id);
 
-      const fs = await getPillarScoresForUsers(userIds);
-      if (cancelled) return;
-      setFranchiseScores(fs);
+        // Pending submissions count
+        const { count: pending } = userIds.length
+          ? await supabase
+              .from("submissions")
+              .select("id", { count: "exact", head: true })
+              .eq("status", "pending")
+              .in("user_id", userIds)
+          : { count: 0 };
 
-      // Per-member flowers
-      const entries = await Promise.all(
-        memberList.map(async (m) => [m.id, await getPillarScoresForUsers([m.id])] as const),
-      );
-      if (cancelled) return;
-      setPerMember(Object.fromEntries(entries));
+        // All graded submissions for these members
+        const { data: subs } = userIds.length
+          ? await supabase
+              .from("submissions")
+              .select(
+                "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
+              )
+              .in("user_id", userIds)
+          : { data: [] };
+
+        if (cancelled) return;
+
+        const allRows = (subs ?? []) as GradedRow[];
+        const byMember: Record<string, GradedRow[]> = {};
+        for (const m of memberList) byMember[m.id] = [];
+        for (const r of allRows) {
+          if (byMember[r.user_id]) byMember[r.user_id].push(r);
+        }
+        const aggMap: Record<string, GradeAggregate> = {};
+        for (const m of memberList) aggMap[m.id] = aggregateGrades(byMember[m.id] ?? []);
+
+        setMembers(memberList);
+        setPendingCount(pending ?? 0);
+        setFranchiseName(franchise?.name ?? null);
+        setPerMember(aggMap);
+        setFranchiseAgg(aggregateGrades(allRows));
       } catch (e) {
         console.error("Incharge dashboard failed", e);
         if (!cancelled) {
-          setFranchiseScores(Array.from({ length: 12 }, () => 0) as PillarScores);
           setPerMember({});
+          setFranchiseAgg(emptyAggregate());
         }
       }
     })();
@@ -118,6 +157,8 @@ function InchargeDashboard() {
     };
   }, [profile?.franchise_id, roles]);
 
+  const franchiseSlices = buildSlices(franchiseAgg);
+
   return (
     <div className="space-y-8">
       <header>
@@ -125,11 +166,12 @@ function InchargeDashboard() {
           {profile?.full_name?.split(" ")[0] ?? "Incharge"}'s franchise
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Track {franchiseName ? `${franchiseName}'s` : "your team's"} mastery across all 12 IRM Academy skill pillars.
+          Grade distribution across {franchiseName ?? "your franchise"}—each pie shows the
+          A+ / A / B / C mix for one member.
         </p>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile
           label="Team members"
           value={members.length}
@@ -143,51 +185,69 @@ function InchargeDashboard() {
           to="/incharge/reviews"
           gradient="from-[oklch(0.78_0.16_75)] to-[oklch(0.62_0.20_25)]"
         />
+        <StatTile
+          label="Graded this franchise"
+          value={franchiseAgg.total}
+          icon={GraduationCap}
+          gradient="from-[oklch(0.62_0.18_145)] to-[oklch(0.55_0.18_205)]"
+        />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-display text-xl">Franchise mastery</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Average across {members.length} member{members.length === 1 ? "" : "s"}.
-            Outer (darker) ring = mastered.
-          </p>
-        </CardHeader>
-        <CardContent className="flex justify-center">
-          {franchiseScores ? (
-            <PillarFlower scores={franchiseScores} size={400} showLegend />
-          ) : (
-            <div className="h-[400px] w-[400px] flex items-center justify-center text-sm text-muted-foreground">
-              Loading…
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="font-display text-xl">Franchise grades</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {franchiseAgg.total} graded submission{franchiseAgg.total === 1 ? "" : "s"}
+                {franchiseAgg.total > 0 && (
+                  <> · avg {franchiseAgg.averagePercent}% · pass rate {franchiseAgg.passRate}%</>
+                )}
+              </p>
             </div>
-          )}
+            <LegendRow />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="mx-auto max-w-sm">
+            <CourseGradePie
+              data={franchiseSlices}
+              centerLabel={`${franchiseAgg.averagePercent}%`}
+              centerSub="avg score"
+              height={260}
+            />
+          </div>
         </CardContent>
       </Card>
 
       <section className="space-y-3">
-        <h2 className="font-display text-xl font-semibold">Team mastery — individual</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-xl font-semibold">Per-member grades</h2>
+          <LegendRow />
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {members.map((m) => {
-            const ms = perMember[m.id];
+            const agg = perMember[m.id] ?? emptyAggregate();
+            const slices = buildSlices(agg);
             return (
               <Card key={m.id} className="hover-lift">
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-1">
                   <CardTitle className="text-sm font-medium">
                     {m.full_name ?? "Unnamed member"}
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {agg.total === 0
+                      ? "No grades yet"
+                      : `${agg.total} graded · avg ${agg.averagePercent}%`}
+                  </p>
                 </CardHeader>
-                <CardContent className="flex justify-center pt-0">
-                  {ms ? (
-                    <PillarFlower
-                      scores={ms}
-                      size={200}
-                      showLabels={false}
-                    />
-                  ) : (
-                    <div className="h-[200px] w-[200px] flex items-center justify-center text-xs text-muted-foreground">
-                      …
-                    </div>
-                  )}
+                <CardContent className="pt-0">
+                  <CourseGradePie
+                    data={slices}
+                    centerLabel={agg.total === 0 ? "—" : `${agg.averagePercent}%`}
+                    centerSub={agg.total === 0 ? "no data" : "avg"}
+                    height={180}
+                  />
                 </CardContent>
               </Card>
             );
@@ -201,6 +261,28 @@ function InchargeDashboard() {
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+function LegendRow() {
+  const items: { letter: string }[] = [
+    { letter: "A+" },
+    { letter: "A" },
+    { letter: "B" },
+    { letter: "C" },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+      {items.map((i) => (
+        <span key={i.letter} className="inline-flex items-center gap-1.5">
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-sm"
+            style={{ backgroundColor: LETTER_COLORS[i.letter] }}
+          />
+          {i.letter}
+        </span>
+      ))}
     </div>
   );
 }
