@@ -1,63 +1,80 @@
 ## Goal
 
-On the incharge dashboard:
-1. Remove the 12-pillar flower visualizations (both franchise-wide and per-member).
-2. Replace them with grade-based **pie charts** (donuts) showing the letter-grade distribution (A+ / A / B / C) per member, plus one franchise-wide pie.
-3. Seed the **IRM Lahore** franchise so the chart has data: ensure ~10 members and create graded submissions per member with a varied mix so the pies look meaningful.
+Kill the 12-pillar "flower" everywhere it still appears and replace it with a single, consistent grade-percentage visualization. Every dashboard — CEO home, CEO franchises grid, CEO franchise detail, member home, and (already done) incharge dashboard — will speak the same language: **letter-grade pies (A+ / A / B / C) and an average %**, computed from `submissions.letter_grade`.
 
-The CEO dashboard's flower stays untouched (only the incharge view is changed).
+## Why
 
-## Why pie charts
+The flower shows lesson-completion across 12 abstract pillars. The grading system you actually use is A+ (90), A (85), B (75), C (redo / 0). Two unrelated mental models on the same screen confused you twice already. From now on, performance = letter-grade mix + average %.
 
-The current flowers show "pillar mastery" — an abstract aggregate that has nothing to do with the new A+/A/B/C grading the incharge actually issues. A donut showing how many of a member's submissions are A+/A/B/C maps 1-to-1 with what the incharge graded, which is what they want to see at a glance.
+## What gets removed
 
-## Changes
+- `src/components/PillarFlower.tsx` — delete file.
+- `src/lib/pillar-data.ts` — delete file.
+- `src/lib/pillars.ts` — delete file (no other consumers).
+- All `PillarFlower` / `getPillarScoresForUsers` / `PillarScores` imports and JSX in:
+  - `src/routes/ceo.index.tsx`
+  - `src/routes/ceo.franchises.index.tsx`
+  - `src/routes/ceo.franchises.$id.tsx`
+  - `src/routes/member.index.tsx`
 
-### 1. `src/routes/incharge.index.tsx` — swap visualizations
+(`src/routes/incharge.index.tsx` is already done from last turn.)
 
-- Remove imports of `PillarFlower`, `getPillarScoresForUsers`, `PillarScores`.
-- Remove the `franchiseScores` and `perMember` state and the calls that fill them.
-- Add a fetch for **submissions** for the franchise's members:
-  - `submissions` rows where `user_id IN (memberIds)` and `status != 'pending'` and `letter_grade IS NOT NULL`.
-- Use `aggregateGrades` from `@/lib/grade-utils` to compute counts per member and franchise-wide.
-- Replace the "Franchise mastery" card with a **"Franchise grades"** card containing one `CourseGradePie` showing total A+/A/B/C across all members, with center label = average %.
-- Replace each per-member flower card with a `CourseGradePie` showing that member's A+/A/B/C distribution; below the donut show: total graded count, average %, pass rate. Empty members get a "No grades yet" placeholder.
-- Add a small legend chip row (A+ green, A blue, B amber, C red) using `LETTER_COLORS` from `CourseGradePie.tsx`.
-- Update the page subtitle from "mastery across all 12 IRM Academy skill pillars" to something like "grades issued to your team".
+## What replaces it
 
-### 2. Seed graded submissions for IRM Lahore
+A small shared helper + the existing `CourseGradePie` donut.
 
-Lahore franchise (`269c91e9-5ceb-4872-80ac-7267b4a30d32`) already has these 8 members:
-Abdul Rehman, Arham Siddiqui, Ayesha Tariq, Fatima Noor, Iqra Yousuf, Maaz, Mehwish Anwar, Owais Mirza
-(plus the Lahore Incharge).
+### New helper: `src/lib/grade-summary.ts`
 
-To reach 10 members, insert 2 new profiles + member roles for Lahore:
-- "Hamna Tariq"
-- "Zara Khalid"
+One function: `fetchGradeSummaries(userIds: string[])`. Pulls `submissions` (id, user_id, status, letter_grade, grade, reviewed_at) for those users in one query and returns:
 
-(Created as `profiles` rows with synthetic UUIDs and matching `user_roles` rows with role `member` and `franchise_id` = Lahore. No `auth.users` row is created — these are display-only seed members for the incharge view, matching how the existing Lahore members appear.)
-
-Then, for each of the 10 Lahore members, insert 6–10 graded `submissions` rows against existing lessons from the two published courses (Capcut PC Full Editing Course 2026, Graphic Design Basics) with a deliberate mix so the pies look distinct. Approximate distribution per member:
-
-```text
-Top performers (3):  ~5 A+, 3 A, 1 B, 0 C
-Strong (3):          2 A+, 4 A, 2 B, 0 C
-Mid (3):             1 A+, 2 A, 3 B, 1 C
-Struggling (1):      0 A+, 1 A, 2 B, 4 C
+```ts
+Map<string /* userId */, GradeAggregate>  // from grade-utils
 ```
 
-Each row sets: `user_id`, `lesson_id`, `status='approved'` (or `'revision'` for C), `letter_grade`, `grade` (mapped via LETTER_TO_PERCENT), `reviewed_by` = Lahore Incharge id, `reviewed_at` = recent timestamps spread over the last 30 days, `file_url` = a placeholder string. This is done as a SQL migration.
+Plus `aggregateMany(rows)` to roll an arbitrary set of rows into one `GradeAggregate`. Used everywhere we need org-wide / franchise-wide totals.
 
-### 3. Cleanup
+### New component: `src/components/grading/GradePieCard.tsx`
 
-- Leave `PillarFlower` component and pillar libs in place (still used by CEO dashboard and possibly other views).
-- No changes to `ceo.grades.tsx`, `MemberGradeReport.tsx`, or grade dialogs.
+A self-contained card — donut + average %, total count, pass rate, and a 4-chip A+/A/B/C legend underneath. Takes `{ title, agg, size? }`. Used on every dashboard so the look is identical.
+
+## Per-page changes
+
+### 1. `src/routes/ceo.index.tsx` (CEO home)
+
+Replace the "12-pillar mastery" Card with an **"Academy performance"** Card containing one big `GradePieCard` (org-wide, all members across all franchises). Add a small grid below it with one mini `GradePieCard` per franchise so the CEO sees franchise-by-franchise performance at a glance. Stat tiles unchanged.
+
+### 2. `src/routes/ceo.franchises.index.tsx` (Franchises grid)
+
+In each franchise card, replace the small flower with a small `GradePieCard` (size ~140) showing that franchise's average % in the donut center, plus member count below it (already there). The "Click for more details" CTA stays.
+
+### 3. `src/routes/ceo.franchises.$id.tsx` (Franchise detail)
+
+- Top "Franchise mastery" card → **"Franchise grades"** card with one large donut + average % + pass rate, and a stacked horizontal bar showing the A+/A/B/C breakdown.
+- Per-member cards: replace the inline 150px flower with a 130px `GradePieCard` (no title — the member name is already in the card header). Keep the existing course-progress and attendance tiles untouched.
+- Remove `PILLARS`, `PillarScores`, `EMPTY_SCORES`, `scoresForUser`, and the entire pillar lessons-by-course resolution block (lines ~123–151, ~215–225, ~270–275). Per-member `scores` field on `MemberDetail` becomes `gradeAgg: GradeAggregate`.
+
+### 4. `src/routes/member.index.tsx` (Member home)
+
+The right-rail "Skill mastery" card becomes "**My grades**":
+- Donut of A+/A/B/C from this member's own submissions.
+- Center = their average %.
+- Below: "X graded · pass rate Y%" and the existing "View grade report" button.
+- Drop `pillarScores`, `getPillarScoresForUsers`, `PillarFlower` imports.
+
+### 5. `src/routes/incharge.index.tsx`
+
+Already pies. No change.
 
 ## Files touched
 
-- **edit** `src/routes/incharge.index.tsx` — replace flower with pie charts, fetch submissions instead of pillar scores.
-- **migration** — insert 2 new Lahore members (profiles + user_roles) and ~80 graded submissions across the 10 Lahore members.
+- **delete**: `src/components/PillarFlower.tsx`, `src/lib/pillar-data.ts`, `src/lib/pillars.ts`
+- **create**: `src/lib/grade-summary.ts`, `src/components/grading/GradePieCard.tsx`
+- **edit**: `src/routes/ceo.index.tsx`, `src/routes/ceo.franchises.index.tsx`, `src/routes/ceo.franchises.$id.tsx`, `src/routes/member.index.tsx`
 
-## Open question
+## Sanity check after build
 
-The 2 new seed members (Hamna Tariq, Zara Khalid) will be profile-only (no login), same as how the rest of the Lahore demo members appear. If you'd rather have only the existing 8 Lahore members get grades (no new seed members), say so and I'll skip step 2's profile insert and just seed grades for the 8.
+After the edits I'll grep for any leftover `PillarFlower`, `PillarScores`, `pillar-data`, or `@/lib/pillars` imports — if any survive, the build will break, so they must all be gone.
+
+## One small open call
+
+For the CEO home "per-franchise mini pie" grid: should each mini pie be **clickable** and link to that franchise's detail page? I think yes (matches the existing stat tiles which are all links) — I'll do that unless you want them static.
