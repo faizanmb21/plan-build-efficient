@@ -1,87 +1,63 @@
 ## Goal
 
-Three changes to the grading system:
-1. Re-map letter grades to new percentages (A+=90, A=85, B=75, C=0/redo).
-2. Show per-course performance as a pie/donut chart for each member (member view) and a complete center for the CEO.
-3. Add a "normal template" report export covering all members and incharges with their grades.
+On the incharge dashboard:
+1. Remove the 12-pillar flower visualizations (both franchise-wide and per-member).
+2. Replace them with grade-based **pie charts** (donuts) showing the letter-grade distribution (A+ / A / B / C) per member, plus one franchise-wide pie.
+3. Seed the **IRM Lahore** franchise so the chart has data: ensure ~10 members and create graded submissions per member with a varied mix so the pies look meaningful.
 
----
+The CEO dashboard's flower stays untouched (only the incharge view is changed).
 
-## 1. New grade scale
+## Why pie charts
 
-Currently: A+=100, A=80, B=60, C=0.
-New: **A+=90, A=85, B=75, C=0 (redo)**.
+The current flowers show "pillar mastery" — an abstract aggregate that has nothing to do with the new A+/A/B/C grading the incharge actually issues. A donut showing how many of a member's submissions are A+/A/B/C maps 1-to-1 with what the incharge graded, which is what they want to see at a glance.
 
-Update the single source of truth + duplicates:
-- `src/lib/grade-utils.ts` — `LETTER_TO_PERCENT` and the inline ternary inside `aggregateGrades`.
-- `src/components/grading/LessonReviewDialog.tsx` — `LETTER_GRADE_MAP` numeric values + label text + the AI-suggested mapping (`s >= ? "A+" : ...`) thresholds.
-- `src/components/grading/ProjectGradeDialog.tsx` — `LETTER_MAP` numeric values.
+## Changes
 
-Historical submissions keep their old `grade` values (won't retroactively change). New gradings use the new scale. Aggregates (averagePercent, passRate) automatically use the new mapping going forward via `letter_grade`.
+### 1. `src/routes/incharge.index.tsx` — swap visualizations
 
----
+- Remove imports of `PillarFlower`, `getPillarScoresForUsers`, `PillarScores`.
+- Remove the `franchiseScores` and `perMember` state and the calls that fill them.
+- Add a fetch for **submissions** for the franchise's members:
+  - `submissions` rows where `user_id IN (memberIds)` and `status != 'pending'` and `letter_grade IS NOT NULL`.
+- Use `aggregateGrades` from `@/lib/grade-utils` to compute counts per member and franchise-wide.
+- Replace the "Franchise mastery" card with a **"Franchise grades"** card containing one `CourseGradePie` showing total A+/A/B/C across all members, with center label = average %.
+- Replace each per-member flower card with a `CourseGradePie` showing that member's A+/A/B/C distribution; below the donut show: total graded count, average %, pass rate. Empty members get a "No grades yet" placeholder.
+- Add a small legend chip row (A+ green, A blue, B amber, C red) using `LETTER_COLORS` from `CourseGradePie.tsx`.
+- Update the page subtitle from "mastery across all 12 IRM Academy skill pillars" to something like "grades issued to your team".
 
-## 2. Pie/donut charts (per-course breakdown)
+### 2. Seed graded submissions for IRM Lahore
 
-`recharts` is already installed.
+Lahore franchise (`269c91e9-5ceb-4872-80ac-7267b4a30d32`) already has these 8 members:
+Abdul Rehman, Arham Siddiqui, Ayesha Tariq, Fatima Noor, Iqra Yousuf, Maaz, Mehwish Anwar, Owais Mirza
+(plus the Lahore Incharge).
 
-**New component**: `src/components/grading/CourseGradePie.tsx`
-- Donut chart showing distribution of A+/A/B/C counts per course OR average % per course.
-- Two modes via prop: `mode: "distribution"` (slices = letters) or `mode: "courses"` (slices = course averages with course title labels).
-- Color tokens: emerald (A+), sky (A), amber (B), rose (C) — match existing `letterColorClass`.
+To reach 10 members, insert 2 new profiles + member roles for Lahore:
+- "Hamna Tariq"
+- "Zara Khalid"
 
-**Member view** — `src/components/MemberGradeReport.tsx` (also rendered inside member.grades.tsx and ceo drill-in):
-- Above the existing "Per-course breakdown" cards, add a 2-column grid:
-  - Left: donut of overall letter distribution.
-  - Right: donut of average % by course (one slice per course).
-- Center label of donut shows total avg % (the "complete center").
+(Created as `profiles` rows with synthetic UUIDs and matching `user_roles` rows with role `member` and `franchise_id` = Lahore. No `auth.users` row is created — these are display-only seed members for the incharge view, matching how the existing Lahore members appear.)
 
-**CEO view** — `src/routes/ceo.grades.tsx`:
-- In the existing Overview tab add a "Cohort overview" donut: average % per course across all members, with a center showing org-wide average.
-- Drill-in dialog already uses `MemberGradeReport`, so member donuts appear there for free.
+Then, for each of the 10 Lahore members, insert 6–10 graded `submissions` rows against existing lessons from the two published courses (Capcut PC Full Editing Course 2026, Graphic Design Basics) with a deliberate mix so the pies look distinct. Approximate distribution per member:
 
----
+```text
+Top performers (3):  ~5 A+, 3 A, 1 B, 0 C
+Strong (3):          2 A+, 4 A, 2 B, 0 C
+Mid (3):             1 A+, 2 A, 3 B, 1 C
+Struggling (1):      0 A+, 1 A, 2 B, 4 C
+```
 
-## 3. Report export template (all members + incharges with grades)
+Each row sets: `user_id`, `lesson_id`, `status='approved'` (or `'revision'` for C), `letter_grade`, `grade` (mapped via LETTER_TO_PERCENT), `reviewed_by` = Lahore Incharge id, `reviewed_at` = recent timestamps spread over the last 30 days, `file_url` = a placeholder string. This is done as a SQL migration.
 
-**Approach**: Add Excel (.xlsx) export using `xlsx` (SheetJS) — install via `bun add xlsx`. CSV export already exists per-member; this is a roll-up.
+### 3. Cleanup
 
-**New route**: `src/routes/ceo.grades.report.tsx` already exists for printable; we'll add an "Export full report" button on `ceo.grades.tsx` that generates a multi-sheet workbook:
+- Leave `PillarFlower` component and pillar libs in place (still used by CEO dashboard and possibly other views).
+- No changes to `ceo.grades.tsx`, `MemberGradeReport.tsx`, or grade dialogs.
 
-Sheets:
-1. **Summary** — one row per person (members + incharges): Name, Role, Franchise, Total Graded, Avg %, Pass %, A+/A/B/C counts, Last Graded.
-2. **Members - Detail** — one row per submission for every member: Member, Franchise, Course, Lesson, Letter, %, Status, Reviewer, Submitted, Graded, Feedback.
-3. **By Course** — pivot: rows = members, columns = courses, cells = avg % (with overall column).
-4. **Incharges** — list of incharges with their franchise, member count, franchise avg %, pass rate.
+## Files touched
 
-Filename: `grades-report-YYYY-MM-DD.xlsx`.
-
-Also keep current per-member CSV export untouched.
-
-A matching PDF "printable" version stays available via the existing `/ceo/grades/report` route — we'll add a "Download PDF" affordance that just uses the browser print dialog (already in place).
-
----
-
-## Files to change/create
-
-Modify:
-- `src/lib/grade-utils.ts` (scale + helper for chart data)
-- `src/components/grading/LessonReviewDialog.tsx` (scale + labels)
-- `src/components/grading/ProjectGradeDialog.tsx` (scale)
-- `src/components/MemberGradeReport.tsx` (add donuts)
-- `src/routes/ceo.grades.tsx` (cohort donut + export button)
-
-Create:
-- `src/components/grading/CourseGradePie.tsx`
-- `src/lib/grade-export.ts` (workbook builder)
-
-Install:
-- `xlsx`
-
-No DB migrations. Old `grade` numeric values on past submissions stay as-is; new ones use the new scale.
-
----
+- **edit** `src/routes/incharge.index.tsx` — replace flower with pie charts, fetch submissions instead of pillar scores.
+- **migration** — insert 2 new Lahore members (profiles + user_roles) and ~80 graded submissions across the 10 Lahore members.
 
 ## Open question
 
-Should past submissions be **retroactively re-scored** to the new scale (UPDATE submissions SET grade = new_value WHERE letter_grade = ...)? I'd default to **no** (preserve audit history) unless you confirm yes — let me know in the approval.
+The 2 new seed members (Hamna Tariq, Zara Khalid) will be profile-only (no login), same as how the rest of the Lahore demo members appear. If you'd rather have only the existing 8 Lahore members get grades (no new seed members), say so and I'll skip step 2's profile insert and just seed grades for the 8.
