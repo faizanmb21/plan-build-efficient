@@ -87,7 +87,7 @@ function MemberHome() {
         const { data: peers } = await supabase
           .from("profiles")
           .select("id")
-          .eq("franchise_id", profile.franchise_id);
+          .eq("franchise_id", profile.franchise_id!);
         const ids = (peers ?? []).map((p) => p.id);
         if (ids.length === 0) return;
         const summaries = await fetchGradeSummaries(ids);
