@@ -79,7 +79,7 @@ export function useInactivityLogout({
         duration: warnMs,
         action: {
           label: "Stay signed in",
-          onClick: () => reset(),
+          onClick: () => reset(true),
         },
       });
       logoutTimer.current = window.setTimeout(doLogout, warnMs);
@@ -88,7 +88,9 @@ export function useInactivityLogout({
     const doLogout = async () => {
       warningOpen.current = false;
       try {
-        await supabase.auth.signOut();
+        // scope: "local" -> only this tab is signed out. Other tabs/roles
+        // (e.g. CEO in another tab) keep their session.
+        await supabase.auth.signOut({ scope: "local" });
       } catch {
         /* noop */
       }
@@ -97,9 +99,7 @@ export function useInactivityLogout({
     };
 
     const onActivity = () => {
-      // While the warning is showing, only an explicit click on "Stay signed in"
-      // counts. Passive mouse drift should NOT cancel — but a real interaction
-      // (keydown/click/touch) should.
+      // Passive movement (mousemove/scroll) — throttled, ignored while warning shown
       if (warningOpen.current) return;
       reset();
     };
