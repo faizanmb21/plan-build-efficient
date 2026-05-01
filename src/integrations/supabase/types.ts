@@ -706,7 +706,7 @@ export type Database = {
       seed_demo_content: { Args: never; Returns: Json }
     }
     Enums: {
-      app_role: "ceo" | "incharge" | "member"
+      app_role: "ceo" | "incharge" | "member" | "qa"
       assignment_priority: "mandatory" | "recommended"
       course_status: "draft" | "published"
       lesson_type: "video" | "pdf" | "quiz" | "practical"
@@ -838,7 +838,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["ceo", "incharge", "member"],
+      app_role: ["ceo", "incharge", "member", "qa"],
       assignment_priority: ["mandatory", "recommended"],
       course_status: ["draft", "published"],
       lesson_type: ["video", "pdf", "quiz", "practical"],
