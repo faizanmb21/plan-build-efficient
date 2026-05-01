@@ -505,3 +505,324 @@ export function PillarCoverageBars({
     </Card>
   );
 }
+
+/* ================================================================== */
+/* === MOCKUP-MATCHED PRIMITIVES (KpiTile / CompletionBar / pills) === */
+/* ================================================================== */
+
+export type KpiTone = "indigo" | "emerald" | "sky" | "amber" | "rose" | "neutral";
+
+export function KpiTile({
+  label,
+  value,
+  subtitle,
+  tone = "indigo",
+}: {
+  label: string;
+  value: React.ReactNode;
+  subtitle?: React.ReactNode;
+  tone?: KpiTone;
+}) {
+  const valueCls =
+    tone === "emerald"
+      ? "text-emerald-400"
+      : tone === "sky"
+        ? "text-sky-400"
+        : tone === "amber"
+          ? "text-amber-400"
+          : tone === "rose"
+            ? "text-rose-400"
+            : tone === "neutral"
+              ? "text-foreground"
+              : "text-indigo-400";
+  return (
+    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
+      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+      <p className={`mt-1.5 font-display text-4xl font-bold tabular-nums leading-none ${valueCls}`}>
+        {value}
+      </p>
+      {subtitle && (
+        <p className="mt-2 text-xs text-muted-foreground">{subtitle}</p>
+      )}
+    </div>
+  );
+}
+
+/** Color-tiered horizontal completion bar with a right-aligned percentage. */
+export function CompletionBar({
+  pct,
+  width = 120,
+  showLabel = true,
+  muted = false,
+}: {
+  pct: number;
+  width?: number;
+  showLabel?: boolean;
+  muted?: boolean;
+}) {
+  const safe = Math.max(0, Math.min(100, Math.round(pct)));
+  const tone =
+    muted
+      ? "bg-white/15"
+      : safe >= 80
+        ? "bg-emerald-500"
+        : safe >= 65
+          ? "bg-sky-500"
+          : safe >= 45
+            ? "bg-amber-500"
+            : safe > 0
+              ? "bg-rose-500"
+              : "bg-white/10";
+  const labelCls =
+    muted
+      ? "text-muted-foreground"
+      : safe >= 80
+        ? "text-emerald-400"
+        : safe >= 65
+          ? "text-sky-400"
+          : safe >= 45
+            ? "text-amber-400"
+            : safe > 0
+              ? "text-rose-400"
+              : "text-muted-foreground";
+  return (
+    <div className="inline-flex items-center gap-2">
+      <div
+        className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]"
+        style={{ width }}
+      >
+        <div
+          className={`${tone} h-full rounded-full transition-all`}
+          style={{ width: `${Math.max(safe === 0 ? 0 : 4, safe)}%` }}
+        />
+      </div>
+      {showLabel && (
+        <span className={`tabular-nums text-xs font-medium ${labelCls}`}>
+          {safe}%
+        </span>
+      )}
+    </div>
+  );
+}
+
+export type StatusTone =
+  | "strong"
+  | "good"
+  | "watch"
+  | "at_risk"
+  | "on_track"
+  | "active"
+  | "slow"
+  | "completed"
+  | "in_progress"
+  | "due_soon"
+  | "overdue"
+  | "not_started"
+  | "pending"
+  | "new"
+  | "urgent"
+  | "review";
+
+const STATUS_CLASSES: Record<StatusTone, string> = {
+  strong: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  good: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+  watch: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  at_risk: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  on_track: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  active: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30",
+  slow: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  completed: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  in_progress: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30",
+  due_soon: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  overdue: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  not_started: "bg-white/8 text-muted-foreground border-white/10",
+  pending: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  new: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30",
+  urgent: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  review: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+};
+
+const STATUS_LABELS: Record<StatusTone, string> = {
+  strong: "Strong",
+  good: "Good",
+  watch: "Watch",
+  at_risk: "At risk",
+  on_track: "On track",
+  active: "Active",
+  slow: "Slow",
+  completed: "Completed",
+  in_progress: "In progress",
+  due_soon: "Due soon",
+  overdue: "Overdue",
+  not_started: "Not started",
+  pending: "Pending",
+  new: "New",
+  urgent: "Urgent",
+  review: "Review",
+};
+
+export function StatusPill({
+  tone,
+  label,
+  className = "",
+}: {
+  tone: StatusTone;
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${STATUS_CLASSES[tone]} ${className}`}
+    >
+      {label ?? STATUS_LABELS[tone]}
+    </span>
+  );
+}
+
+/** Letter grade + percent inline (e.g. "A+ · 91%") */
+export function LetterGradeCell({
+  letter,
+  percent,
+}: {
+  letter: string | null;
+  percent: number;
+}) {
+  if (!letter || percent <= 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const tone =
+    letter === "A+"
+      ? "text-emerald-400"
+      : letter === "A"
+        ? "text-sky-400"
+        : letter === "B"
+          ? "text-amber-400"
+          : "text-rose-400";
+  return (
+    <span className={`font-medium tabular-nums ${tone}`}>
+      {letter} · {percent}%
+    </span>
+  );
+}
+
+/** Small text-only colored issue badge (e.g. "3 overdue", "No login 7d"). */
+export function IssueBadge({
+  label,
+  tone = "rose",
+}: {
+  label: string;
+  tone?: "rose" | "amber" | "sky";
+}) {
+  const cls =
+    tone === "amber"
+      ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+      : tone === "sky"
+        ? "bg-sky-500/15 text-sky-300 border-sky-500/30"
+        : "bg-rose-500/15 text-rose-300 border-rose-500/30";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** Compact circular avatar with initials. */
+export function MiniAvatar({
+  name,
+  tone = "indigo",
+}: {
+  name: string | null;
+  tone?: "indigo" | "emerald" | "sky" | "amber" | "rose";
+}) {
+  const initials =
+    (name ?? "")
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((s) => s[0]!.toUpperCase())
+      .join("") || "?";
+  const cls =
+    tone === "emerald"
+      ? "bg-emerald-500/20 text-emerald-300"
+      : tone === "sky"
+        ? "bg-sky-500/20 text-sky-300"
+        : tone === "amber"
+          ? "bg-amber-500/20 text-amber-300"
+          : tone === "rose"
+            ? "bg-rose-500/20 text-rose-300"
+            : "bg-indigo-500/20 text-indigo-300";
+  return (
+    <span
+      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${cls}`}
+    >
+      {initials}
+    </span>
+  );
+}
+
+/** Risk level → status tone helper for franchise-level rollups */
+export function franchiseStatusTone(avgPct: number): StatusTone {
+  if (avgPct >= 85) return "strong";
+  if (avgPct >= 75) return "good";
+  if (avgPct >= 60) return "watch";
+  return "at_risk";
+}
+
+/** Pill for grade-distribution legend. */
+export function GradeLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-sm bg-emerald-500" /> A+ 90%+
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-sm bg-sky-500" /> A 85%+
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-sm bg-amber-500" /> B 75%+
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-sm bg-rose-500" /> C redo
+      </span>
+    </div>
+  );
+}
+
+/** Grade-summary horizontal bars (A+/A/B/C) — used in incharge & member cards. */
+export function GradeSummaryBars({ agg }: { agg: GradeAggregate }) {
+  const total = agg.aPlus + agg.a + agg.b + agg.c;
+  const rows = [
+    { label: "A+ grades (90%+)", count: agg.aPlus, tone: "bg-emerald-500", text: "text-emerald-400" },
+    { label: "A grades (85%+)", count: agg.a, tone: "bg-sky-500", text: "text-sky-400" },
+    { label: "B grades (75%+)", count: agg.b, tone: "bg-amber-500", text: "text-amber-400" },
+    { label: "C grades (redo)", count: agg.c, tone: "bg-rose-500", text: "text-rose-400" },
+  ];
+  return (
+    <ul className="space-y-3">
+      {rows.map((r) => {
+        const pct = total > 0 ? Math.round((r.count / total) * 100) : 0;
+        return (
+          <li key={r.label} className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{r.label}</span>
+              <span className={`font-medium tabular-nums ${r.text}`}>
+                {total > 0 ? `${pct}%` : `${r.count}`}
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <div
+                className={`${r.tone} h-full rounded-full`}
+                style={{ width: `${total > 0 ? Math.max(pct === 0 ? 0 : 4, pct) : 0}%` }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
