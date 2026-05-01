@@ -15,7 +15,7 @@ export const Route = createFileRoute("/invite/$token")({
 interface InviteRow {
   id: string;
   email: string;
-  role: "ceo" | "incharge" | "member";
+  role: "ceo" | "incharge" | "member" | "qa";
   franchise_id: string | null;
   expires_at: string;
   accepted_at: string | null;
