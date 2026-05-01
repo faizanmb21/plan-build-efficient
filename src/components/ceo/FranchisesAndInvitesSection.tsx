@@ -192,7 +192,7 @@ export function FranchisesAndInvitesSection() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {showArchived ? "Archived" : "Franchises"} ({visible.length})
+              {showArchived ? `Archived (${visible.length})` : "Manage franchises & invites"}
             </h2>
             <p className="text-xs text-muted-foreground">
               Create franchises, invite incharges &amp; members. Archived franchises can be
@@ -219,24 +219,10 @@ export function FranchisesAndInvitesSection() {
           </div>
         </div>
 
-        {visible.length === 0 ? (
+        {!showArchived ? null : visible.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              {showArchived ? (
-                "Nothing archived."
-              ) : (
-                <>
-                  No franchises yet.{" "}
-                  <button
-                    type="button"
-                    onClick={() => setFranchiseOpen(true)}
-                    className="font-semibold text-accent underline-offset-4 hover:underline"
-                  >
-                    Create your first one
-                  </button>{" "}
-                  to start adding members.
-                </>
-              )}
+              Nothing archived.
             </CardContent>
           </Card>
         ) : (
@@ -287,13 +273,6 @@ export function FranchisesAndInvitesSection() {
                         {memberCount === 1 ? "" : "s"}
                       </div>
                     </div>
-
-                    {!isArchived && (
-                      <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs font-medium text-accent transition-all duration-200 group-hover:border-accent/50 group-hover:bg-accent/10">
-                        <span>Click for more details</span>
-                        <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
-                      </div>
-                    )}
                   </CardContent>
                 </>
               );
@@ -301,37 +280,29 @@ export function FranchisesAndInvitesSection() {
               const actionFooter = (
                 <div className="space-y-2 border-t border-border/60 px-6 py-3">
                   <div className="flex flex-wrap gap-2">
-                    {!isArchived ? (
-                      <Button size="sm" variant="outline" onClick={() => archive(f.id, f.name)}>
-                        <Archive className="h-3.5 w-3.5" /> Archive
+                    <Button size="sm" variant="outline" onClick={() => restore(f.id)}>
+                      <RotateCcw className="h-3.5 w-3.5" /> Restore
+                    </Button>
+                    {purgeReady ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => purge(f.id, f.name, false)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete forever
                       </Button>
                     ) : (
-                      <>
-                        <Button size="sm" variant="outline" onClick={() => restore(f.id)}>
-                          <RotateCcw className="h-3.5 w-3.5" /> Restore
-                        </Button>
-                        {purgeReady ? (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => purge(f.id, f.name, false)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" /> Delete forever
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive"
-                            onClick={() => purge(f.id, f.name, true)}
-                          >
-                            <AlertTriangle className="h-3.5 w-3.5" /> Force delete
-                          </Button>
-                        )}
-                      </>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => purge(f.id, f.name, true)}
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" /> Force delete
+                      </Button>
                     )}
                   </div>
-                  {isArchived && f.auto_delete_at && (
+                  {f.auto_delete_at && (
                     <p className="text-[11px] text-muted-foreground">
                       Auto-purge after {new Date(f.auto_delete_at).toLocaleDateString()}
                     </p>
@@ -339,27 +310,9 @@ export function FranchisesAndInvitesSection() {
                 </div>
               );
 
-              if (isArchived) {
-                return (
-                  <Card key={f.id} className="opacity-70">
-                    {cardBody}
-                    {actionFooter}
-                  </Card>
-                );
-              }
-
               return (
-                <Card
-                  key={f.id}
-                  className="group overflow-hidden p-0 transition-all duration-200 hover:border-accent/50 hover:shadow-lg focus-within:border-accent/50"
-                >
-                  <Link
-                    to="/ceo/franchises/$id"
-                    params={{ id: f.id }}
-                    className="block cursor-pointer rounded-t-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                  >
-                    {cardBody}
-                  </Link>
+                <Card key={f.id} className="opacity-70">
+                  {cardBody}
                   {actionFooter}
                 </Card>
               );

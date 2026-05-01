@@ -6,6 +6,12 @@ import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -15,6 +21,8 @@ import {
 } from "@/components/ui/table";
 import { AlertTriangle, ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { MemberGradeReport } from "@/components/MemberGradeReport";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   CompletionBar,
   IssueBadge,
@@ -113,7 +121,7 @@ async function fetchOrgPerformance(): Promise<OrgPerformance> {
     await Promise.all([
       supabase
         .from("franchises")
-        .select("id,name,manager_id")
+        .select("id,name,manager_id,location,archived_at,auto_delete_at")
         .is("archived_at", null)
         .order("name"),
       supabase.from("profiles").select("id,full_name,franchise_id"),
@@ -331,37 +339,40 @@ async function fetchOrgPerformance(): Promise<OrgPerformance> {
 
   const org = combineAggregates(aggByUser.values());
 
-  // Per-incharge member roster blocks (for the top-of-dashboard strip)
-  const inchargeBlocks: InchargeBlock[] = (franchises ?? [])
-    .filter((f) => !!f.manager_id)
-    .map((f) => {
-      const memberIdsHere = memberIds.filter(
-        (id) => profileById.get(id)?.franchise_id === f.id,
-      );
-      const members = memberIdsHere.map((id) => ({
-        userId: id,
-        fullName: profileById.get(id)?.full_name ?? null,
-        agg: aggByUser.get(id) ?? emptyAggregate(),
-        avgCompletion: completion.byUser.get(id)?.overallPct ?? 0,
-      }));
-      // Sort: graded first by avg desc, then ungraded by name
-      members.sort((a, b) => {
-        if (a.agg.total === 0 && b.agg.total === 0) {
-          return (a.fullName ?? "").localeCompare(b.fullName ?? "");
-        }
-        if (a.agg.total === 0) return 1;
-        if (b.agg.total === 0) return -1;
-        return b.agg.averagePercent - a.agg.averagePercent;
-      });
-      return {
-        franchiseId: f.id,
-        franchiseName: f.name,
-        inchargeName: f.manager_id
-          ? profileById.get(f.manager_id)?.full_name ?? null
-          : null,
-        members,
-      };
+  // Per-franchise overview blocks (donut + member roster) for the top grid
+  const aggByFranchise = new Map(perFranchise.map((p) => [p.id, p.agg]));
+  const inchargeBlocks: InchargeBlock[] = (franchises ?? []).map((f) => {
+    const memberIdsHere = memberIds.filter(
+      (id) => profileById.get(id)?.franchise_id === f.id,
+    );
+    const members = memberIdsHere.map((id) => ({
+      userId: id,
+      fullName: profileById.get(id)?.full_name ?? null,
+      agg: aggByUser.get(id) ?? emptyAggregate(),
+      avgCompletion: completion.byUser.get(id)?.overallPct ?? 0,
+    }));
+    members.sort((a, b) => {
+      if (a.agg.total === 0 && b.agg.total === 0) {
+        return (a.fullName ?? "").localeCompare(b.fullName ?? "");
+      }
+      if (a.agg.total === 0) return 1;
+      if (b.agg.total === 0) return -1;
+      return b.agg.averagePercent - a.agg.averagePercent;
     });
+    return {
+      franchiseId: f.id,
+      franchiseName: f.name,
+      location: (f as { location: string | null }).location ?? null,
+      inchargeName: f.manager_id
+        ? profileById.get(f.manager_id)?.full_name ?? null
+        : null,
+      agg: aggByFranchise.get(f.id) ?? emptyAggregate(),
+      members,
+      isArchived: !!(f as { archived_at: string | null }).archived_at,
+      archivedAt: (f as { archived_at: string | null }).archived_at ?? null,
+      autoDeleteAt: (f as { auto_delete_at: string | null }).auto_delete_at ?? null,
+    };
+  });
 
   return {
     totalMembers: memberSet.size,
@@ -385,6 +396,29 @@ function CeoDashboard() {
     queryFn: fetchOrgPerformance,
   });
   const perf = perfQuery.data;
+  const confirm = useConfirm();
+
+  const [gradeMember, setGradeMember] = React.useState<{
+    id: string;
+    name: string | null;
+  } | null>(null);
+
+  const handleArchive = React.useCallback(
+    async (id: string, name: string) => {
+      const ok = await confirm({
+        title: "Archive franchise?",
+        description: `Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`,
+        confirmLabel: "Archive",
+        variant: "destructive",
+      });
+      if (!ok) return;
+      const { error } = await supabase.rpc("archive_franchise", { _franchise_id: id });
+      if (error) return toast.error(error.message);
+      toast.success("Franchise archived");
+      perfQuery.refetch();
+    },
+    [confirm, perfQuery],
+  );
 
   const monthLabel = new Intl.DateTimeFormat(undefined, {
     month: "long",
@@ -460,8 +494,12 @@ function CeoDashboard() {
         />
       </div>
 
-      {/* Incharge & members snapshot — per-incharge roster with grade bars */}
-      <InchargeMemberStrip blocks={perf?.inchargeBlocks ?? []} />
+      {/* Franchise overview — donut + member roster, click member to open grade report */}
+      <InchargeMemberStrip
+        blocks={perf?.inchargeBlocks ?? []}
+        onMemberClick={(id, name) => setGradeMember({ id, name })}
+        onArchive={handleArchive}
+      />
 
       {/* Franchises (cards), New franchise/invite buttons, and Invites list */}
       <FranchisesAndInvitesSection />
@@ -653,6 +691,25 @@ function CeoDashboard() {
 
       {/* Incharge scorecard (kept for grader management) */}
       {perf && perf.incharges.length > 0 && <InchargeScorecard rows={perf.incharges} />}
+
+      {/* Member grade report — opens when clicking a member row in the overview grid */}
+      <Dialog
+        open={!!gradeMember}
+        onOpenChange={(o) => !o && setGradeMember(null)}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Member grade report</DialogTitle>
+          </DialogHeader>
+          {gradeMember && (
+            <MemberGradeReport
+              userId={gradeMember.id}
+              fullName={gradeMember.name}
+              franchiseName={null}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

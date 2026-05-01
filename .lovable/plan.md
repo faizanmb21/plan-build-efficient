@@ -1,46 +1,121 @@
 ## Goal
 
-1. Make `/ceo` (Dashboard) and `/ceo/franchises` (Franchises) render the **same unified content** so the two routes are no longer separate experiences.
-2. Add a new **"Incharge & members" snapshot strip** to the top of that unified view — one card per incharge showing their members' grade overview, identical in spirit to what the Franchises page already shows, with each member clickable through to their detailed profile.
+Restructure the unified CEO dashboard so the top section visually combines the two screenshots:
 
-## What the unified page looks like (top → bottom)
+- The **donut/franchise summary cards** (currently in the "Franchises" section lower down) move to the **top** of the dashboard.
+- Beneath each donut, list **up to 10 members** of that franchise with their `[avatar] Name ─ grade-distribution bar ─ avg %` row (the same layout shown in screenshot 2).
+- If a franchise has **more than 10 members**, show a "View all N members →" row that navigates to that franchise detail page.
+- Clicking **any member row** opens the **member's grade report dialog directly on the CEO dashboard** (no navigation away), reusing the existing `MemberGradeReport` component already used in `ceo.franchises.$id.tsx`.
 
-1. **Header** — "IRM Academy" greeting + Training Progress label.
-2. **KPI strip** (existing) — Total Members · Avg Completion · Avg Grade · Pending to Grade.
-3. **NEW: Incharge & members snapshot** (top, per the user's request)
-   - One card per active franchise/incharge.
-   - Card header: incharge name, franchise name, member count.
-   - Body: a horizontal bar list — one row per member with `[avatar] Name ───── grade-distribution mini-bar  ──  avg %`. Bar is the same `GradeDistributionBar` (A+ / A / B / C / Redo) already used elsewhere, sized per member. Members with no graded work show a muted empty bar.
-   - Each member row is a `Link` to `/ceo/franchises/$id` (existing member-detail surface used from the franchise card grid) — clicking a member navigates to that member's detailed profile view.
-   - Card footer: "Open franchise →" link to `/ceo/franchises/$id`.
-   - Empty state: "No incharges assigned yet."
-4. **Franchise cards grid** (moved over from `/ceo/franchises`)
-   - Existing card layout: pie chart, incharge name, member count, "Click for more details", Archive/Restore/Delete actions.
-   - "Show archived (N)", "New franchise", and "New invite" buttons live in this section's header.
-5. **Invites list** (moved over from `/ceo/franchises`) — unchanged.
-6. **Course-level training completion** table (existing on dashboard).
-7. **Members needing attention** table (existing on dashboard).
-8. **Incharge scorecard** (existing).
+## New top section: "Franchise overview"
 
-The previous standalone "Franchise training overview" table on the dashboard is **removed** — the franchise cards above already show the same info more visually, and removing it eliminates the duplication the user flagged.
+Replaces the current `InchargeMemberStrip` (which is plain text rows) and supersedes the donut cards in `FranchisesAndInvitesSection`'s grid for the active-franchise view.
 
-## Routing
+Each card contains:
 
-- Both `/ceo` and `/ceo/franchises` are kept (per the user's choice "Keep both routes but unify content").
-- Implementation: extract the merged view into a single component `CeoOverview` rendered by both `ceo.index.tsx` and `ceo.franchises.index.tsx`. The sidebar keeps both links so deep-links (and existing bookmarks like the "Open franchises" buttons elsewhere in the app) keep working; they now land on the same content.
-- The franchise-detail route `/ceo/franchises/$id` is untouched.
+```text
+┌──────────────────────────────────────┐
+│ 🏢 IRM Sargodha                      │
+│ 📍 Sargodha, Pakistan                │
+│                                      │
+│           [ 64% donut ]              │
+│  • A+ 72  • A 64  • B 56  • Redo 61  │
+│                                      │
+│ 🛡 Sargodha Incharge · 👥 8 members   │
+│ ───────────────────────────────────  │
+│ [SJ] Sana Javed   ████████░░  85%    │ ← clickable
+│ [HS] Hassan Sheikh ██████░░░░  70%   │
+│ ... (up to 10)                       │
+│ View all 12 members →                │ (only if > 10)
+│ ───────────────────────────────────  │
+│ Click for more details →             │
+│ [Archive]                            │
+└──────────────────────────────────────┘
+```
 
-## Technical notes
+- Donut: existing `GradePieCard` with `size={150}` and the 4-color stats already present.
+- Member rows: existing `MiniAvatar` + `GradeDistributionBar` + avg percent (same primitives used today in `InchargeMemberStrip`), sorted graded-first by avg desc then ungraded by name (same sort as today).
+- Member row is a `<button>` that calls `onMemberClick(memberId)` on the parent — NOT a `Link`. The parent owns a `gradeMember` state and renders the existing grade dialog.
+- "View all N members →" row only renders when `members.length > 10`. Links to `/ceo/franchises/$id`.
+- "Click for more details" footer link to `/ceo/franchises/$id` (preserved from current franchise card).
+- Archive button preserved at the bottom of each card.
 
-- Create `src/components/ceo/CeoOverview.tsx` containing all sections above. Move the data-fetching from `ceo.index.tsx` (`fetchOrgPerformance`) and the franchise/invite CRUD from `ceo.franchises.index.tsx` into this component (or split into two hooks: `useOrgPerformance`, `useFranchisesAndInvites`).
-- Add a new derived structure in `fetchOrgPerformance` (or a sibling query): for each franchise with a manager, list its members with `{ id, full_name, agg, avgPct }`. The data is already fetched (profiles, roles, submissions, completion summary) — just shape it.
-- New presentational component `InchargeMemberStrip` rendering the per-incharge cards and the per-member bar rows. Reuses existing `GradeDistributionBar`, `MiniAvatar`, `LetterGradeCell`.
-- Member row link target: `/ceo/franchises/$id` (the franchise detail page, where individual member profiles are already viewable). If a different per-member route exists I'll wire to that instead — confirmed via the codebase that member detail lives inside franchise detail.
-- `ceo.index.tsx` and `ceo.franchises.index.tsx` become thin wrappers: `export const Route = createFileRoute(...)({ component: () => <CeoOverview /> })`.
-- No DB schema changes. No new RLS. No new server functions.
+## Member grade dialog on the dashboard
+
+Reuse the exact dialog already used in `src/routes/ceo.franchises.$id.tsx` (lines 467–479):
+
+```tsx
+<Dialog open={!!gradeMember} onOpenChange={(o) => !o && setGradeMember(null)}>
+  <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+    <DialogHeader><DialogTitle>Member grade report</DialogTitle></DialogHeader>
+    {gradeMember && <MemberGradeReport userId={gradeMember.id} ... />}
+  </DialogContent>
+</Dialog>
+```
+
+State + handler live in `ceo.index.tsx`. The dashboard already has each member's `userId` and `fullName` in `inchargeBlocks`, so no extra fetching is needed to open the dialog — `MemberGradeReport` fetches its own data by `userId`.
+
+## Sections after the change (top → bottom)
+
+1. Header (IRM Academy)
+2. KPI strip (unchanged)
+3. **NEW unified "Franchise overview" grid** (donut + member list per franchise + archive action) — replaces both the current `InchargeMemberStrip` AND the donut grid inside `FranchisesAndInvitesSection`.
+4. Franchises management controls — "Show archived (N)", "New franchise", "New invite" buttons + Archived list (when toggled) + Invites list. Pulled out of `FranchisesAndInvitesSection` and lives below the overview grid.
+5. Course bottlenecks table (unchanged)
+6. Members needing attention table (unchanged)
+7. Incharge scorecard (unchanged)
+
+## Technical changes
+
+### `src/components/ceo/InchargeMemberStrip.tsx` — rewritten
+
+- Renamed conceptually to a "Franchise overview" grid (filename kept to minimize churn, or rename to `FranchiseOverviewGrid.tsx` — happy with either; I'll keep the existing filename to avoid touching `ceo.index.tsx` import paths beyond what's needed).
+- New props:
+  ```ts
+  interface FranchiseOverviewItem {
+    franchiseId: string;
+    franchiseName: string;
+    location: string | null;
+    inchargeName: string | null;
+    agg: GradeAggregate;       // franchise-level aggregate for donut
+    members: InchargeMember[]; // already sorted
+    isArchived: boolean;
+    archivedAt: string | null;
+    autoDeleteAt: string | null;
+  }
+  interface Props {
+    items: FranchiseOverviewItem[];
+    onMemberClick: (userId: string, fullName: string | null) => void;
+    onArchive: (id: string, name: string) => void;
+    onRestore: (id: string) => void;
+    onPurge: (id: string, name: string, force: boolean) => void;
+  }
+  ```
+- Renders `GradePieCard` (size 150), the 4-color legend (A+/A/B/Redo counts) like the screenshot, member list sliced to 10, "View all N →" link when overflow, archive/restore action row, "Click for more details" link wrapping the donut+member-list area.
+- Member row uses a `<button>` triggering `onMemberClick`.
+
+### `src/routes/ceo.index.tsx`
+
+- Extend `inchargeBlocks` build to include `agg` (franchise aggregate, already computed in `perFranchise`), `location`, `isArchived` flag — i.e. produce `FranchiseOverviewItem[]` directly. Easiest: also fetch `location, archived_at, auto_delete_at` in the franchises query (currently only `id,name,manager_id` is selected; expand to include those columns — no schema change).
+- Add local state `const [gradeMember, setGradeMember] = React.useState<{id: string; name: string | null} | null>(null)`.
+- Render the new grid with `onMemberClick={(id, name) => setGradeMember({id, name})}`.
+- Render the grade dialog (same JSX as in `ceo.franchises.$id.tsx`).
+- Move archive/restore/purge handlers up from `FranchisesAndInvitesSection` (or pass through) so the new grid can wire them.
+
+### `src/components/ceo/FranchisesAndInvitesSection.tsx`
+
+- Remove the active franchise donut grid (lines ~243–368).
+- Keep: archived list (when `showArchived` is on), the toolbar (`Show archived` toggle, `New franchise`, `New invite` buttons), the `Invites` section, and the dialogs.
+- This component becomes "Franchise admin & invites".
+
+### Member click target (decision, per the user's "open the members chart and all details")
+
+- Open the existing `MemberGradeReport` dialog **inline on `/ceo`**. This matches "open the member's chart and all details" — `MemberGradeReport` already shows the member's grade pie, course breakdown, and detailed submissions. No navigation away.
+- The "View all N members →" overflow link still goes to `/ceo/franchises/$id` for the full franchise view.
 
 ## Out of scope
 
-- No changes to incharge / member / QA dashboards.
-- No change to franchise-detail page or member-profile page.
-- No changes to seeded data.
+- No DB schema changes.
+- No changes to `MemberGradeReport`, `GradePieCard`, `GradeDistributionBar`, or the franchise detail page.
+- No changes to invites flow.
+- Archived franchises continue to live in the "Show archived" toggle inside the franchise admin section, not in the new top grid.
