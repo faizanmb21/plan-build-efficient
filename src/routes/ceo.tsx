@@ -12,6 +12,7 @@ const nav: NavItem[] = [
   { to: "/ceo/attendance", label: "Attendance", icon: Activity },
   { to: "/ceo/submissions", label: "Submissions", icon: FileCheck },
   { to: "/ceo/grades", label: "Grades", icon: GraduationCap },
+  { to: "/ceo/qa", label: "QA reviewers", icon: BadgeCheck },
   { to: "/incharge", label: "View as Incharge", icon: ShieldCheck },
   { to: "/qa", label: "View as QA", icon: BadgeCheck },
   { to: "/ceo/seed", label: "Seed demo data", icon: Sparkles },
