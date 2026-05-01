@@ -17,17 +17,18 @@ import { AlertTriangle, ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   CompletionBar,
-  GradeLegend,
-  GradeDistributionBar,
   IssueBadge,
   InchargeScorecard,
   KpiTile,
   LetterGradeCell,
   MiniAvatar,
-  StatusPill,
-  franchiseStatusTone,
   type InchargeRow,
 } from "@/components/dashboard/ProgressPrimitives";
+import {
+  InchargeMemberStrip,
+  type InchargeBlock,
+} from "@/components/ceo/InchargeMemberStrip";
+import { FranchisesAndInvitesSection } from "@/components/ceo/FranchisesAndInvitesSection";
 import {
   aggregateGrades,
   emptyAggregate,
