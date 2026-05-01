@@ -2,7 +2,7 @@ import * as React from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppRole = "ceo" | "incharge" | "member";
+export type AppRole = "ceo" | "incharge" | "member" | "qa";
 
 export interface Profile {
   id: string;
@@ -25,7 +25,7 @@ interface AuthState {
 
 const AuthContext = React.createContext<AuthState | null>(null);
 
-const ROLE_PRIORITY: AppRole[] = ["ceo", "incharge", "member"];
+const ROLE_PRIORITY: AppRole[] = ["ceo", "incharge", "qa", "member"];
 
 function pickPrimary(roles: AppRole[]): AppRole | null {
   for (const r of ROLE_PRIORITY) if (roles.includes(r)) return r;
@@ -126,6 +126,7 @@ export function useAuth(): AuthState {
 export function homeForRole(role: AppRole | null): string {
   if (role === "ceo") return "/ceo";
   if (role === "incharge") return "/incharge";
+  if (role === "qa") return "/qa";
   if (role === "member") return "/member";
   return "/login";
 }
