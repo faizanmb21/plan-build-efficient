@@ -396,6 +396,29 @@ function CeoDashboard() {
     queryFn: fetchOrgPerformance,
   });
   const perf = perfQuery.data;
+  const confirm = useConfirm();
+
+  const [gradeMember, setGradeMember] = React.useState<{
+    id: string;
+    name: string | null;
+  } | null>(null);
+
+  const handleArchive = React.useCallback(
+    async (id: string, name: string) => {
+      const ok = await confirm({
+        title: "Archive franchise?",
+        description: `Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`,
+        confirmLabel: "Archive",
+        variant: "destructive",
+      });
+      if (!ok) return;
+      const { error } = await supabase.rpc("archive_franchise", { _franchise_id: id });
+      if (error) return toast.error(error.message);
+      toast.success("Franchise archived");
+      perfQuery.refetch();
+    },
+    [confirm, perfQuery],
+  );
 
   const monthLabel = new Intl.DateTimeFormat(undefined, {
     month: "long",
