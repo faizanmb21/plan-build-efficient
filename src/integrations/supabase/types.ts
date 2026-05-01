@@ -709,6 +709,7 @@ export type Database = {
     Functions: {
       accept_invite: { Args: { _token: string }; Returns: Json }
       archive_franchise: { Args: { _franchise_id: string }; Returns: Json }
+      backfill_grading_demo_data: { Args: never; Returns: Json }
       claim_first_ceo: { Args: never; Returns: boolean }
       close_stale_sessions: { Args: never; Returns: number }
       get_franchise_member_emails: {
