@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-const PASSWORD = "Academy@123";
+const PASSWORD = "QA-Reviewer-2026!Strong#Pass";
 const EMAIL = "qa@irmacademy.test";
 const FULL_NAME = "QA Reviewer";
 
