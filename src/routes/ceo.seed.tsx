@@ -190,6 +190,7 @@ function SeedPage() {
 function roleFor(email: string): string {
   if (email.startsWith("ceo@")) return "CEO";
   if (email.startsWith("incharge.")) return "Incharge";
+  if (email.startsWith("qa@")) return "QA Reviewer (assigned: Sargodha + Lahore)";
   if (email.startsWith("you@")) return "Member (your demo)";
   return "Member";
 }
