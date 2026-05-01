@@ -331,6 +331,38 @@ async function fetchOrgPerformance(): Promise<OrgPerformance> {
 
   const org = combineAggregates(aggByUser.values());
 
+  // Per-incharge member roster blocks (for the top-of-dashboard strip)
+  const inchargeBlocks: InchargeBlock[] = (franchises ?? [])
+    .filter((f) => !!f.manager_id)
+    .map((f) => {
+      const memberIdsHere = memberIds.filter(
+        (id) => profileById.get(id)?.franchise_id === f.id,
+      );
+      const members = memberIdsHere.map((id) => ({
+        userId: id,
+        fullName: profileById.get(id)?.full_name ?? null,
+        agg: aggByUser.get(id) ?? emptyAggregate(),
+        avgCompletion: completion.byUser.get(id)?.overallPct ?? 0,
+      }));
+      // Sort: graded first by avg desc, then ungraded by name
+      members.sort((a, b) => {
+        if (a.agg.total === 0 && b.agg.total === 0) {
+          return (a.fullName ?? "").localeCompare(b.fullName ?? "");
+        }
+        if (a.agg.total === 0) return 1;
+        if (b.agg.total === 0) return -1;
+        return b.agg.averagePercent - a.agg.averagePercent;
+      });
+      return {
+        franchiseId: f.id,
+        franchiseName: f.name,
+        inchargeName: f.manager_id
+          ? profileById.get(f.manager_id)?.full_name ?? null
+          : null,
+        members,
+      };
+    });
+
   return {
     totalMembers: memberSet.size,
     totalFranchises: (franchises ?? []).length,
@@ -342,6 +374,7 @@ async function fetchOrgPerformance(): Promise<OrgPerformance> {
     courses,
     attention,
     incharges,
+    inchargeBlocks,
   };
 }
 
