@@ -13,35 +13,18 @@ import { FranchisesAndInvitesSection } from "@/components/ceo/FranchisesAndInvit
 import { InchargeMemberStrip } from "@/components/ceo/InchargeMemberStrip";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { Route as DashboardRoute } from "./ceo.index";
+import { fetchOrgPerformance } from "./ceo.index";
 
 export const Route = createFileRoute("/ceo/franchises/")({
   component: FranchisesPage,
 });
 
 function FranchisesPage() {
-  // Reuse the same data the CEO dashboard fetches so we can render the
-  // franchise donut + member roster grid below the management section.
-  // We piggyback on the dashboard's query key/fn via the loader function it exports.
-  const { fetchOrgPerformance } = DashboardRoute.options as unknown as {
-    fetchOrgPerformance?: () => Promise<unknown>;
-  };
-  void fetchOrgPerformance;
-
   const perfQuery = useQuery({
     queryKey: ["ceo", "org-performance-v2"],
-    queryFn: async () => {
-      // Lazy import to avoid duplicating the fetcher; ceo.index re-exports nothing,
-      // so we re-implement only the bits we need by re-using the same key—
-      // React Query will share the cache with the dashboard route when both are mounted.
-      const mod = await import("./ceo.index");
-      // @ts-expect-error — fetcher attached for cross-route reuse
-      return mod.fetchOrgPerformance();
-    },
+    queryFn: fetchOrgPerformance,
   });
-  const perf = perfQuery.data as
-    | { inchargeBlocks: import("@/components/ceo/InchargeMemberStrip").InchargeBlock[] }
-    | undefined;
+  const perf = perfQuery.data;
 
   const confirm = useConfirm();
   const [gradeMember, setGradeMember] = React.useState<{

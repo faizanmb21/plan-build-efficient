@@ -115,7 +115,7 @@ interface OrgPerformance {
   inchargeBlocks: InchargeBlock[];
 }
 
-async function fetchOrgPerformance(): Promise<OrgPerformance> {
+export async function fetchOrgPerformance(): Promise<OrgPerformance> {
   const [{ data: franchises }, { data: profiles }, { data: roles }, { data: subs }] =
     await Promise.all([
       supabase
