@@ -1,5 +1,6 @@
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Card,
@@ -11,8 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, BadgeCheck, Globe2, Save } from "lucide-react";
+import { Loader2, BadgeCheck, Globe2, Save, UserPlus, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { createQaAccount } from "@/server/create-qa-account";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
