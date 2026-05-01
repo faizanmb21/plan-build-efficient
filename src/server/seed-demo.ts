@@ -10,6 +10,7 @@ const ACCOUNTS: DemoAccount[] = [
   { email: "incharge.sargodha@irmacademy.test", full_name: "Sargodha Incharge" },
   { email: "incharge.lahore@irmacademy.test", full_name: "Lahore Incharge" },
   { email: "incharge.pdk@irmacademy.test", full_name: "PDK Incharge" },
+  { email: "qa@irmacademy.test", full_name: "QA Reviewer" },
   { email: "you@irmacademy.test", full_name: "Demo Creator (You)" },
   ...Array.from({ length: 20 }, (_, i) => {
     const n = String(i + 1).padStart(2, "0");
