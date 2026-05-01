@@ -460,102 +460,11 @@ function CeoDashboard() {
         />
       </div>
 
-      {/* Franchise training overview */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">Franchise training overview</CardTitle>
-              <CardDescription>
-                Completion % · grade avg · grade distribution
-              </CardDescription>
-            </div>
-            <Link to="/ceo/franchises">
-              <Button variant="ghost" size="sm">
-                Open franchises <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Franchise</TableHead>
-                  <TableHead className="text-right">Members</TableHead>
-                  <TableHead>Avg Completion</TableHead>
-                  <TableHead>Avg Grade</TableHead>
-                  <TableHead>Grade Distribution (A+ · A · B · C)</TableHead>
-                  <TableHead className="text-right">Pending</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(perf?.perFranchise ?? []).map((f) => {
-                  const letter =
-                    f.agg.averagePercent >= 90
-                      ? "A+"
-                      : f.agg.averagePercent >= 85
-                        ? "A"
-                        : f.agg.averagePercent >= 75
-                          ? "B"
-                          : f.agg.averagePercent > 0
-                            ? "C"
-                            : null;
-                  return (
-                    <TableRow key={f.id} className="hover:bg-white/[0.02]">
-                      <TableCell>
-                        <Link
-                          to="/ceo/franchises/$id"
-                          params={{ id: f.id }}
-                          className="font-medium hover:underline"
-                        >
-                          {f.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {f.memberCount}
-                      </TableCell>
-                      <TableCell>
-                        <CompletionBar pct={f.avgCompletion} width={120} />
-                      </TableCell>
-                      <TableCell>
-                        <LetterGradeCell letter={letter} percent={f.agg.averagePercent} />
-                      </TableCell>
-                      <TableCell>
-                        <GradeDistributionBar agg={f.agg} width={180} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {f.pendingCount > 0 ? (
-                          <span className="inline-flex h-6 w-8 items-center justify-center rounded-full bg-rose-500/15 text-xs font-medium text-rose-300">
-                            {f.pendingCount}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">0</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <StatusPill tone={franchiseStatusTone(f.agg.averagePercent)} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {(!perf || perf.perFranchise.length === 0) && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                      {perfQuery.isLoading ? "Loading franchises…" : "No franchises yet."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="mt-3 border-t border-white/5 pt-3">
-            <GradeLegend />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Incharge & members snapshot — per-incharge roster with grade bars */}
+      <InchargeMemberStrip blocks={perf?.inchargeBlocks ?? []} />
+
+      {/* Franchises (cards), New franchise/invite buttons, and Invites list */}
+      <FranchisesAndInvitesSection />
 
       {/* Course bottlenecks */}
       <Card>
