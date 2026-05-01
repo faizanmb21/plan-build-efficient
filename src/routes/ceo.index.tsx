@@ -691,6 +691,25 @@ function CeoDashboard() {
 
       {/* Incharge scorecard (kept for grader management) */}
       {perf && perf.incharges.length > 0 && <InchargeScorecard rows={perf.incharges} />}
+
+      {/* Member grade report — opens when clicking a member row in the overview grid */}
+      <Dialog
+        open={!!gradeMember}
+        onOpenChange={(o) => !o && setGradeMember(null)}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Member grade report</DialogTitle>
+          </DialogHeader>
+          {gradeMember && (
+            <MemberGradeReport
+              userId={gradeMember.id}
+              fullName={gradeMember.name}
+              franchiseName={null}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
