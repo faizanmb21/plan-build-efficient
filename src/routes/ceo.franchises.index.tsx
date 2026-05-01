@@ -518,7 +518,7 @@ function NewInviteDialog({
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const [email, setEmail] = React.useState("");
-  const [role, setRole] = React.useState<"incharge" | "member">("member");
+  const [role, setRole] = React.useState<"incharge" | "member" | "qa">("member");
   const [franchiseId, setFranchiseId] = React.useState<string>("");
   const [busy, setBusy] = React.useState(false);
 
@@ -583,13 +583,14 @@ function NewInviteDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as "incharge" | "member")}>
+            <Select value={role} onValueChange={(v) => setRole(v as "incharge" | "member" | "qa")}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="member">Member (learner)</SelectItem>
                 <SelectItem value="incharge">Incharge (franchise manager)</SelectItem>
+                <SelectItem value="qa">QA (org-wide grader)</SelectItem>
               </SelectContent>
             </Select>
           </div>
