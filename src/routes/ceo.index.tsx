@@ -494,8 +494,12 @@ function CeoDashboard() {
         />
       </div>
 
-      {/* Incharge & members snapshot — per-incharge roster with grade bars */}
-      <InchargeMemberStrip blocks={perf?.inchargeBlocks ?? []} />
+      {/* Franchise overview — donut + member roster, click member to open grade report */}
+      <InchargeMemberStrip
+        blocks={perf?.inchargeBlocks ?? []}
+        onMemberClick={(id, name) => setGradeMember({ id, name })}
+        onArchive={handleArchive}
+      />
 
       {/* Franchises (cards), New franchise/invite buttons, and Invites list */}
       <FranchisesAndInvitesSection />
