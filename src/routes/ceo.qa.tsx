@@ -155,14 +155,49 @@ function CeoQaPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl tracking-tight">QA reviewers</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Restrict each QA to specific franchises. A QA with{" "}
-          <span className="font-medium text-foreground">no franchises</span> selected can review
-          submissions across <span className="font-medium text-foreground">the whole organization</span>.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl tracking-tight">QA reviewers</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Restrict each QA to specific franchises. A QA with{" "}
+            <span className="font-medium text-foreground">no franchises</span> selected can review
+            submissions across <span className="font-medium text-foreground">the whole organization</span>.
+          </p>
+        </div>
+        <Button onClick={handleCreateQa} disabled={creatingQa}>
+          {creatingQa ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <UserPlus className="h-4 w-4" />
+          )}
+          Create demo QA login
+        </Button>
       </header>
+
+      {creds && (
+        <Card className="border-success/40 bg-success/5">
+          <CardHeader>
+            <CardTitle className="text-base">QA login ready</CardTitle>
+            <CardDescription>
+              Sign out and log back in with these credentials to access the QA dashboard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3 text-sm">
+            <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{creds.email}</code>
+            <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{creds.password}</code>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(`${creds.email}\t${creds.password}`);
+                toast.success("Copied");
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
