@@ -6,6 +6,12 @@ import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -15,6 +21,8 @@ import {
 } from "@/components/ui/table";
 import { AlertTriangle, ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { MemberGradeReport } from "@/components/MemberGradeReport";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   CompletionBar,
   IssueBadge,
