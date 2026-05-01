@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, ArrowRight, Sparkles } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -28,7 +28,6 @@ import {
   IssueBadge,
   InchargeScorecard,
   KpiTile,
-  LetterGradeCell,
   MiniAvatar,
   type InchargeRow,
 } from "@/components/dashboard/ProgressPrimitives";
@@ -36,7 +35,7 @@ import {
   InchargeMemberStrip,
   type InchargeBlock,
 } from "@/components/ceo/InchargeMemberStrip";
-import { FranchisesAndInvitesSection } from "@/components/ceo/FranchisesAndInvitesSection";
+
 import {
   aggregateGrades,
   emptyAggregate,
