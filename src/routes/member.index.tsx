@@ -1,31 +1,48 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   BookOpen,
   Clock,
   AlertCircle,
   Play,
-  CheckCircle2,
   Sparkles,
   Flame,
-  Timer,
   Calendar,
-  TrendingUp,
   ArrowRight,
-  Trophy,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import { GradePieCard } from "@/components/grading/GradePieCard";
-import { fetchAggregateForUser, fetchGradeSummaries, combineAggregates } from "@/lib/grade-summary";
-import type { GradeAggregate } from "@/lib/grade-utils";
-import { emptyAggregate } from "@/lib/grade-utils";
+import {
+  CompletionBar,
+  GradeDistributionBar,
+  GradeLegend,
+  IssueBadge,
+  KpiTile,
+  LetterGradeCell,
+  StatusPill,
+  type StatusTone,
+} from "@/components/dashboard/ProgressPrimitives";
+import {
+  fetchAggregateForUser,
+  fetchGradeSummaries,
+  combineAggregates,
+} from "@/lib/grade-summary";
+import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
+import { fetchCompletionSummary } from "@/lib/completion-summary";
 
 export const Route = createFileRoute("/member/")({
   validateSearch: (search: Record<string, unknown>): { previewMember?: string } =>
@@ -59,6 +76,8 @@ type EnrichedAssignment = AssignmentRow & {
   dueSoon: boolean;
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function MemberHome() {
   const { user, profile } = useAuth();
   const { previewMember } = useSearch({ from: "/member/" });
@@ -67,7 +86,7 @@ function MemberHome() {
   const [assignments, setAssignments] = React.useState<AssignmentRow[]>([]);
   const [stats, setStats] = React.useState<Record<string, CourseStat>>({});
   const [gradeAgg, setGradeAgg] = React.useState<GradeAggregate>(emptyAggregate());
-  const [peer, setPeer] = React.useState<{ franchiseAvg: number; rank: number | null; total: number } | null>(null);
+  const [peer, setPeer] = React.useState<{ franchiseAvg: number; rank: number | null; total: number; franchiseCompletion: number } | null>(null);
   const [hoursStudied, setHoursStudied] = React.useState(0);
   const [streakDays, setStreakDays] = React.useState(0);
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
@@ -77,6 +96,7 @@ function MemberHome() {
     fetchAggregateForUser(effectiveUserId).then(setGradeAgg);
   }, [effectiveUserId]);
 
+  // Peer comparison (avg + rank + franchise completion)
   React.useEffect(() => {
     if (!effectiveUserId || !profile?.franchise_id) {
       setPeer(null);
@@ -90,7 +110,10 @@ function MemberHome() {
           .eq("franchise_id", profile.franchise_id!);
         const ids = (peers ?? []).map((p) => p.id);
         if (ids.length === 0) return;
-        const summaries = await fetchGradeSummaries(ids);
+        const [summaries, completion] = await Promise.all([
+          fetchGradeSummaries(ids),
+          fetchCompletionSummary({ userIds: ids }),
+        ]);
         const myAgg = summaries.get(effectiveUserId) ?? emptyAggregate();
         const franchiseAgg = combineAggregates(summaries.values());
         const ranked = ids
@@ -100,6 +123,7 @@ function MemberHome() {
         const idx = ranked.findIndex((r) => r.id === effectiveUserId);
         setPeer({
           franchiseAvg: franchiseAgg.averagePercent,
+          franchiseCompletion: completion.overallAvgPct,
           rank: idx >= 0 && myAgg.total > 0 ? idx + 1 : null,
           total: ranked.length,
         });
@@ -184,7 +208,7 @@ function MemberHome() {
         setStats({});
       }
 
-      const fourteenAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+      const fourteenAgo = new Date(Date.now() - 14 * DAY_MS).toISOString();
       const { data: sess } = await supabase
         .from("study_sessions")
         .select("active_seconds,started_at")
@@ -200,9 +224,7 @@ function MemberHome() {
       setActiveDays(dayKeys);
       let streak = 0;
       for (let i = 0; i < 14; i++) {
-        const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .slice(0, 10);
+        const d = new Date(Date.now() - i * DAY_MS).toISOString().slice(0, 10);
         if (dayKeys.has(d)) streak++;
         else if (i > 0) break;
       }
@@ -212,6 +234,80 @@ function MemberHome() {
     })();
   }, [effectiveUserId]);
 
+  // Per-lesson grades for "course → letter grade" cells
+  const submissionsQuery = useQuery({
+    queryKey: ["member", "submissions", effectiveUserId],
+    queryFn: async () => {
+      if (!effectiveUserId) return [] as Array<{ lesson_id: string; letter_grade: string | null; status: string }>;
+      const { data } = await supabase
+        .from("submissions")
+        .select("lesson_id,letter_grade,status")
+        .eq("user_id", effectiveUserId);
+      return data ?? [];
+    },
+    enabled: !!effectiveUserId,
+  });
+
+  // Map lesson → course for the submissions
+  const courseLetterMap = React.useMemo(() => {
+    const out = new Map<string, { letter: string | null; pct: number; pending: number }>();
+    return out;
+  }, []);
+
+  // We compute letter per course by averaging numeric % of letter grades.
+  const lessonCourseQuery = useQuery({
+    queryKey: ["member", "lesson-course", assignments.map((a) => a.course_id).join(",")],
+    queryFn: async () => {
+      const courseIds = assignments.map((a) => a.course_id);
+      if (courseIds.length === 0) return new Map<string, string>();
+      const { data: secs } = await supabase
+        .from("sections")
+        .select("id,course_id")
+        .in("course_id", courseIds);
+      const sectionToCourse = new Map((secs ?? []).map((s) => [s.id, s.course_id]));
+      const sectionIds = Array.from(sectionToCourse.keys());
+      const { data: lessons } = sectionIds.length
+        ? await supabase.from("lessons").select("id,section_id").in("section_id", sectionIds)
+        : { data: [] as { id: string; section_id: string }[] };
+      const map = new Map<string, string>();
+      for (const l of lessons ?? []) {
+        const cid = sectionToCourse.get(l.section_id);
+        if (cid) map.set(l.id, cid);
+      }
+      return map;
+    },
+    enabled: assignments.length > 0,
+  });
+
+  const courseGrades = React.useMemo(() => {
+    const out = new Map<string, { letter: string | null; pct: number; pending: number }>();
+    const lessonToCourse = lessonCourseQuery.data;
+    if (!lessonToCourse) return out;
+    const acc = new Map<string, { sum: number; n: number; pending: number }>();
+    for (const s of submissionsQuery.data ?? []) {
+      const cid = lessonToCourse.get(s.lesson_id);
+      if (!cid) continue;
+      const cur = acc.get(cid) ?? { sum: 0, n: 0, pending: 0 };
+      if (s.status === "pending") cur.pending++;
+      else {
+        const l = (s.letter_grade ?? "").trim();
+        const pct = l === "A+" ? 90 : l === "A" ? 85 : l === "B" ? 75 : l === "C" ? 0 : null;
+        if (pct !== null) {
+          cur.sum += pct;
+          cur.n++;
+        }
+      }
+      acc.set(cid, cur);
+    }
+    for (const [cid, v] of acc) {
+      const pct = v.n > 0 ? Math.round(v.sum / v.n) : 0;
+      const letter =
+        pct >= 90 ? "A+" : pct >= 85 ? "A" : pct >= 75 ? "B" : pct > 0 ? "C" : null;
+      out.set(cid, { letter, pct, pending: v.pending });
+    }
+    return out;
+  }, [submissionsQuery.data, lessonCourseQuery.data]);
+
   const now = Date.now();
   const enriched: EnrichedAssignment[] = assignments.map((a) => {
     const s = stats[a.course_id] ?? { total: 0, done: 0, lastTouched: null };
@@ -220,7 +316,7 @@ function MemberHome() {
     const dueSoon = !!(
       a.deadline &&
       !overdue &&
-      new Date(a.deadline).getTime() - now < 7 * 24 * 60 * 60 * 1000 &&
+      new Date(a.deadline).getTime() - now < 7 * DAY_MS &&
       pct < 100
     );
     return { ...a, stat: s, pct, overdue, dueSoon };
@@ -238,27 +334,28 @@ function MemberHome() {
   const overdue = enriched.filter((e) => e.overdue);
   const upcoming = enriched
     .filter((e) => e.deadline && e.pct < 100)
-    .sort(
-      (a, b) =>
-        new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime(),
-    )
+    .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
     .slice(0, 4);
 
   const continueCourse = inProgress[0] ?? notStarted[0] ?? null;
-
   const firstName =
     profile?.full_name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "there";
-
   const overallPct = enriched.length
-    ? Math.round(
-        enriched.reduce((s, e) => s + e.pct, 0) / enriched.length,
-      )
+    ? Math.round(enriched.reduce((s, e) => s + e.pct, 0) / enriched.length)
     : 0;
+
+  function statusFor(e: EnrichedAssignment): StatusTone {
+    if (e.pct === 100) return "completed";
+    if (e.overdue) return "overdue";
+    if (e.dueSoon) return "due_soon";
+    if (e.pct > 0) return "in_progress";
+    return "not_started";
+  }
 
   return (
     <div className="space-y-6">
       {/* Welcome header */}
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">
             Welcome back, {firstName} 👋
@@ -279,20 +376,66 @@ function MemberHome() {
         )}
       </header>
 
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiTile
+          label="My Completion"
+          value={`${overallPct}%`}
+          subtitle={`${completed.length} / ${enriched.length} courses done`}
+          tone={overallPct >= 75 ? "emerald" : overallPct >= 50 ? "sky" : "amber"}
+        />
+        <KpiTile
+          label="My Avg Grade"
+          value={gradeAgg.total > 0 ? `${gradeAgg.averagePercent}%` : "—"}
+          subtitle={gradeAgg.total > 0 ? `${gradeAgg.total} graded` : "No grades yet"}
+          tone={
+            gradeAgg.total === 0 ? "neutral"
+            : gradeAgg.averagePercent >= 85 ? "emerald"
+            : gradeAgg.averagePercent >= 75 ? "sky" : "amber"
+          }
+        />
+        <KpiTile
+          label="Streak"
+          value={streakDays}
+          subtitle={`${hoursStudied}h in last 14d`}
+          tone={streakDays >= 3 ? "emerald" : streakDays > 0 ? "sky" : "neutral"}
+        />
+        <KpiTile
+          label="My Rank"
+          value={peer?.rank ? `#${peer.rank}` : "—"}
+          subtitle={peer ? `of ${peer.total} in franchise` : "—"}
+          tone={peer?.rank && peer.rank <= 3 ? "emerald" : "indigo"}
+        />
+      </div>
+
+      {/* Where you stand */}
       {gradeAgg.total > 0 && peer && (
-        <Card className="border-accent/20 bg-gradient-to-br from-accent/[0.04] to-primary/[0.04]">
-          <CardContent className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
-            <Stand label="Your avg" value={`${gradeAgg.averagePercent}%`} accent />
-            <Stand label="Franchise avg" value={`${peer.franchiseAvg}%`} />
-            <Stand label="Your rank" value={peer.rank ? `${peer.rank} of ${peer.total}` : "—"} />
-            <Stand label="Pass rate" value={`${gradeAgg.passRate}%`} />
+        <Card className="border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.04] to-emerald-500/[0.04]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Where you stand</CardTitle>
+            <CardDescription>
+              Your numbers vs. franchise average.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <StandRow
+                label="Avg grade"
+                you={gradeAgg.averagePercent}
+                them={peer.franchiseAvg}
+              />
+              <StandRow
+                label="Course completion"
+                you={overallPct}
+                them={peer.franchiseCompletion}
+              />
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Two-column layout: main + rail */}
+      {/* Two-column: training table + activity rail */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        {/* ======== MAIN COLUMN ======== */}
         <div className="space-y-6">
           {/* Continue learning hero */}
           {loading ? (
@@ -307,101 +450,122 @@ function MemberHome() {
             <EmptyState />
           )}
 
-          {/* Tabbed course library */}
+          {/* My training progress table */}
           {enriched.length > 0 && (
-            <Tabs defaultValue="in-progress" className="space-y-4">
-              <TabsList className="bg-white/[0.04] border border-white/10">
-                <TabsTrigger value="in-progress" className="gap-1.5">
-                  In progress
-                  {inProgress.length > 0 && (
-                    <span className="rounded-full bg-primary/20 px-1.5 text-[10px] font-medium text-primary">
-                      {inProgress.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="not-started" className="gap-1.5">
-                  Not started
-                  {notStarted.length > 0 && (
-                    <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-medium">
-                      {notStarted.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="completed" className="gap-1.5">
-                  Completed
-                  {completed.length > 0 && (
-                    <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-medium">
-                      {completed.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-              </TabsList>
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base">My training progress</CardTitle>
+                    <CardDescription>
+                      Every assigned course at a glance.
+                    </CardDescription>
+                  </div>
+                  <GradeLegend />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Course</TableHead>
+                        <TableHead>Completion</TableHead>
+                        <TableHead className="text-right">Lessons</TableHead>
+                        <TableHead>Grade</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Deadline</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {enriched.map((e) => {
+                        const cg = courseGrades.get(e.course_id);
+                        return (
+                          <TableRow key={e.id} className="hover:bg-white/[0.02]">
+                            <TableCell>
+                              <Link
+                                to="/member/courses/$id"
+                                params={{ id: e.course_id }}
+                                className="font-medium hover:underline"
+                              >
+                                {e.courses?.title}
+                              </Link>
+                              {e.priority === "mandatory" && (
+                                <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                                  Mandatory
+                                </span>
+                              )}
+                              {cg && cg.pending > 0 && (
+                                <div className="mt-1">
+                                  <IssueBadge label={`${cg.pending} pending`} tone="amber" />
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <CompletionBar pct={e.pct} width={120} />
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
+                              {e.stat.done}/{e.stat.total}
+                            </TableCell>
+                            <TableCell>
+                              <LetterGradeCell letter={cg?.letter ?? null} percent={cg?.pct ?? 0} />
+                            </TableCell>
+                            <TableCell>
+                              <StatusPill tone={statusFor(e)} />
+                            </TableCell>
+                            <TableCell className="text-right text-xs text-muted-foreground">
+                              {e.deadline ? format(new Date(e.deadline), "MMM d") : "—"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button asChild size="sm" variant="ghost">
+                                <Link to="/member/courses/$id" params={{ id: e.course_id }}>
+                                  {e.pct === 0 ? "Start" : e.pct === 100 ? "Review" : "Resume"}
+                                  <ArrowRight className="h-3 w-3" />
+                                </Link>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-              <TabsContent value="in-progress" className="m-0">
-                {inProgress.length > 0 ? (
-                  <CourseGrid items={inProgress} />
-                ) : (
-                  <BucketEmpty
-                    icon={Play}
-                    label="Nothing in progress"
-                    hint="Start a course from the Not started tab."
-                  />
-                )}
-              </TabsContent>
-              <TabsContent value="not-started" className="m-0">
-                {notStarted.length > 0 ? (
-                  <CourseGrid items={notStarted} />
-                ) : (
-                  <BucketEmpty
-                    icon={BookOpen}
-                    label="All caught up"
-                    hint="Every assigned course has been started."
-                  />
-                )}
-              </TabsContent>
-              <TabsContent value="completed" className="m-0">
-                {completed.length > 0 ? (
-                  <CourseGrid items={completed} />
-                ) : (
-                  <BucketEmpty
-                    icon={Trophy}
-                    label="No completions yet"
-                    hint="Finish your first course to earn a spot here."
-                  />
-                )}
-              </TabsContent>
-            </Tabs>
+          {/* Grade distribution */}
+          {gradeAgg.total > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">My grade distribution</CardTitle>
+                <CardDescription>
+                  {gradeAgg.total} graded · pass rate {gradeAgg.passRate}%
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GradeDistributionBar agg={gradeAgg} width={400} />
+                <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                  <Pill tone="bg-emerald-500" label="A+" count={gradeAgg.aPlus} />
+                  <Pill tone="bg-sky-500" label="A" count={gradeAgg.a} />
+                  <Pill tone="bg-amber-500" label="B" count={gradeAgg.b} />
+                  <Pill tone="bg-rose-500" label="C (redo)" count={gradeAgg.c} />
+                </div>
+                <div className="mt-4">
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/member/grades">
+                      View grade report <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
 
-        {/* ======== RIGHT RAIL ======== */}
+        {/* RIGHT RAIL */}
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-          {/* Stats */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <TrendingUp className="h-4 w-4" />
-                Your activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3 pt-0">
-              <RailStat icon={BookOpen} value={enriched.length} label="Enrolled" />
-              <RailStat
-                icon={CheckCircle2}
-                value={completed.length}
-                label="Completed"
-              />
-              <RailStat icon={Timer} value={hoursStudied} label="Hours · 14d" />
-              <RailStat
-                icon={Flame}
-                value={streakDays}
-                label="Day streak"
-                accent={streakDays > 1}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Streak / activity dots */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -416,10 +580,13 @@ function MemberHome() {
                 <span className="font-medium text-foreground">{overallPct}%</span>
               </div>
               <Progress value={overallPct} className="mt-1.5 h-1.5" />
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <Flame className={`h-3.5 w-3.5 ${streakDays > 1 ? "text-amber-400" : ""}`} />
+                {streakDays > 1 ? `${streakDays}-day streak` : "Build a streak — log in daily"}
+              </div>
             </CardContent>
           </Card>
 
-          {/* Upcoming deadlines */}
           {upcoming.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
@@ -461,41 +628,50 @@ function MemberHome() {
               </CardContent>
             </Card>
           )}
-
-          {/* My grades */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Trophy className="h-4 w-4" />
-                My grades
-              </CardTitle>
-              <CardDescription className="text-[11px]">
-                A+ 90% · A 85% · B 75% · C means redo
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center gap-3 pt-0">
-              <GradePieCard agg={gradeAgg} size={200} />
-              <Button asChild variant="ghost" size="sm" className="w-full">
-                <Link to="/member/grades">
-                  View grade report
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
         </aside>
       </div>
     </div>
   );
 }
 
-function Stand({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function StandRow({ label, you, them }: { label: string; you: number; them: number }) {
+  const diff = you - them;
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={`mt-0.5 font-display text-xl font-bold tabular-nums ${accent ? "text-accent" : "text-foreground"}`}>
-        {value}
-      </p>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="tabular-nums">
+          <span className="font-semibold">{you}%</span>
+          <span className="ml-1.5 text-muted-foreground">vs {them}%</span>
+          <span
+            className={`ml-2 ${
+              diff > 0 ? "text-emerald-400" : diff < 0 ? "text-rose-400" : "text-muted-foreground"
+            }`}
+          >
+            {diff > 0 ? `+${diff}` : diff}
+          </span>
+        </span>
+      </div>
+      <div className="mt-1.5 grid grid-cols-2 gap-2">
+        <div>
+          <div className="mb-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">You</div>
+          <CompletionBar pct={you} width={140} showLabel={false} />
+        </div>
+        <div>
+          <div className="mb-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">Franchise</div>
+          <CompletionBar pct={them} width={140} showLabel={false} muted />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Pill({ tone, label, count }: { tone: string; label: string; count: number }) {
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5">
+      <span className={`h-2 w-2 rounded-sm ${tone}`} />
+      <span className="text-muted-foreground">{label}</span>
+      <span className="ml-auto font-semibold tabular-nums">{count}</span>
     </div>
   );
 }
@@ -539,9 +715,7 @@ function ContinueLearningHero({ a }: { a: EnrichedAssignment }) {
             {a.stat.lastTouched && (
               <p className="text-xs text-muted-foreground">
                 Last opened{" "}
-                {formatDistanceToNow(new Date(a.stat.lastTouched), {
-                  addSuffix: true,
-                })}
+                {formatDistanceToNow(new Date(a.stat.lastTouched), { addSuffix: true })}
               </p>
             )}
           </div>
@@ -568,124 +742,9 @@ function ContinueLearningHero({ a }: { a: EnrichedAssignment }) {
   );
 }
 
-/* -------------------- Course grid + card -------------------- */
-
-function CourseGrid({ items }: { items: EnrichedAssignment[] }) {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {items.map((a) => (
-        <CourseCard key={a.id} a={a} />
-      ))}
-    </div>
-  );
-}
-
-function CourseCard({ a }: { a: EnrichedAssignment }) {
-  return (
-    <Card interactive className="flex flex-col overflow-hidden">
-      <Link
-        to="/member/courses/$id"
-        params={{ id: a.course_id }}
-        className="flex flex-1 flex-col"
-      >
-        <div className="relative aspect-video w-full bg-muted">
-          {a.courses?.thumbnail_url ? (
-            <img
-              src={a.courses.thumbnail_url}
-              alt={a.courses.title ?? ""}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
-              <BookOpen className="h-10 w-10 text-primary/40" />
-            </div>
-          )}
-          {a.pct === 100 && (
-            <div className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground">
-              <CheckCircle2 className="h-3 w-3" />
-              Done
-            </div>
-          )}
-          {a.priority === "mandatory" && a.pct < 100 && (
-            <div className="absolute right-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-medium backdrop-blur">
-              Mandatory
-            </div>
-          )}
-        </div>
-        <CardContent className="flex flex-1 flex-col gap-3 p-4">
-          <div className="flex-1 space-y-1">
-            <h3 className="line-clamp-2 font-medium leading-snug">
-              {a.courses?.title}
-            </h3>
-            {a.courses?.description && (
-              <p className="line-clamp-2 text-xs text-muted-foreground">
-                {a.courses.description}
-              </p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>
-                {a.stat.done}/{a.stat.total} lessons
-              </span>
-              <span className="font-medium text-foreground">{a.pct}%</span>
-            </div>
-            <Progress value={a.pct} className="h-1.5" />
-          </div>
-          {a.deadline && (
-            <div
-              className={`flex items-center gap-1.5 text-[11px] ${
-                a.overdue ? "text-destructive" : "text-muted-foreground"
-              }`}
-            >
-              {a.overdue ? (
-                <AlertCircle className="h-3 w-3" />
-              ) : (
-                <Clock className="h-3 w-3" />
-              )}
-              {a.overdue ? "Overdue · " : "Due "}
-              {format(new Date(a.deadline), "MMM d")}
-            </div>
-          )}
-        </CardContent>
-      </Link>
-    </Card>
-  );
-}
-
-/* -------------------- Right-rail bits -------------------- */
-
-function RailStat({
-  icon: Icon,
-  value,
-  label,
-  accent,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  value: number;
-  label: string;
-  accent?: boolean;
-}) {
-  return (
-    <div className="rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-        <Icon className={`h-3 w-3 ${accent ? "text-primary" : ""}`} />
-        {label}
-      </div>
-      <div
-        className={`mt-1 font-display text-xl font-bold tracking-tight ${
-          accent ? "text-primary" : ""
-        }`}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
 function ActivityDots({ activeDays }: { activeDays: Set<string> }) {
   const days = Array.from({ length: 14 }).map((_, i) => {
-    const d = new Date(Date.now() - (13 - i) * 24 * 60 * 60 * 1000);
+    const d = new Date(Date.now() - (13 - i) * DAY_MS);
     const key = d.toISOString().slice(0, 10);
     return { key, active: activeDays.has(key), label: format(d, "EEE d") };
   });
@@ -696,17 +755,13 @@ function ActivityDots({ activeDays }: { activeDays: Set<string> }) {
           key={d.key}
           title={d.label}
           className={`h-6 flex-1 rounded ${
-            d.active
-              ? "bg-primary"
-              : "bg-white/[0.04] border border-white/5"
+            d.active ? "bg-primary" : "bg-white/[0.04] border border-white/5"
           }`}
         />
       ))}
     </div>
   );
 }
-
-/* -------------------- Empty states -------------------- */
 
 function EmptyState() {
   return (
@@ -718,30 +773,9 @@ function EmptyState() {
         <div>
           <h2 className="font-display text-lg font-semibold">No courses yet</h2>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Once your incharge or CEO assigns you a course, it will show up
-            here so you can start learning.
+            Once your incharge or CEO assigns you a course, it will show up here so you can start learning.
           </p>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function BucketEmpty({
-  icon: Icon,
-  label,
-  hint,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  hint: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
-        <Icon className="h-6 w-6 text-muted-foreground" />
-        <p className="font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground">{hint}</p>
       </CardContent>
     </Card>
   );
