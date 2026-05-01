@@ -105,6 +105,7 @@ interface OrgPerformance {
   courses: CourseRow[];
   attention: AttentionRowData[];
   incharges: InchargeRow[];
+  inchargeBlocks: InchargeBlock[];
 }
 
 async function fetchOrgPerformance(): Promise<OrgPerformance> {
