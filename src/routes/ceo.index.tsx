@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, ArrowRight, Sparkles } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -28,7 +28,6 @@ import {
   IssueBadge,
   InchargeScorecard,
   KpiTile,
-  LetterGradeCell,
   MiniAvatar,
   type InchargeRow,
 } from "@/components/dashboard/ProgressPrimitives";
@@ -36,7 +35,7 @@ import {
   InchargeMemberStrip,
   type InchargeBlock,
 } from "@/components/ceo/InchargeMemberStrip";
-import { FranchisesAndInvitesSection } from "@/components/ceo/FranchisesAndInvitesSection";
+
 import {
   aggregateGrades,
   emptyAggregate,
@@ -116,7 +115,7 @@ interface OrgPerformance {
   inchargeBlocks: InchargeBlock[];
 }
 
-async function fetchOrgPerformance(): Promise<OrgPerformance> {
+export async function fetchOrgPerformance(): Promise<OrgPerformance> {
   const [{ data: franchises }, { data: profiles }, { data: roles }, { data: subs }] =
     await Promise.all([
       supabase
@@ -500,103 +499,6 @@ function CeoDashboard() {
         onMemberClick={(id, name) => setGradeMember({ id, name })}
         onArchive={handleArchive}
       />
-
-      {/* Franchises (cards), New franchise/invite buttons, and Invites list */}
-      <FranchisesAndInvitesSection />
-
-      {/* Course bottlenecks */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">
-                Course-level training completion — all franchises
-              </CardTitle>
-              <CardDescription>Which courses are bottlenecks</CardDescription>
-            </div>
-            <Link to="/ceo/courses">
-              <Button variant="ghost" size="sm">
-                Open courses <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Course</TableHead>
-                  <TableHead className="text-right">Enrolled</TableHead>
-                  <TableHead className="text-right">Completed</TableHead>
-                  <TableHead>Avg Completion</TableHead>
-                  <TableHead>Avg Grade</TableHead>
-                  <TableHead>Pass Rate</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(perf?.courses ?? []).map((c) => {
-                  const passing =
-                    c.agg.total > 0
-                      ? c.agg.aPlus + c.agg.a + c.agg.b
-                      : 0;
-                  const letter =
-                    c.agg.averagePercent >= 90
-                      ? "A+"
-                      : c.agg.averagePercent >= 85
-                        ? "A"
-                        : c.agg.averagePercent >= 75
-                          ? "B"
-                          : c.agg.averagePercent > 0
-                            ? "C"
-                            : null;
-                  const passTone =
-                    c.agg.total === 0
-                      ? "bg-white/8 text-muted-foreground"
-                      : passing / c.agg.total >= 0.8
-                        ? "bg-emerald-500/15 text-emerald-300"
-                        : passing / c.agg.total >= 0.6
-                          ? "bg-sky-500/15 text-sky-300"
-                          : passing / c.agg.total >= 0.4
-                            ? "bg-amber-500/15 text-amber-300"
-                            : "bg-rose-500/15 text-rose-300";
-                  return (
-                    <TableRow key={c.id} className="hover:bg-white/[0.02]">
-                      <TableCell className="font-medium">{c.title}</TableCell>
-                      <TableCell className="text-right tabular-nums">{c.enrolled}</TableCell>
-                      <TableCell className="text-right tabular-nums">{c.completed}</TableCell>
-                      <TableCell>
-                        <CompletionBar pct={c.avgCompletion} width={120} />
-                      </TableCell>
-                      <TableCell>
-                        {c.agg.total > 0 ? (
-                          <LetterGradeCell letter={letter} percent={c.agg.averagePercent} />
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${passTone}`}
-                        >
-                          {c.agg.total > 0 ? `${passing}/${c.agg.total}` : "—"}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {(!perf || perf.courses.length === 0) && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                      {perfQuery.isLoading ? "Loading courses…" : "No courses assigned yet."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Members needing attention */}
       <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/[0.04] to-rose-500/[0.04]">
