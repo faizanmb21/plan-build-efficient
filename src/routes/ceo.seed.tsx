@@ -61,9 +61,12 @@ function SeedPage() {
       <header>
         <h1 className="text-3xl tracking-tight">Seed demo data</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          One-shot population: 3 franchises, 24 accounts, 12 courses with lessons, assignments and sample
-          progress + submissions. Safe to run more than once — rerunning it also restores all demo account
-          passwords to <code className="rounded bg-muted px-1.5 py-0.5">Academy@123</code>.
+          One-shot population: 3 franchises, 25 accounts (CEO, 3 Incharges, 1 QA, 20 Members),
+          courses with lessons, assignments and graded submissions across every member. Also wires the
+          QA reviewer to <span className="font-medium">IRM Sargodha</span> and{" "}
+          <span className="font-medium">IRM Lahore</span>. Safe to run more than once — rerunning it also
+          restores all demo account passwords to{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5">Academy@123</code>.
         </p>
       </header>
 
@@ -190,6 +193,7 @@ function SeedPage() {
 function roleFor(email: string): string {
   if (email.startsWith("ceo@")) return "CEO";
   if (email.startsWith("incharge.")) return "Incharge";
+  if (email.startsWith("qa@")) return "QA Reviewer (assigned: Sargodha + Lahore)";
   if (email.startsWith("you@")) return "Member (your demo)";
   return "Member";
 }

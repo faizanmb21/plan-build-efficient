@@ -10,6 +10,7 @@ const ACCOUNTS: DemoAccount[] = [
   { email: "incharge.sargodha@irmacademy.test", full_name: "Sargodha Incharge" },
   { email: "incharge.lahore@irmacademy.test", full_name: "Lahore Incharge" },
   { email: "incharge.pdk@irmacademy.test", full_name: "PDK Incharge" },
+  { email: "qa@irmacademy.test", full_name: "QA Reviewer" },
   { email: "you@irmacademy.test", full_name: "Demo Creator (You)" },
   ...Array.from({ length: 20 }, (_, i) => {
     const n = String(i + 1).padStart(2, "0");
@@ -111,6 +112,44 @@ export const seedDemo = createServerFn({ method: "POST" }).handler(async () => {
       failed,
       error: `Content seed failed: ${seedErr.message}`,
     };
+  }
+
+  // Wire up the QA demo account: ensure role exists and assign it to 2 of 3 franchises.
+  try {
+    const qaId = await findUserIdByEmail("qa@irmacademy.test");
+    if (qaId) {
+      await supabaseAdmin
+        .from("user_roles")
+        .upsert({ user_id: qaId, role: "qa" }, { onConflict: "user_id,role" });
+      await supabaseAdmin.from("profiles").update({ full_name: "QA Reviewer" }).eq("id", qaId);
+
+      const { data: fr } = await supabaseAdmin
+        .from("franchises")
+        .select("id,name")
+        .is("archived_at", null)
+        .order("name");
+      const target = (fr ?? []).filter(
+        (f) => f.name === "IRM Sargodha" || f.name === "IRM Lahore",
+      );
+      if (target.length) {
+        await supabaseAdmin
+          .from("qa_franchise_assignments")
+          .upsert(
+            target.map((f) => ({ user_id: qaId, franchise_id: f.id })),
+            { onConflict: "user_id,franchise_id" },
+          );
+      }
+    }
+  } catch {
+    // Non-fatal: QA wiring is best-effort.
+  }
+
+  // Backfill grades + a healthy distribution of pending/approved/revision submissions
+  // so every dashboard (Incharge, Member, QA, CEO) has data to render.
+  try {
+    await supabaseAdmin.rpc("backfill_grading_demo_data");
+  } catch {
+    // Non-fatal.
   }
 
   return {
