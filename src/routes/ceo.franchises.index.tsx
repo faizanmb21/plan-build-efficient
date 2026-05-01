@@ -5,6 +5,8 @@ import { Route as DashboardRoute } from "./ceo.index";
 // They share the dashboard component (KPIs, incharge & members snapshot,
 // franchise cards, invites, course bottlenecks, attention, scorecard).
 
+const DashboardComponent = DashboardRoute.options.component as React.ComponentType;
+
 export const Route = createFileRoute("/ceo/franchises/")({
-  component: DashboardRoute.options.component!,
+  component: DashboardComponent,
 });
