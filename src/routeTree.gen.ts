@@ -10,12 +10,14 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as QaRouteImport } from './routes/qa'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as MemberRouteImport } from './routes/member'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InchargeRouteImport } from './routes/incharge'
 import { Route as CeoRouteImport } from './routes/ceo'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as QaIndexRouteImport } from './routes/qa.index'
 import { Route as MemberIndexRouteImport } from './routes/member.index'
 import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
@@ -48,6 +50,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const QaRoute = QaRouteImport.update({
+  id: '/qa',
+  path: '/qa',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -77,6 +84,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const QaIndexRoute = QaIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => QaRoute,
 } as any)
 const MemberIndexRoute = MemberIndexRouteImport.update({
   id: '/',
@@ -216,6 +228,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/member': typeof MemberRouteWithChildren
   '/profile': typeof ProfileRoute
+  '/qa': typeof QaRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
@@ -237,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/qa/': typeof QaIndexRoute
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/ceo/grades/report': typeof CeoGradesReportRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
@@ -268,6 +282,7 @@ export interface FileRoutesByTo {
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
+  '/qa': typeof QaIndexRoute
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/ceo/grades/report': typeof CeoGradesReportRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
@@ -283,6 +298,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/member': typeof MemberRouteWithChildren
   '/profile': typeof ProfileRoute
+  '/qa': typeof QaRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/ceo/assign': typeof CeoAssignRoute
   '/ceo/attendance': typeof CeoAttendanceRoute
@@ -304,6 +320,7 @@ export interface FileRoutesById {
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
+  '/qa/': typeof QaIndexRoute
   '/ceo/franchises/$id': typeof CeoFranchisesIdRoute
   '/ceo/grades/report': typeof CeoGradesReportRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
@@ -320,6 +337,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/member'
     | '/profile'
+    | '/qa'
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/attendance'
@@ -341,6 +359,7 @@ export interface FileRouteTypes {
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/qa/'
     | '/ceo/franchises/$id'
     | '/ceo/grades/report'
     | '/member/courses/$id'
@@ -372,6 +391,7 @@ export interface FileRouteTypes {
     | '/ceo'
     | '/incharge'
     | '/member'
+    | '/qa'
     | '/ceo/franchises/$id'
     | '/ceo/grades/report'
     | '/member/courses/$id'
@@ -386,6 +406,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/member'
     | '/profile'
+    | '/qa'
     | '/reset-password'
     | '/ceo/assign'
     | '/ceo/attendance'
@@ -407,6 +428,7 @@ export interface FileRouteTypes {
     | '/ceo/'
     | '/incharge/'
     | '/member/'
+    | '/qa/'
     | '/ceo/franchises/$id'
     | '/ceo/grades/report'
     | '/member/courses/$id'
@@ -422,6 +444,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MemberRoute: typeof MemberRouteWithChildren
   ProfileRoute: typeof ProfileRoute
+  QaRoute: typeof QaRouteWithChildren
   ResetPasswordRoute: typeof ResetPasswordRoute
   InviteTokenRoute: typeof InviteTokenRoute
 }
@@ -433,6 +456,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/qa': {
+      id: '/qa'
+      path: '/qa'
+      fullPath: '/qa'
+      preLoaderRoute: typeof QaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profile': {
@@ -476,6 +506,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/qa/': {
+      id: '/qa/'
+      path: '/'
+      fullPath: '/qa/'
+      preLoaderRoute: typeof QaIndexRouteImport
+      parentRoute: typeof QaRoute
     }
     '/member/': {
       id: '/member/'
@@ -759,6 +796,16 @@ const MemberRouteChildren: MemberRouteChildren = {
 const MemberRouteWithChildren =
   MemberRoute._addFileChildren(MemberRouteChildren)
 
+interface QaRouteChildren {
+  QaIndexRoute: typeof QaIndexRoute
+}
+
+const QaRouteChildren: QaRouteChildren = {
+  QaIndexRoute: QaIndexRoute,
+}
+
+const QaRouteWithChildren = QaRoute._addFileChildren(QaRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CeoRoute: CeoRouteWithChildren,
@@ -766,6 +813,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MemberRoute: MemberRouteWithChildren,
   ProfileRoute: ProfileRoute,
+  QaRoute: QaRouteWithChildren,
   ResetPasswordRoute: ResetPasswordRoute,
   InviteTokenRoute: InviteTokenRoute,
 }
