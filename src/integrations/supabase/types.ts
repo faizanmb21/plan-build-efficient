@@ -496,6 +496,38 @@ export type Database = {
           },
         ]
       }
+      qa_franchise_assignments: {
+        Row: {
+          assigned_by: string | null
+          created_at: string
+          franchise_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string
+          franchise_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string
+          franchise_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qa_franchise_assignments_franchise_id_fkey"
+            columns: ["franchise_id"]
+            isOneToOne: false
+            referencedRelation: "franchises"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sections: {
         Row: {
           course_id: string
@@ -697,6 +729,10 @@ export type Database = {
       purge_franchise: {
         Args: { _force?: boolean; _franchise_id: string }
         Returns: Json
+      }
+      qa_can_access_franchise: {
+        Args: { _franchise_id: string; _uid: string }
+        Returns: boolean
       }
       remove_member_from_franchise: {
         Args: { _user_id: string }
