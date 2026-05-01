@@ -21,6 +21,7 @@ import { Route as QaIndexRouteImport } from './routes/qa.index'
 import { Route as MemberIndexRouteImport } from './routes/member.index'
 import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
+import { Route as QaSubmissionsRouteImport } from './routes/qa.submissions'
 import { Route as MemberProjectsRouteImport } from './routes/member.projects'
 import { Route as MemberGradesRouteImport } from './routes/member.grades'
 import { Route as MemberFocusRouteImport } from './routes/member.focus'
@@ -104,6 +105,11 @@ const CeoIndexRoute = CeoIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => CeoRoute,
+} as any)
+const QaSubmissionsRoute = QaSubmissionsRouteImport.update({
+  id: '/submissions',
+  path: '/submissions',
+  getParentRoute: () => QaRoute,
 } as any)
 const MemberProjectsRoute = MemberProjectsRouteImport.update({
   id: '/projects',
@@ -247,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
   '/member/projects': typeof MemberProjectsRoute
+  '/qa/submissions': typeof QaSubmissionsRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
@@ -279,6 +286,7 @@ export interface FileRoutesByTo {
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
   '/member/projects': typeof MemberProjectsRoute
+  '/qa/submissions': typeof QaSubmissionsRoute
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
   '/member': typeof MemberIndexRoute
@@ -317,6 +325,7 @@ export interface FileRoutesById {
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
   '/member/projects': typeof MemberProjectsRoute
+  '/qa/submissions': typeof QaSubmissionsRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
   '/member/': typeof MemberIndexRoute
@@ -356,6 +365,7 @@ export interface FileRouteTypes {
     | '/member/focus'
     | '/member/grades'
     | '/member/projects'
+    | '/qa/submissions'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
@@ -388,6 +398,7 @@ export interface FileRouteTypes {
     | '/member/focus'
     | '/member/grades'
     | '/member/projects'
+    | '/qa/submissions'
     | '/ceo'
     | '/incharge'
     | '/member'
@@ -425,6 +436,7 @@ export interface FileRouteTypes {
     | '/member/focus'
     | '/member/grades'
     | '/member/projects'
+    | '/qa/submissions'
     | '/ceo/'
     | '/incharge/'
     | '/member/'
@@ -534,6 +546,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/ceo/'
       preLoaderRoute: typeof CeoIndexRouteImport
       parentRoute: typeof CeoRoute
+    }
+    '/qa/submissions': {
+      id: '/qa/submissions'
+      path: '/submissions'
+      fullPath: '/qa/submissions'
+      preLoaderRoute: typeof QaSubmissionsRouteImport
+      parentRoute: typeof QaRoute
     }
     '/member/projects': {
       id: '/member/projects'
@@ -797,10 +816,12 @@ const MemberRouteWithChildren =
   MemberRoute._addFileChildren(MemberRouteChildren)
 
 interface QaRouteChildren {
+  QaSubmissionsRoute: typeof QaSubmissionsRoute
   QaIndexRoute: typeof QaIndexRoute
 }
 
 const QaRouteChildren: QaRouteChildren = {
+  QaSubmissionsRoute: QaSubmissionsRoute,
   QaIndexRoute: QaIndexRoute,
 }
 
