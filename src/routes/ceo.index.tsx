@@ -113,7 +113,7 @@ async function fetchOrgPerformance(): Promise<OrgPerformance> {
     await Promise.all([
       supabase
         .from("franchises")
-        .select("id,name,manager_id")
+        .select("id,name,manager_id,location,archived_at,auto_delete_at")
         .is("archived_at", null)
         .order("name"),
       supabase.from("profiles").select("id,full_name,franchise_id"),
