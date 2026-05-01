@@ -6,26 +6,27 @@ import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Building2,
-  BookOpen,
-  Users,
-  FileCheck,
-  Sparkles,
-  ArrowRight,
-  AlertTriangle,
-  GraduationCap,
-} from "lucide-react";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { AlertTriangle, ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { GradePieCard } from "@/components/grading/GradePieCard";
 import {
-  AttentionList,
-  FranchiseLeaderboard,
+  CompletionBar,
+  GradeLegend,
+  GradeDistributionBar,
+  IssueBadge,
   InchargeScorecard,
-  PillarCoverageBars,
-  type AttentionItem,
-  type FranchiseRow,
+  KpiTile,
+  LetterGradeCell,
+  MiniAvatar,
+  StatusPill,
+  franchiseStatusTone,
   type InchargeRow,
-  type PillarRow,
 } from "@/components/dashboard/ProgressPrimitives";
 import {
   aggregateGrades,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/grade-utils";
 import { combineAggregates } from "@/lib/grade-summary";
 import { computeInchargeKpis, computeMemberRisk } from "@/lib/progress-signals";
+import { fetchCompletionSummary, fetchOverdueCounts } from "@/lib/completion-summary";
 
 export const Route = createFileRoute("/ceo/")({
   component: CeoDashboard,
@@ -62,350 +64,652 @@ function CeoDashboardError({ error, reset }: { error: Error; reset: () => void }
   );
 }
 
-interface Stats {
-  franchises: number;
-  courses: number;
-  members: number;
-  pendingSubmissions: number;
-}
-
-async function fetchStats(): Promise<Stats> {
-  const [f, c, m, s] = await Promise.all([
-    supabase.from("franchises").select("id", { count: "exact", head: true }).is("archived_at", null),
-    supabase.from("courses").select("id", { count: "exact", head: true }),
-    supabase.from("profiles").select("id", { count: "exact", head: true }),
-    supabase.from("submissions").select("id", { count: "exact", head: true }).eq("status", "pending"),
-  ]);
-  return {
-    franchises: f.count ?? 0,
-    courses: c.count ?? 0,
-    members: m.count ?? 0,
-    pendingSubmissions: s.count ?? 0,
-  };
-}
-
-interface LessonShape {
+interface FranchiseRowData {
   id: string;
-  sections: { course_id: string; courses: { id: string; title: string } | null } | null;
+  name: string;
+  inchargeName: string | null;
+  memberCount: number;
+  agg: GradeAggregate;
+  pendingCount: number;
+  avgCompletion: number;
+}
+
+interface CourseRow {
+  id: string;
+  title: string;
+  enrolled: number;
+  completed: number;
+  avgCompletion: number;
+  agg: GradeAggregate;
+}
+
+interface AttentionRowData {
+  userId: string;
+  fullName: string | null;
+  franchiseName: string | null;
+  coursesAssigned: number;
+  avgCompletion: number;
+  agg: GradeAggregate;
+  issues: { label: string; tone: "rose" | "amber" }[];
 }
 
 interface OrgPerformance {
+  totalMembers: number;
+  totalFranchises: number;
+  avgCompletion: number;
   org: GradeAggregate;
-  perFranchise: FranchiseRow[];
-  attention: AttentionItem[];
+  pendingTotal: number;
+  oldestPendingDays: number | null;
+  perFranchise: FranchiseRowData[];
+  courses: CourseRow[];
+  attention: AttentionRowData[];
   incharges: InchargeRow[];
-  pillars: PillarRow[];
 }
 
 async function fetchOrgPerformance(): Promise<OrgPerformance> {
-  try {
-    const [{ data: franchises }, { data: profiles }, { data: roles }, { data: subs }] =
-      await Promise.all([
-        supabase
-          .from("franchises")
-          .select("id,name,manager_id")
-          .is("archived_at", null)
-          .order("name"),
-        supabase.from("profiles").select("id,full_name,franchise_id"),
-        supabase.from("user_roles").select("user_id,role,franchise_id"),
-        supabase
-          .from("submissions")
-          .select(
-            "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-          ),
-      ]);
+  const [{ data: franchises }, { data: profiles }, { data: roles }, { data: subs }] =
+    await Promise.all([
+      supabase
+        .from("franchises")
+        .select("id,name,manager_id")
+        .is("archived_at", null)
+        .order("name"),
+      supabase.from("profiles").select("id,full_name,franchise_id"),
+      supabase.from("user_roles").select("user_id,role,franchise_id"),
+      supabase
+        .from("submissions")
+        .select(
+          "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
+        ),
+    ]);
 
-    const memberSet = new Set<string>();
-    const inchargeSet = new Set<string>();
-    for (const r of roles ?? []) {
-      if (r.role === "member") memberSet.add(r.user_id);
-      else if (r.role === "incharge") inchargeSet.add(r.user_id);
-    }
-    const profileById = new Map<string, { full_name: string | null; franchise_id: string | null }>();
-    for (const p of profiles ?? []) {
-      profileById.set(p.id, { full_name: p.full_name, franchise_id: p.franchise_id });
-    }
+  const memberSet = new Set<string>();
+  for (const r of roles ?? []) if (r.role === "member") memberSet.add(r.user_id);
 
-    const allRows = (subs ?? []) as GradedRow[];
-
-    // Lesson → course lookup for pillar bars
-    const lessonIds = Array.from(
-      new Set(allRows.filter((r) => r.letter_grade).map((r) => r.lesson_id)),
-    );
-    const { data: lessons } = lessonIds.length
-      ? await supabase
-          .from("lessons")
-          .select("id,sections(course_id,courses(id,title))")
-          .in("id", lessonIds)
-      : { data: [] as unknown[] };
-    const lessonMap = new Map<string, LessonShape>();
-    (lessons as LessonShape[] | null | undefined)?.forEach((l) => lessonMap.set(l.id, l));
-
-    // Per-member aggregates
-    const subsByUser = new Map<string, GradedRow[]>();
-    for (const r of allRows) {
-      const arr = subsByUser.get(r.user_id) ?? [];
-      arr.push(r);
-      subsByUser.set(r.user_id, arr);
-    }
-    const aggByUser = new Map<string, GradeAggregate>();
-    for (const id of memberSet) {
-      aggByUser.set(id, aggregateGrades(subsByUser.get(id) ?? []));
-    }
-
-    // Pull recent activity per member (limit query size)
-    const memberIds = Array.from(memberSet);
-    const { data: sessions } = memberIds.length
-      ? await supabase
-          .from("study_sessions")
-          .select("user_id,started_at")
-          .in("user_id", memberIds)
-          .order("started_at", { ascending: false })
-          .limit(5000)
-      : { data: [] as { user_id: string; started_at: string }[] };
-    const lastActivityByUser = new Map<string, string | null>();
-    for (const id of memberIds) lastActivityByUser.set(id, null);
-    for (const s of (sessions ?? []) as { user_id: string; started_at: string }[]) {
-      const cur = lastActivityByUser.get(s.user_id);
-      if (!cur || new Date(s.started_at) > new Date(cur)) {
-        lastActivityByUser.set(s.user_id, s.started_at);
-      }
-    }
-    // Combine with most recent submission timestamp
-    for (const [uid, rows] of subsByUser) {
-      const t = rows
-        .map((r) => r.reviewed_at ?? r.created_at)
-        .filter(Boolean)
-        .sort()
-        .pop();
-      const cur = lastActivityByUser.get(uid);
-      if (!cur || (t && new Date(t) > new Date(cur))) {
-        lastActivityByUser.set(uid, t ?? null);
-      }
-    }
-
-    // Per-franchise rows
-    const perFranchise: FranchiseRow[] = (franchises ?? []).map((f) => {
-      const ids = Array.from(memberSet).filter(
-        (id) => profileById.get(id)?.franchise_id === f.id,
-      );
-      const aggs = ids.map((id) => aggByUser.get(id) ?? emptyAggregate());
-      const agg = combineAggregates(aggs);
-      const subsHere = ids.flatMap((id) => subsByUser.get(id) ?? []);
-      const pendingCount = subsHere.filter((s) => s.status === "pending").length;
-      const lastGraded = subsHere
-        .map((s) => s.reviewed_at)
-        .filter(Boolean)
-        .sort()
-        .pop() as string | undefined;
-      const inchargeName = f.manager_id
-        ? profileById.get(f.manager_id)?.full_name ?? null
-        : null;
-      return {
-        id: f.id,
-        name: f.name,
-        inchargeName,
-        memberCount: ids.length,
-        agg,
-        pendingCount,
-        lastGradedAt: lastGraded ?? null,
-      };
-    });
-
-    // Org-wide
-    const org = combineAggregates(aggByUser.values());
-
-    // Attention list (academy-wide)
-    const attention: AttentionItem[] = [];
-    for (const id of memberSet) {
-      const agg = aggByUser.get(id) ?? emptyAggregate();
-      const lastAct = lastActivityByUser.get(id) ?? null;
-      const signal = computeMemberRisk(agg, lastAct);
-      if (signal.level === "ok") continue;
-      const p = profileById.get(id);
-      const fr = p?.franchise_id
-        ? (franchises ?? []).find((f) => f.id === p.franchise_id)?.name ?? null
-        : null;
-      attention.push({
-        userId: id,
-        fullName: p?.full_name ?? null,
-        franchiseName: fr,
-        agg,
-        signal,
-      });
-    }
-
-    // Incharge scorecard
-    const incharges: InchargeRow[] = [];
-    for (const f of franchises ?? []) {
-      if (!f.manager_id) continue;
-      const memberIdsHere = Array.from(memberSet).filter(
-        (id) => profileById.get(id)?.franchise_id === f.id,
-      );
-      const subsHere = memberIdsHere.flatMap((id) => subsByUser.get(id) ?? []);
-      const reviewedByThem = subsHere.filter((s) => s.reviewed_by === f.manager_id);
-      const pendingHere = subsHere.filter((s) => s.status === "pending");
-      const kpis = computeInchargeKpis(f.manager_id, reviewedByThem, pendingHere);
-      incharges.push({
-        inchargeId: f.manager_id,
-        inchargeName: profileById.get(f.manager_id)?.full_name ?? null,
-        franchiseName: f.name,
-        kpis,
-        pendingInFranchise: pendingHere.length,
-      });
-    }
-
-    // Pillar coverage (academy-wide)
-    const pillarMap = new Map<string, { title: string; rows: GradedRow[] }>();
-    for (const r of allRows) {
-      if (!r.letter_grade) continue;
-      if (!memberSet.has(r.user_id)) continue;
-      const l = lessonMap.get(r.lesson_id);
-      const cid = l?.sections?.courses?.id;
-      const ctitle = l?.sections?.courses?.title;
-      if (!cid || !ctitle) continue;
-      const cur = pillarMap.get(cid) ?? { title: ctitle, rows: [] };
-      cur.rows.push(r);
-      pillarMap.set(cid, cur);
-    }
-    const pillars: PillarRow[] = Array.from(pillarMap.entries()).map(([courseId, v]) => ({
-      courseId,
-      title: v.title,
-      agg: aggregateGrades(v.rows),
-    }));
-
-    return { org, perFranchise, attention, incharges, pillars };
-  } catch (e) {
-    console.error("fetchOrgPerformance failed", e);
-    return {
-      org: emptyAggregate(),
-      perFranchise: [],
-      attention: [],
-      incharges: [],
-      pillars: [],
-    };
+  const profileById = new Map<string, { full_name: string | null; franchise_id: string | null }>();
+  for (const p of profiles ?? []) {
+    profileById.set(p.id, { full_name: p.full_name, franchise_id: p.franchise_id });
   }
+
+  const memberIds = Array.from(memberSet);
+  const allRows = (subs ?? []) as GradedRow[];
+
+  // Per-member submission rollups
+  const subsByUser = new Map<string, GradedRow[]>();
+  for (const r of allRows) {
+    const arr = subsByUser.get(r.user_id) ?? [];
+    arr.push(r);
+    subsByUser.set(r.user_id, arr);
+  }
+  const aggByUser = new Map<string, GradeAggregate>();
+  for (const id of memberSet) aggByUser.set(id, aggregateGrades(subsByUser.get(id) ?? []));
+
+  // Last activity (sessions + submissions)
+  const { data: sessions } = memberIds.length
+    ? await supabase
+        .from("study_sessions")
+        .select("user_id,started_at")
+        .in("user_id", memberIds)
+        .order("started_at", { ascending: false })
+        .limit(5000)
+    : { data: [] as { user_id: string; started_at: string }[] };
+  const lastActivityByUser = new Map<string, string | null>();
+  for (const id of memberIds) lastActivityByUser.set(id, null);
+  for (const s of (sessions ?? []) as { user_id: string; started_at: string }[]) {
+    const cur = lastActivityByUser.get(s.user_id);
+    if (!cur || new Date(s.started_at) > new Date(cur)) {
+      lastActivityByUser.set(s.user_id, s.started_at);
+    }
+  }
+  for (const [uid, rows] of subsByUser) {
+    const t = rows
+      .map((r) => r.reviewed_at ?? r.created_at)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    const cur = lastActivityByUser.get(uid);
+    if (t && (!cur || new Date(t) > new Date(cur))) {
+      lastActivityByUser.set(uid, t);
+    }
+  }
+
+  // Completion across the academy
+  const completion = await fetchCompletionSummary({ userIds: memberIds });
+  const overdue = await fetchOverdueCounts(memberIds, completion.byUser);
+
+  // Courses-assigned count per user (for attention table)
+  const coursesAssignedByUser = new Map<string, number>();
+  for (const uid of memberIds) {
+    coursesAssignedByUser.set(uid, completion.byUser.get(uid)?.byCourse.size ?? 0);
+  }
+
+  // Per-franchise rollups
+  const perFranchise: FranchiseRowData[] = (franchises ?? []).map((f) => {
+    const ids = memberIds.filter(
+      (id) => profileById.get(id)?.franchise_id === f.id,
+    );
+    const aggs = ids.map((id) => aggByUser.get(id) ?? emptyAggregate());
+    const agg = combineAggregates(aggs);
+    const subsHere = ids.flatMap((id) => subsByUser.get(id) ?? []);
+    const pendingCount = subsHere.filter((s) => s.status === "pending").length;
+    const inchargeName = f.manager_id
+      ? profileById.get(f.manager_id)?.full_name ?? null
+      : null;
+    const compSum = ids.reduce(
+      (s, id) => s + (completion.byUser.get(id)?.overallPct ?? 0),
+      0,
+    );
+    const compCount = ids.filter(
+      (id) => (completion.byUser.get(id)?.byCourse.size ?? 0) > 0,
+    ).length;
+    return {
+      id: f.id,
+      name: f.name,
+      inchargeName,
+      memberCount: ids.length,
+      agg,
+      pendingCount,
+      avgCompletion: compCount > 0 ? Math.round(compSum / compCount) : 0,
+    };
+  });
+
+  // Course rollups: enrolled, completed, avg completion + grade aggregate
+  // Need lesson→course map for grade aggregation by course
+  const lessonIds = Array.from(
+    new Set(allRows.filter((r) => r.letter_grade).map((r) => r.lesson_id)),
+  );
+  const { data: lessons } = lessonIds.length
+    ? await supabase
+        .from("lessons")
+        .select("id,sections(course_id)")
+        .in("id", lessonIds)
+    : { data: [] as { id: string; sections: { course_id: string } | null }[] };
+  const lessonToCourse = new Map<string, string>();
+  for (const l of (lessons ?? []) as {
+    id: string;
+    sections: { course_id: string } | null;
+  }[]) {
+    if (l.sections?.course_id) lessonToCourse.set(l.id, l.sections.course_id);
+  }
+  const rowsByCourse = new Map<string, GradedRow[]>();
+  for (const r of allRows) {
+    if (!memberSet.has(r.user_id)) continue;
+    const cid = lessonToCourse.get(r.lesson_id);
+    if (!cid) continue;
+    const arr = rowsByCourse.get(cid) ?? [];
+    arr.push(r);
+    rowsByCourse.set(cid, arr);
+  }
+
+  const courses: CourseRow[] = Array.from(completion.byCourse.entries()).map(
+    ([cid, c]) => ({
+      id: cid,
+      title: c.title,
+      enrolled: c.enrolled,
+      completed: c.completed,
+      avgCompletion: c.avgPct,
+      agg: aggregateGrades(rowsByCourse.get(cid) ?? []),
+    }),
+  );
+  courses.sort((a, b) => b.avgCompletion - a.avgCompletion);
+
+  // Attention list — members with issues
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const attention: AttentionRowData[] = [];
+  for (const id of memberIds) {
+    const agg = aggByUser.get(id) ?? emptyAggregate();
+    const lastAct = lastActivityByUser.get(id) ?? null;
+    const signal = computeMemberRisk(agg, lastAct);
+    const od = overdue.get(id) ?? 0;
+    const issues: { label: string; tone: "rose" | "amber" }[] = [];
+    if (od > 0) issues.push({ label: `${od} overdue`, tone: "rose" });
+    if (signal.daysSinceActivity !== null && signal.daysSinceActivity >= 14) {
+      issues.push({ label: `No login ${signal.daysSinceActivity}d`, tone: "rose" });
+    } else if (signal.daysSinceActivity !== null && signal.daysSinceActivity >= 7) {
+      issues.push({ label: `No login ${signal.daysSinceActivity}d`, tone: "amber" });
+    }
+    if (agg.total > 0 && agg.averagePercent < 70) {
+      issues.push({ label: `Low avg ${agg.averagePercent}%`, tone: "rose" });
+    } else if (agg.total > 0 && agg.averagePercent < 80) {
+      issues.push({ label: `Avg ${agg.averagePercent}%`, tone: "amber" });
+    }
+    const compPct = completion.byUser.get(id)?.overallPct ?? 0;
+    if (compPct > 0 && compPct < 30) {
+      issues.push({ label: `Stuck ${compPct}%`, tone: "amber" });
+    }
+    if (issues.length === 0 && signal.level === "ok") continue;
+    if (issues.length === 0) continue;
+
+    const p = profileById.get(id);
+    const fr = p?.franchise_id
+      ? (franchises ?? []).find((f) => f.id === p.franchise_id)?.name ?? null
+      : null;
+    attention.push({
+      userId: id,
+      fullName: p?.full_name ?? null,
+      franchiseName: fr,
+      coursesAssigned: coursesAssignedByUser.get(id) ?? 0,
+      avgCompletion: compPct,
+      agg,
+      issues,
+    });
+  }
+  attention.sort((a, b) => b.issues.length - a.issues.length);
+
+  // Incharge scorecard
+  const incharges: InchargeRow[] = [];
+  for (const f of franchises ?? []) {
+    if (!f.manager_id) continue;
+    const memberIdsHere = memberIds.filter(
+      (id) => profileById.get(id)?.franchise_id === f.id,
+    );
+    const subsHere = memberIdsHere.flatMap((id) => subsByUser.get(id) ?? []);
+    const reviewedByThem = subsHere.filter((s) => s.reviewed_by === f.manager_id);
+    const pendingHere = subsHere.filter((s) => s.status === "pending");
+    const kpis = computeInchargeKpis(f.manager_id, reviewedByThem, pendingHere);
+    incharges.push({
+      inchargeId: f.manager_id,
+      inchargeName: profileById.get(f.manager_id)?.full_name ?? null,
+      franchiseName: f.name,
+      kpis,
+      pendingInFranchise: pendingHere.length,
+    });
+  }
+
+  // Pending totals + oldest
+  let oldestPendingDays: number | null = null;
+  let pendingTotal = 0;
+  for (const r of allRows) {
+    if (r.status !== "pending") continue;
+    if (!memberSet.has(r.user_id)) continue;
+    pendingTotal++;
+    const d = Math.floor((Date.now() - new Date(r.created_at).getTime()) / DAY_MS);
+    if (oldestPendingDays === null || d > oldestPendingDays) oldestPendingDays = d;
+  }
+
+  const org = combineAggregates(aggByUser.values());
+
+  return {
+    totalMembers: memberSet.size,
+    totalFranchises: (franchises ?? []).length,
+    avgCompletion: completion.overallAvgPct,
+    org,
+    pendingTotal,
+    oldestPendingDays,
+    perFranchise,
+    courses,
+    attention,
+    incharges,
+  };
 }
 
 function CeoDashboard() {
   const { profile } = useAuth();
-  const statsQuery = useQuery({ queryKey: ["ceo", "stats"], queryFn: fetchStats });
-  const perfQuery = useQuery({ queryKey: ["ceo", "org-performance"], queryFn: fetchOrgPerformance });
-  const stats = statsQuery.data;
+  const perfQuery = useQuery({
+    queryKey: ["ceo", "org-performance-v2"],
+    queryFn: fetchOrgPerformance,
+  });
   const perf = perfQuery.data;
+
+  const monthLabel = new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-3xl font-bold tracking-tight">
-          Welcome{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Academy-wide progress review.
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-bold tracking-tight">
+            IRM Academy
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Welcome{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""} ·
+            full academy view
+          </p>
+        </div>
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          Training Progress Dashboard · {monthLabel}
         </p>
       </header>
 
-      {/* Hero strip */}
+      {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile to="/ceo/franchises" label="Franchises" value={stats?.franchises} icon={Building2} />
-        <StatTile to="/ceo/courses" label="Courses" value={stats?.courses} icon={BookOpen} />
-        <StatTile to="/ceo/franchises" label="Users" value={stats?.members} icon={Users} />
-        <StatTile
-          to="/ceo/submissions"
-          label="Pending grading"
-          value={stats?.pendingSubmissions}
-          icon={FileCheck}
-          tone={(stats?.pendingSubmissions ?? 0) > 0 ? "amber" : "default"}
+        <KpiTile
+          label="Total Members"
+          value={perf?.totalMembers ?? "—"}
+          subtitle={
+            perf
+              ? `${perf.totalFranchises} ${perf.totalFranchises === 1 ? "franchise" : "franchises"}`
+              : undefined
+          }
+          tone="indigo"
+        />
+        <KpiTile
+          label="Avg Training Completion"
+          value={perf ? `${perf.avgCompletion}%` : "—"}
+          subtitle="Across all courses"
+          tone={
+            !perf
+              ? "neutral"
+              : perf.avgCompletion >= 75
+                ? "emerald"
+                : perf.avgCompletion >= 50
+                  ? "sky"
+                  : "amber"
+          }
+        />
+        <KpiTile
+          label="Avg Grade Score"
+          value={perf ? `${perf.org.averagePercent}%` : "—"}
+          subtitle="All graded submissions"
+          tone={
+            !perf
+              ? "neutral"
+              : perf.org.averagePercent >= 85
+                ? "emerald"
+                : perf.org.averagePercent >= 75
+                  ? "sky"
+                  : "amber"
+          }
+        />
+        <KpiTile
+          label="Pending to Grade"
+          value={perf?.pendingTotal ?? "—"}
+          subtitle={
+            perf?.oldestPendingDays !== null && perf?.oldestPendingDays !== undefined
+              ? `Oldest: ${perf.oldestPendingDays}d`
+              : "Caught up"
+          }
+          tone={(perf?.pendingTotal ?? 0) > 0 ? "amber" : "emerald"}
         />
       </div>
 
-      {/* Org donut */}
+      {/* Franchise training overview */}
       <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
-              <CardTitle className="font-display text-xl flex items-center gap-2">
-                <GraduationCap className="h-5 w-5 text-accent" /> Academy performance
-              </CardTitle>
+              <CardTitle className="text-base">Franchise training overview</CardTitle>
               <CardDescription>
-                Overall grade mix across every franchise — A+ 90% · A 85% · B 75% · C means redo.
+                Completion % · grade avg · grade distribution
               </CardDescription>
             </div>
-            <Link to="/ceo/grades">
-              <Button variant="outline" size="sm">
-                Full report <ArrowRight className="h-3.5 w-3.5" />
+            <Link to="/ceo/franchises">
+              <Button variant="ghost" size="sm">
+                Open franchises <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-center py-2">
-            {perf ? (
-              <GradePieCard agg={perf.org} size={280} />
-            ) : (
-              <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
-                Loading performance…
-              </div>
-            )}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Franchise</TableHead>
+                  <TableHead className="text-right">Members</TableHead>
+                  <TableHead>Avg Completion</TableHead>
+                  <TableHead>Avg Grade</TableHead>
+                  <TableHead>Grade Distribution (A+ · A · B · C)</TableHead>
+                  <TableHead className="text-right">Pending</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(perf?.perFranchise ?? []).map((f) => {
+                  const letter =
+                    f.agg.averagePercent >= 90
+                      ? "A+"
+                      : f.agg.averagePercent >= 85
+                        ? "A"
+                        : f.agg.averagePercent >= 75
+                          ? "B"
+                          : f.agg.averagePercent > 0
+                            ? "C"
+                            : null;
+                  return (
+                    <TableRow key={f.id} className="hover:bg-white/[0.02]">
+                      <TableCell>
+                        <Link
+                          to="/ceo/franchises/$id"
+                          params={{ id: f.id }}
+                          className="font-medium hover:underline"
+                        >
+                          {f.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {f.memberCount}
+                      </TableCell>
+                      <TableCell>
+                        <CompletionBar pct={f.avgCompletion} width={120} />
+                      </TableCell>
+                      <TableCell>
+                        <LetterGradeCell letter={letter} percent={f.agg.averagePercent} />
+                      </TableCell>
+                      <TableCell>
+                        <GradeDistributionBar agg={f.agg} width={180} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {f.pendingCount > 0 ? (
+                          <span className="inline-flex h-6 w-8 items-center justify-center rounded-full bg-rose-500/15 text-xs font-medium text-rose-300">
+                            {f.pendingCount}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">0</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <StatusPill tone={franchiseStatusTone(f.agg.averagePercent)} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(!perf || perf.perFranchise.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      {perfQuery.isLoading ? "Loading franchises…" : "No franchises yet."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="mt-3 border-t border-white/5 pt-3">
+            <GradeLegend />
           </div>
         </CardContent>
       </Card>
 
-      {/* Franchise leaderboard */}
-      {perf && <FranchiseLeaderboard rows={perf.perFranchise} />}
+      {/* Course bottlenecks */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">
+                Course-level training completion — all franchises
+              </CardTitle>
+              <CardDescription>Which courses are bottlenecks</CardDescription>
+            </div>
+            <Link to="/ceo/courses">
+              <Button variant="ghost" size="sm">
+                Open courses <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Course</TableHead>
+                  <TableHead className="text-right">Enrolled</TableHead>
+                  <TableHead className="text-right">Completed</TableHead>
+                  <TableHead>Avg Completion</TableHead>
+                  <TableHead>Avg Grade</TableHead>
+                  <TableHead>Pass Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(perf?.courses ?? []).map((c) => {
+                  const passing =
+                    c.agg.total > 0
+                      ? c.agg.aPlus + c.agg.a + c.agg.b
+                      : 0;
+                  const letter =
+                    c.agg.averagePercent >= 90
+                      ? "A+"
+                      : c.agg.averagePercent >= 85
+                        ? "A"
+                        : c.agg.averagePercent >= 75
+                          ? "B"
+                          : c.agg.averagePercent > 0
+                            ? "C"
+                            : null;
+                  const passTone =
+                    c.agg.total === 0
+                      ? "bg-white/8 text-muted-foreground"
+                      : passing / c.agg.total >= 0.8
+                        ? "bg-emerald-500/15 text-emerald-300"
+                        : passing / c.agg.total >= 0.6
+                          ? "bg-sky-500/15 text-sky-300"
+                          : passing / c.agg.total >= 0.4
+                            ? "bg-amber-500/15 text-amber-300"
+                            : "bg-rose-500/15 text-rose-300";
+                  return (
+                    <TableRow key={c.id} className="hover:bg-white/[0.02]">
+                      <TableCell className="font-medium">{c.title}</TableCell>
+                      <TableCell className="text-right tabular-nums">{c.enrolled}</TableCell>
+                      <TableCell className="text-right tabular-nums">{c.completed}</TableCell>
+                      <TableCell>
+                        <CompletionBar pct={c.avgCompletion} width={120} />
+                      </TableCell>
+                      <TableCell>
+                        {c.agg.total > 0 ? (
+                          <LetterGradeCell letter={letter} percent={c.agg.averagePercent} />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${passTone}`}
+                        >
+                          {c.agg.total > 0 ? `${passing}/${c.agg.total}` : "—"}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(!perf || perf.courses.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                      {perfQuery.isLoading ? "Loading courses…" : "No courses assigned yet."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Incharge scorecard */}
-      {perf && <InchargeScorecard rows={perf.incharges} />}
+      {/* Members needing attention */}
+      <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/[0.04] to-rose-500/[0.04]">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                Members needing attention
+              </CardTitle>
+              <CardDescription>Overdue, no activity, or failing</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Member</TableHead>
+                  <TableHead>Franchise</TableHead>
+                  <TableHead className="text-right">Courses Assigned</TableHead>
+                  <TableHead>Avg Completion</TableHead>
+                  <TableHead className="text-right">Avg Grade</TableHead>
+                  <TableHead>Issue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(perf?.attention ?? []).slice(0, 12).map((m) => {
+                  const tone: "indigo" | "rose" | "amber" =
+                    m.issues.some((i) => i.tone === "rose")
+                      ? "rose"
+                      : "amber";
+                  return (
+                    <TableRow key={m.userId} className="hover:bg-white/[0.02]">
+                      <TableCell>
+                        <span className="inline-flex items-center gap-2">
+                          <MiniAvatar name={m.fullName} tone={tone} />
+                          <span className="font-medium">{m.fullName ?? "—"}</span>
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {m.franchiseName ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {m.coursesAssigned}
+                      </TableCell>
+                      <TableCell>
+                        <CompletionBar pct={m.avgCompletion} width={110} />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {m.agg.total > 0 ? (
+                          <span
+                            className={
+                              m.agg.averagePercent >= 80
+                                ? "text-emerald-400"
+                                : m.agg.averagePercent >= 70
+                                  ? "text-amber-400"
+                                  : "text-rose-400"
+                            }
+                          >
+                            {m.agg.averagePercent}%
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {m.issues.slice(0, 2).map((i, idx) => (
+                            <IssueBadge key={idx} label={i.label} tone={i.tone} />
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(!perf || perf.attention.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                      {perfQuery.isLoading
+                        ? "Scanning members…"
+                        : "Every member across the academy is on track. 🎉"}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Academy-wide attention */}
-      {perf && (
-        <AttentionList
-          items={perf.attention}
-          showFranchise
-          emptyHint="Every member across the academy is on track. 🎉"
-        />
-      )}
-
-      {/* Pillar coverage */}
-      {perf && (
-        <PillarCoverageBars
-          rows={perf.pillars}
-          description="Average grade per pillar across the entire academy."
-        />
-      )}
+      {/* Incharge scorecard (kept for grader management) */}
+      {perf && perf.incharges.length > 0 && <InchargeScorecard rows={perf.incharges} />}
     </div>
-  );
-}
-
-function StatTile({
-  to,
-  label,
-  value,
-  icon: Icon,
-  tone,
-}: {
-  to: string;
-  label: string;
-  value: number | undefined;
-  icon: React.ComponentType<{ className?: string }>;
-  tone?: "default" | "amber" | "rose";
-}) {
-  const toneCls =
-    tone === "amber" ? "text-amber-300" : tone === "rose" ? "text-rose-300" : "text-foreground";
-  return (
-    <Link to={to} className="group block">
-      <Card className="hover-lift transition-colors group-hover:border-accent/40">
-        <CardContent className="flex items-center justify-between p-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className={`mt-0.5 font-display text-2xl font-bold tabular-nums ${toneCls}`}>
-              {value ?? "—"}
-            </p>
-          </div>
-          <Icon className="h-5 w-5 text-muted-foreground" />
-        </CardContent>
-      </Card>
-    </Link>
   );
 }
 
