@@ -1,5 +1,6 @@
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Card,
@@ -11,8 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, BadgeCheck, Globe2, Save } from "lucide-react";
+import { Loader2, BadgeCheck, Globe2, Save, UserPlus, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { createQaAccount } from "@/server/create-qa-account";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
@@ -27,6 +29,31 @@ function CeoQaPage() {
   const [assignments, setAssignments] = React.useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = React.useState(true);
   const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [creatingQa, setCreatingQa] = React.useState(false);
+  const [creds, setCreds] = React.useState<{ email: string; password: string } | null>(null);
+  const createQa = useServerFn(createQaAccount);
+
+  const handleCreateQa = async () => {
+    setCreatingQa(true);
+    try {
+      const r = (await createQa()) as
+        | { ok: true; status: "created" | "reset"; email: string; password: string }
+        | { ok: false; error: string };
+      if (!r.ok) {
+        toast.error(r.error);
+      } else {
+        setCreds({ email: r.email, password: r.password });
+        toast.success(
+          r.status === "created" ? "QA account created" : "QA account password reset",
+        );
+        await load();
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed");
+    } finally {
+      setCreatingQa(false);
+    }
+  };
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -128,14 +155,49 @@ function CeoQaPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl tracking-tight">QA reviewers</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Restrict each QA to specific franchises. A QA with{" "}
-          <span className="font-medium text-foreground">no franchises</span> selected can review
-          submissions across <span className="font-medium text-foreground">the whole organization</span>.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl tracking-tight">QA reviewers</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Restrict each QA to specific franchises. A QA with{" "}
+            <span className="font-medium text-foreground">no franchises</span> selected can review
+            submissions across <span className="font-medium text-foreground">the whole organization</span>.
+          </p>
+        </div>
+        <Button onClick={handleCreateQa} disabled={creatingQa}>
+          {creatingQa ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <UserPlus className="h-4 w-4" />
+          )}
+          Create demo QA login
+        </Button>
       </header>
+
+      {creds && (
+        <Card className="border-success/40 bg-success/5">
+          <CardHeader>
+            <CardTitle className="text-base">QA login ready</CardTitle>
+            <CardDescription>
+              Sign out and log back in with these credentials to access the QA dashboard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3 text-sm">
+            <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{creds.email}</code>
+            <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{creds.password}</code>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(`${creds.email}\t${creds.password}`);
+                toast.success("Copied");
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
