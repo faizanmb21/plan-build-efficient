@@ -29,6 +29,31 @@ function CeoQaPage() {
   const [assignments, setAssignments] = React.useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = React.useState(true);
   const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [creatingQa, setCreatingQa] = React.useState(false);
+  const [creds, setCreds] = React.useState<{ email: string; password: string } | null>(null);
+  const createQa = useServerFn(createQaAccount);
+
+  const handleCreateQa = async () => {
+    setCreatingQa(true);
+    try {
+      const r = (await createQa()) as
+        | { ok: true; status: "created" | "reset"; email: string; password: string }
+        | { ok: false; error: string };
+      if (!r.ok) {
+        toast.error(r.error);
+      } else {
+        setCreds({ email: r.email, password: r.password });
+        toast.success(
+          r.status === "created" ? "QA account created" : "QA account password reset",
+        );
+        await load();
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed");
+    } finally {
+      setCreatingQa(false);
+    }
+  };
 
   const load = React.useCallback(async () => {
     setLoading(true);
