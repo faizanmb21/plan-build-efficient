@@ -25,7 +25,6 @@ import { Route as QaSubmissionsRouteImport } from './routes/qa.submissions'
 import { Route as MemberProjectsRouteImport } from './routes/member.projects'
 import { Route as MemberGradesRouteImport } from './routes/member.grades'
 import { Route as MemberFocusRouteImport } from './routes/member.focus'
-import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
 import { Route as InchargeProjectsRouteImport } from './routes/incharge.projects'
 import { Route as InchargeMembersRouteImport } from './routes/incharge.members'
@@ -126,11 +125,6 @@ const MemberFocusRoute = MemberFocusRouteImport.update({
   id: '/focus',
   path: '/focus',
   getParentRoute: () => MemberRoute,
-} as any)
-const InviteTokenRoute = InviteTokenRouteImport.update({
-  id: '/invite/$token',
-  path: '/invite/$token',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const InchargeReviewsRoute = InchargeReviewsRouteImport.update({
   id: '/reviews',
@@ -256,7 +250,6 @@ export interface FileRoutesByFullPath {
   '/incharge/members': typeof InchargeMembersRoute
   '/incharge/projects': typeof InchargeProjectsRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
-  '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
   '/member/projects': typeof MemberProjectsRoute
@@ -290,7 +283,6 @@ export interface FileRoutesByTo {
   '/incharge/members': typeof InchargeMembersRoute
   '/incharge/projects': typeof InchargeProjectsRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
-  '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
   '/member/projects': typeof MemberProjectsRoute
@@ -330,7 +322,6 @@ export interface FileRoutesById {
   '/incharge/members': typeof InchargeMembersRoute
   '/incharge/projects': typeof InchargeProjectsRoute
   '/incharge/reviews': typeof InchargeReviewsRoute
-  '/invite/$token': typeof InviteTokenRoute
   '/member/focus': typeof MemberFocusRoute
   '/member/grades': typeof MemberGradesRoute
   '/member/projects': typeof MemberProjectsRoute
@@ -371,7 +362,6 @@ export interface FileRouteTypes {
     | '/incharge/members'
     | '/incharge/projects'
     | '/incharge/reviews'
-    | '/invite/$token'
     | '/member/focus'
     | '/member/grades'
     | '/member/projects'
@@ -405,7 +395,6 @@ export interface FileRouteTypes {
     | '/incharge/members'
     | '/incharge/projects'
     | '/incharge/reviews'
-    | '/invite/$token'
     | '/member/focus'
     | '/member/grades'
     | '/member/projects'
@@ -444,7 +433,6 @@ export interface FileRouteTypes {
     | '/incharge/members'
     | '/incharge/projects'
     | '/incharge/reviews'
-    | '/invite/$token'
     | '/member/focus'
     | '/member/grades'
     | '/member/projects'
@@ -470,7 +458,6 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   QaRoute: typeof QaRouteWithChildren
   ResetPasswordRoute: typeof ResetPasswordRoute
-  InviteTokenRoute: typeof InviteTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -586,13 +573,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/member/focus'
       preLoaderRoute: typeof MemberFocusRouteImport
       parentRoute: typeof MemberRoute
-    }
-    '/invite/$token': {
-      id: '/invite/$token'
-      path: '/invite/$token'
-      fullPath: '/invite/$token'
-      preLoaderRoute: typeof InviteTokenRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/incharge/reviews': {
       id: '/incharge/reviews'
@@ -857,8 +837,16 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   QaRoute: QaRouteWithChildren,
   ResetPasswordRoute: ResetPasswordRoute,
-  InviteTokenRoute: InviteTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
