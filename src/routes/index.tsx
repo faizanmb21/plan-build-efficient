@@ -43,10 +43,10 @@ function Index() {
           
           <Card>
             <CardHeader>
-              <CardTitle>Waiting for an invite</CardTitle>
+              <CardTitle>No access yet</CardTitle>
               <CardDescription>
-                If a CEO has already been set up, ask them to send you an invite link to join your
-                franchise.
+                Your account isn't attached to a franchise or role yet. Contact your CEO or
+                franchise incharge so they can set up your access.
               </CardDescription>
             </CardHeader>
             <CardContent>

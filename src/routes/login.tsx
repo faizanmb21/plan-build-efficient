@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, homeForRole } from "@/lib/auth";
@@ -16,10 +16,8 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const navigate = useNavigate();
   const { session, primaryRole, loading: authLoading, refresh } = useAuth();
-  const [mode, setMode] = React.useState<"signin" | "signup">("signin");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [fullName, setFullName] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
@@ -31,21 +29,8 @@ function LoginPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`,
-            data: { full_name: fullName },
-          },
-        });
-        if (error) throw error;
-        toast.success("Account created! Signing you in…");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       await refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Authentication failed";
@@ -75,23 +60,10 @@ function LoginPage() {
             <AnimatedCap size={36} />
           </div>
           <CardTitle className="text-2xl">IRM Academy</CardTitle>
-          <CardDescription>
-            {mode === "signin" ? "Sign in to your account" : "Create your account"}
-          </CardDescription>
+          <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "signup" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="name">Full name</Label>
-                <Input
-                  id="name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
-              </div>
-            )}
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -106,15 +78,13 @@ function LoginPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                {mode === "signin" && (
-                  <button
-                    type="button"
-                    onClick={handleForgot}
-                    className="text-xs text-accent hover:underline"
-                  >
-                    Forgot?
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleForgot}
+                  className="text-xs text-accent hover:underline"
+                >
+                  Forgot?
+                </button>
               </div>
               <Input
                 id="password"
@@ -123,28 +93,15 @@ function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete="current-password"
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+              {busy ? "Please wait…" : "Sign in"}
             </Button>
           </form>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            {mode === "signin" ? "Don't have an account?" : "Already have an account?"}{" "}
-            <button
-              type="button"
-              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              className="font-medium text-accent hover:underline"
-            >
-              {mode === "signin" ? "Sign up" : "Sign in"}
-            </button>
-          </p>
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            Have an invite link?{" "}
-            <Link to="/" className="text-accent hover:underline">
-              Open it to join your franchise
-            </Link>
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Accounts are created by your CEO or franchise incharge. Contact them if you need access.
           </p>
         </CardContent>
       </Card>

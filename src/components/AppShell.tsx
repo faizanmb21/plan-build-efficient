@@ -25,10 +25,19 @@ interface AppShellProps {
 }
 
 export function AppShell({ nav, roleLabel, children }: AppShellProps) {
-  const { profile, signOut } = useAuth();
+  const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!user) return;
+    const mustChange = (user.user_metadata as { must_change_password?: boolean } | null)
+      ?.must_change_password;
+    if (mustChange && location.pathname !== "/change-password") {
+      navigate({ to: "/change-password" });
+    }
+  }, [user, location.pathname, navigate]);
 
   async function handleSignOut() {
     await signOut();
