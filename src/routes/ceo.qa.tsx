@@ -339,19 +339,11 @@ function CreateQaDialog({
             <Input id="qa-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ayesha Khan" />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="qa-email">Email</Label>
-            <Input id="qa-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="qa.lahore@irmacademy.com" />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Temporary password</Label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 rounded bg-muted px-3 py-2 font-mono text-xs">{password}</code>
-              <Button type="button" variant="outline" size="sm" onClick={() => setPassword(randomPassword())}>
-                <RefreshCw className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">A fresh secure password is generated server-side on submit; this preview is for your convenience.</p>
+            <Label>Generated email</Label>
+            <code className="rounded bg-muted px-3 py-2 font-mono text-xs">{generatedEmail}</code>
+            <p className="text-xs text-muted-foreground">
+              Email and a secure password are generated automatically. You'll see both once the account is created so you can share them with the QA.
+            </p>
           </div>
 
           <div className="space-y-2">
