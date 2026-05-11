@@ -257,8 +257,6 @@ function CreateQaDialog({
   onCreated: (c: { email: string; password: string; name: string }) => void;
 }) {
   const [name, setName] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState(() => randomPassword());
   const [orgWide, setOrgWide] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = React.useState(false);
@@ -267,12 +265,22 @@ function CreateQaDialog({
   React.useEffect(() => {
     if (open) {
       setName("");
-      setEmail("");
-      setPassword(randomPassword());
       setOrgWide(false);
       setSelected(new Set());
     }
   }, [open]);
+
+  const generatedEmail = React.useMemo(() => {
+    const slug = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ".")
+      .replace(/^\.+|\.+$/g, "")
+      .slice(0, 24);
+    const rand = Math.random().toString(36).slice(2, 6);
+    const base = slug ? `qa.${slug}` : "qa.reviewer";
+    return `${base}.${rand}@irmacademy.qa`;
+  }, [name, open]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
