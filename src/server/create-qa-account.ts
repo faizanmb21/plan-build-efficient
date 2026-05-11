@@ -26,63 +26,72 @@ export const createQaAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => InputSchema.parse(input))
   .handler(async ({ data, context }) => {
-    const { userId } = context;
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return { ok: false as const, error: "Backend admin secret is not exposed in this preview. Open the published app and try again." };
-    }
-
-    // Authorize: caller must be CEO
-    const { data: roleRow } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("role", "ceo")
-      .maybeSingle();
-    if (!roleRow) {
-      return { ok: false as const, error: "Only the CEO can create QA accounts." };
-    }
-
-    const password = generatePassword();
-
-    const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
-      email: data.email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name: data.fullName, must_change_password: true },
-    });
-
-    if (error || !created?.user) {
-      return { ok: false as const, error: error?.message || "Failed to create user" };
-    }
-    const newUserId = created.user.id;
-
-    await supabaseAdmin
-      .from("profiles")
-      .upsert({ id: newUserId, full_name: data.fullName }, { onConflict: "id" });
-    await supabaseAdmin
-      .from("user_roles")
-      .upsert({ user_id: newUserId, role: "qa" }, { onConflict: "user_id,role" });
-
-    if (data.franchiseIds.length > 0) {
-      const rows = data.franchiseIds.map((fid) => ({
-        user_id: newUserId,
-        franchise_id: fid,
-        assigned_by: userId,
-      }));
-      const { error: aerr } = await supabaseAdmin
-        .from("qa_franchise_assignments")
-        .insert(rows);
-      if (aerr) {
-        return { ok: false as const, error: `User created, but franchise scope failed: ${aerr.message}` };
+    try {
+      const { userId } = context;
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return { ok: false as const, error: "Backend admin secret is not configured." };
       }
-    }
 
-    return {
-      ok: true as const,
-      userId: newUserId,
-      email: data.email,
-      password,
-    };
+      const { data: roleRow } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "ceo")
+        .maybeSingle();
+      if (!roleRow) {
+        return { ok: false as const, error: "Only the CEO can create QA accounts." };
+      }
+
+      const password = generatePassword();
+
+      const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
+        email: data.email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: data.fullName, must_change_password: true },
+      });
+
+      if (error || !created?.user) {
+        console.error("[createQaAccount] createUser failed", error);
+        return { ok: false as const, error: error?.message || "Failed to create user" };
+      }
+      const newUserId = created.user.id;
+
+      const { error: pErr } = await supabaseAdmin
+        .from("profiles")
+        .upsert({ id: newUserId, full_name: data.fullName }, { onConflict: "id" });
+      if (pErr) console.error("[createQaAccount] profile upsert", pErr);
+
+      const { error: rErr } = await supabaseAdmin
+        .from("user_roles")
+        .upsert({ user_id: newUserId, role: "qa" }, { onConflict: "user_id,role" });
+      if (rErr) console.error("[createQaAccount] role upsert", rErr);
+
+      if (data.franchiseIds.length > 0) {
+        const rows = data.franchiseIds.map((fid) => ({
+          user_id: newUserId,
+          franchise_id: fid,
+          assigned_by: userId,
+        }));
+        const { error: aerr } = await supabaseAdmin
+          .from("qa_franchise_assignments")
+          .insert(rows);
+        if (aerr) {
+          console.error("[createQaAccount] assignment insert", aerr);
+          return { ok: false as const, error: `User created, but franchise scope failed: ${aerr.message}` };
+        }
+      }
+
+      return {
+        ok: true as const,
+        userId: newUserId,
+        email: data.email,
+        password,
+      };
+    } catch (e: any) {
+      console.error("[createQaAccount] unhandled", e);
+      return { ok: false as const, error: e?.message || "Unexpected server error" };
+    }
   });
 
 export const listQaReviewers = createServerFn({ method: "GET" })
