@@ -257,8 +257,6 @@ function CreateQaDialog({
   onCreated: (c: { email: string; password: string; name: string }) => void;
 }) {
   const [name, setName] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState(() => randomPassword());
   const [orgWide, setOrgWide] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = React.useState(false);
@@ -267,12 +265,22 @@ function CreateQaDialog({
   React.useEffect(() => {
     if (open) {
       setName("");
-      setEmail("");
-      setPassword(randomPassword());
       setOrgWide(false);
       setSelected(new Set());
     }
   }, [open]);
+
+  const generatedEmail = React.useMemo(() => {
+    const slug = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ".")
+      .replace(/^\.+|\.+$/g, "")
+      .slice(0, 24);
+    const rand = Math.random().toString(36).slice(2, 6);
+    const base = slug ? `qa.${slug}` : "qa.reviewer";
+    return `${base}.${rand}@irmacademy.qa`;
+  }, [name, open]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -284,8 +292,8 @@ function CreateQaDialog({
   };
 
   const submit = async () => {
-    if (!name.trim() || !email.trim()) {
-      toast.error("Name and email are required");
+    if (!name.trim()) {
+      toast.error("Name is required");
       return;
     }
     if (!orgWide && selected.size === 0) {
@@ -296,7 +304,7 @@ function CreateQaDialog({
     try {
       const r = (await create({
         data: {
-          email: email.trim(),
+          email: generatedEmail,
           fullName: name.trim(),
           franchiseIds: orgWide ? [] : [...selected],
         },
@@ -331,19 +339,11 @@ function CreateQaDialog({
             <Input id="qa-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ayesha Khan" />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="qa-email">Email</Label>
-            <Input id="qa-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="qa.lahore@irmacademy.com" />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Temporary password</Label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 rounded bg-muted px-3 py-2 font-mono text-xs">{password}</code>
-              <Button type="button" variant="outline" size="sm" onClick={() => setPassword(randomPassword())}>
-                <RefreshCw className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">A fresh secure password is generated server-side on submit; this preview is for your convenience.</p>
+            <Label>Generated email</Label>
+            <code className="rounded bg-muted px-3 py-2 font-mono text-xs">{generatedEmail}</code>
+            <p className="text-xs text-muted-foreground">
+              Email and a secure password are generated automatically. You'll see both once the account is created so you can share them with the QA.
+            </p>
           </div>
 
           <div className="space-y-2">
