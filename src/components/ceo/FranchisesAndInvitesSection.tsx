@@ -1,6 +1,11 @@
 import * as React from "react";
-import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  createUserAccount,
+  adminResetPassword,
+  listTeam,
+} from "@/server/admin-users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,17 +36,18 @@ import { Badge } from "@/components/ui/badge";
 import {
   Building2,
   Plus,
-  Send,
   Copy,
   Trash2,
   Users,
   Archive,
   RotateCcw,
   AlertTriangle,
-  ArrowRight,
   ShieldCheck,
   MapPin,
   Info,
+  KeyRound,
+  UserPlus,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { GradePieCard } from "@/components/grading/GradePieCard";
@@ -59,17 +65,6 @@ interface Franchise {
   auto_delete_at: string | null;
 }
 
-interface InviteRow {
-  id: string;
-  email: string;
-  role: "ceo" | "incharge" | "member";
-  franchise_id: string | null;
-  token: string;
-  expires_at: string;
-  accepted_at: string | null;
-  created_at: string;
-}
-
 interface MemberRow {
   id: string;
   full_name: string | null;
@@ -77,27 +72,52 @@ interface MemberRow {
   role?: string;
 }
 
+type TeamMember = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  franchise_id: string | null;
+  roles: string[];
+  created_at: string;
+};
+
+function generatePassword(): string {
+  // 12-char password with letters, digits and a couple of symbols — easy to share
+  const letters = "abcdefghijkmnpqrstuvwxyz";
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const nums = "23456789";
+  const syms = "!@#$";
+  const all = letters + upper + nums;
+  let out = "";
+  for (let i = 0; i < 10; i++) out += all[Math.floor(Math.random() * all.length)];
+  out += nums[Math.floor(Math.random() * nums.length)];
+  out += syms[Math.floor(Math.random() * syms.length)];
+  return out;
+}
+
 export function FranchisesAndInvitesSection() {
   const [franchises, setFranchises] = React.useState<Franchise[]>([]);
-  const [invites, setInvites] = React.useState<InviteRow[]>([]);
+  const [team, setTeam] = React.useState<TeamMember[]>([]);
   const [members, setMembers] = React.useState<MemberRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [showArchived, setShowArchived] = React.useState(false);
   const [aggsByFranchise, setAggsByFranchise] = React.useState<Record<string, GradeAggregate>>({});
   const [franchiseOpen, setFranchiseOpen] = React.useState(false);
-  const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
+
+  const listTeamFn = useServerFn(listTeam);
 
   const load = React.useCallback(async () => {
-    const [f, i, p, r] = await Promise.all([
+    const [f, p, r, t] = await Promise.all([
       supabase.from("franchises").select("*").order("created_at", { ascending: false }),
-      supabase.from("invites").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, franchise_id"),
       supabase.from("user_roles").select("user_id, role"),
+      listTeamFn().catch(() => ({ ok: false as const, members: [], error: "" })),
     ]);
 
     const allF = (f.data as Franchise[]) ?? [];
     setFranchises(allF);
-    setInvites((i.data as InviteRow[]) ?? []);
+    setTeam(t.ok ? (t.members as TeamMember[]) : []);
 
     const roleMap = new Map<string, string>();
     ((r.data as { user_id: string; role: string }[]) ?? []).forEach((x) => {
@@ -132,7 +152,7 @@ export function FranchisesAndInvitesSection() {
       });
 
     setAggsByFranchise(Object.fromEntries(entries));
-  }, []);
+  }, [listTeamFn]);
 
   React.useEffect(() => {
     load();
@@ -141,20 +161,6 @@ export function FranchisesAndInvitesSection() {
   const confirm = useConfirm();
 
   const visible = franchises.filter((f) => (showArchived ? !!f.archived_at : !f.archived_at));
-
-  async function archive(id: string, name: string) {
-    const ok = await confirm({
-      title: "Archive franchise?",
-      description: `Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`,
-      confirmLabel: "Archive",
-      variant: "destructive",
-    });
-    if (!ok) return;
-    const { error } = await supabase.rpc("archive_franchise", { _franchise_id: id });
-    if (error) return toast.error(error.message);
-    toast.success("Franchise archived");
-    load();
-  }
 
   async function restore(id: string) {
     const { error } = await supabase.rpc("restore_franchise", { _franchise_id: id });
@@ -183,7 +189,7 @@ export function FranchisesAndInvitesSection() {
   }
 
   if (loading) {
-    return <div className="text-sm text-muted-foreground">Loading franchises…</div>;
+    return <div className="text-sm text-muted-foreground">Loading…</div>;
   }
 
   return (
@@ -192,11 +198,11 @@ export function FranchisesAndInvitesSection() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {showArchived ? `Archived (${visible.length})` : "Manage franchises & invites"}
+              {showArchived ? `Archived (${visible.length})` : "Team & franchises"}
             </h2>
             <p className="text-xs text-muted-foreground">
-              Create franchises, invite incharges &amp; members. Archived franchises can be
-              restored within 30 days.
+              Create franchises and team accounts directly — share the temporary password
+              with the person, they change it on first sign-in.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -210,11 +216,12 @@ export function FranchisesAndInvitesSection() {
               open={franchiseOpen}
               onOpenChange={setFranchiseOpen}
             />
-            <NewInviteDialog
+            <CreateAccountDialog
               franchises={franchises.filter((f) => !f.archived_at)}
               onCreated={load}
-              open={inviteOpen}
-              onOpenChange={setInviteOpen}
+              open={createOpen}
+              onOpenChange={setCreateOpen}
+              callerScope="ceo"
             />
           </div>
         </div>
@@ -228,10 +235,12 @@ export function FranchisesAndInvitesSection() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map((f) => {
-              const team = members.filter((m) => m.franchise_id === f.id);
-              const memberCount = team.filter((m) => m.role === "member").length;
+              const memberCount = members.filter(
+                (m) => m.franchise_id === f.id && m.role === "member",
+              ).length;
               const incharge =
-                team.find((m) => m.id === f.manager_id) ?? team.find((m) => m.role === "incharge");
+                members.find((m) => m.id === f.manager_id) ??
+                members.find((m) => m.franchise_id === f.id && m.role === "incharge");
               const agg = aggsByFranchise[f.id];
               const isArchived = !!f.archived_at;
               const purgeReady =
@@ -239,8 +248,8 @@ export function FranchisesAndInvitesSection() {
                 !!f.archived_at &&
                 new Date(f.archived_at).getTime() < Date.now() - 30 * 24 * 60 * 60 * 1000;
 
-              const cardBody = (
-                <>
+              return (
+                <Card key={f.id} className="opacity-70">
                   <CardHeader>
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="flex items-center gap-2 text-base">
@@ -260,7 +269,6 @@ export function FranchisesAndInvitesSection() {
                         <GradePieCard agg={agg} size={150} showStats={false} />
                       </div>
                     )}
-
                     <div className="space-y-1.5 text-muted-foreground">
                       <div className="flex items-center gap-1.5">
                         <ShieldCheck className="h-3.5 w-3.5" />
@@ -274,46 +282,36 @@ export function FranchisesAndInvitesSection() {
                       </div>
                     </div>
                   </CardContent>
-                </>
-              );
-
-              const actionFooter = (
-                <div className="space-y-2 border-t border-border/60 px-6 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => restore(f.id)}>
-                      <RotateCcw className="h-3.5 w-3.5" /> Restore
-                    </Button>
-                    {purgeReady ? (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => purge(f.id, f.name, false)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Delete forever
+                  <div className="space-y-2 border-t border-border/60 px-6 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => restore(f.id)}>
+                        <RotateCcw className="h-3.5 w-3.5" /> Restore
                       </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive"
-                        onClick={() => purge(f.id, f.name, true)}
-                      >
-                        <AlertTriangle className="h-3.5 w-3.5" /> Force delete
-                      </Button>
+                      {purgeReady ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => purge(f.id, f.name, false)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Delete forever
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => purge(f.id, f.name, true)}
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5" /> Force delete
+                        </Button>
+                      )}
+                    </div>
+                    {f.auto_delete_at && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Auto-purge after {new Date(f.auto_delete_at).toLocaleDateString()}
+                      </p>
                     )}
                   </div>
-                  {f.auto_delete_at && (
-                    <p className="text-[11px] text-muted-foreground">
-                      Auto-purge after {new Date(f.auto_delete_at).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              );
-
-              return (
-                <Card key={f.id} className="opacity-70">
-                  {cardBody}
-                  {actionFooter}
                 </Card>
               );
             })}
@@ -321,46 +319,11 @@ export function FranchisesAndInvitesSection() {
         )}
       </section>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Invites ({invites.length})
-          </h2>
-        </div>
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-          <p>
-            <span className="font-semibold text-foreground">Invites are not emailed automatically.</span>{" "}
-            After creating an invite, copy the link and share it with the recipient yourself
-            (WhatsApp, email, SMS, etc.). They'll use it to create their account and join.
-          </p>
-        </div>
-        {invites.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              No invites yet. Click{" "}
-              <button
-                type="button"
-                onClick={() => setInviteOpen(true)}
-                className="font-semibold text-accent underline-offset-4 hover:underline"
-              >
-                New invite
-              </button>{" "}
-              to send one.
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <div className="divide-y">
-                {invites.map((inv) => (
-                  <InviteRowItem key={inv.id} invite={inv} franchises={franchises} onChange={load} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </section>
+      <TeamList
+        team={team}
+        franchises={franchises}
+        onChanged={load}
+      />
     </div>
   );
 }
@@ -443,192 +406,454 @@ function NewFranchiseDialog({
   );
 }
 
-function NewInviteDialog({
+export function CreateAccountDialog({
   franchises,
   onCreated,
   open: controlledOpen,
   onOpenChange,
+  callerScope,
+  lockFranchiseId = null,
+  triggerLabel,
 }: {
-  franchises: Franchise[];
+  franchises: { id: string; name: string }[];
   onCreated: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  callerScope: "ceo" | "incharge";
+  lockFranchiseId?: string | null;
+  triggerLabel?: string;
 }) {
   const [internalOpen, setInternalOpen] = React.useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
+
   const [email, setEmail] = React.useState("");
-  const [role, setRole] = React.useState<"incharge" | "member" | "qa">("member");
-  const [franchiseId, setFranchiseId] = React.useState<string>("");
+  const [fullName, setFullName] = React.useState("");
+  const [role, setRole] = React.useState<"ceo" | "incharge" | "member" | "qa">(
+    callerScope === "incharge" ? "member" : "member",
+  );
+  const [franchiseId, setFranchiseId] = React.useState<string>(lockFranchiseId ?? "");
+  const [password, setPassword] = React.useState(() => generatePassword());
   const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState<{
+    email: string;
+    password: string;
+    fullName: string;
+    role: string;
+  } | null>(null);
+
+  const createFn = useServerFn(createUserAccount);
+
+  function reset() {
+    setEmail("");
+    setFullName("");
+    setRole(callerScope === "incharge" ? "member" : "member");
+    setFranchiseId(lockFranchiseId ?? "");
+    setPassword(generatePassword());
+    setResult(null);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const { data, error } = await supabase
-      .from("invites")
-      .insert({
-        email: email.trim().toLowerCase(),
+    const res = await createFn({
+      data: {
+        email: email.trim(),
+        password,
+        fullName: fullName.trim(),
         role,
-        franchise_id: franchiseId || null,
-      })
-      .select("token")
-      .single();
+        franchiseId:
+          role === "ceo" || role === "qa"
+            ? null
+            : (lockFranchiseId ?? franchiseId) || null,
+      },
+    });
     setBusy(false);
-    if (error) {
-      toast.error(error.message);
+    if (!res.ok) {
+      toast.error(res.error);
       return;
     }
-    const link = `${window.location.origin}/invite/${data.token}`;
-    await navigator.clipboard.writeText(link).catch(() => {});
-    toast.success("Invite link copied — share it with the recipient (no email is sent)", {
-      duration: 6000,
+    toast.success("Account created");
+    setResult({
+      email: res.email,
+      password: res.password,
+      fullName: res.fullName,
+      role: res.role,
     });
-    setEmail("");
-    setFranchiseId("");
-    setOpen(false);
     onCreated();
   }
 
+  function copyAll() {
+    if (!result) return;
+    const text = `IRM Academy login\n\nName: ${result.fullName}\nEmail: ${result.email}\nTemporary password: ${result.password}\n\nSign in at ${window.location.origin}/login — you'll be asked to change your password on first login.`;
+    navigator.clipboard.writeText(text);
+    toast.success("Credentials copied — paste in WhatsApp/email");
+  }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
-          <Send className="h-4 w-4" /> New invite
+          <UserPlus className="h-4 w-4" /> {triggerLabel ?? "Create account"}
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create invite link</DialogTitle>
-          <DialogDescription>
-            This generates an invite link — <span className="font-semibold">no email is sent</span>.
-            After clicking Create, the link is copied to your clipboard so you can share it
-            manually (WhatsApp, email, SMS, etc.). The recipient uses it to create their account
-            and join your academy.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="iemail">Email</Label>
-            <Input
-              id="iemail"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as "incharge" | "member" | "qa")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="member">Member (learner)</SelectItem>
-                <SelectItem value="incharge">Incharge (franchise manager)</SelectItem>
-                <SelectItem value="qa">QA (org-wide grader)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Franchise</Label>
-            <Select value={franchiseId} onValueChange={setFranchiseId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select franchise (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {franchises.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
-                    {f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {franchises.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                No franchises yet — create one first if you want to assign this user to a branch.
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={busy || !email.trim()}>
-              {busy ? "Creating…" : "Create invite link"}
-            </Button>
-          </DialogFooter>
-        </form>
+        {result ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Account created — share these credentials</DialogTitle>
+              <DialogDescription>
+                Send this to {result.fullName}. They'll be prompted to change the password
+                on first sign-in.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-sm font-mono space-y-1">
+              <div>Email: {result.email}</div>
+              <div>Password: {result.password}</div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button variant="outline" onClick={copyAll}>
+                <Copy className="h-4 w-4" /> Copy share-text
+              </Button>
+              <Button
+                onClick={() => {
+                  setOpen(false);
+                  reset();
+                }}
+              >
+                Done
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Create account</DialogTitle>
+              <DialogDescription>
+                Set the user's email and a temporary password — they'll change it on first
+                sign-in. No invite link is sent.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={submit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="acc-name">Full name</Label>
+                <Input
+                  id="acc-name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="acc-email">Email</Label>
+                <Input
+                  id="acc-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              {callerScope === "ceo" && (
+                <div className="space-y-1.5">
+                  <Label>Role</Label>
+                  <Select
+                    value={role}
+                    onValueChange={(v) => setRole(v as "ceo" | "incharge" | "member" | "qa")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Member (learner)</SelectItem>
+                      <SelectItem value="incharge">Incharge (franchise manager)</SelectItem>
+                      <SelectItem value="qa">QA (org-wide grader)</SelectItem>
+                      <SelectItem value="ceo">CEO (full admin)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {role !== "ceo" && role !== "qa" && !lockFranchiseId && (
+                <div className="space-y-1.5">
+                  <Label>Franchise</Label>
+                  <Select value={franchiseId} onValueChange={setFranchiseId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select franchise" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {franchises.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="acc-pw">Temporary password</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="acc-pw"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setPassword(generatePassword())}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Auto-generated. User will be forced to change it on first sign-in.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={busy || !email.trim() || !fullName.trim()}>
+                  {busy ? "Creating…" : "Create account"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-function InviteRowItem({
-  invite,
+function TeamList({
+  team,
   franchises,
-  onChange,
+  onChanged,
 }: {
-  invite: InviteRow;
+  team: TeamMember[];
   franchises: Franchise[];
-  onChange: () => void;
+  onChanged: () => void;
 }) {
-  const expired = new Date(invite.expires_at) < new Date();
-  const status = invite.accepted_at
-    ? { label: "Accepted", variant: "default" as const }
-    : expired
-      ? { label: "Expired", variant: "destructive" as const }
-      : { label: "Pending", variant: "secondary" as const };
-  const franchise = franchises.find((f) => f.id === invite.franchise_id);
-  const link = `${window.location.origin}/invite/${invite.token}`;
+  const franchiseName = (id: string | null) =>
+    id ? franchises.find((f) => f.id === id)?.name ?? "—" : "—";
+  const [filter, setFilter] = React.useState<string>("all");
 
-  async function copy() {
-    await navigator.clipboard.writeText(link);
-    toast.success("Invite link copied");
+  const filtered = team.filter((m) => {
+    if (filter === "all") return true;
+    if (filter === "no-role") return m.roles.length === 0;
+    return m.roles.includes(filter);
+  });
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          People ({team.length})
+        </h2>
+        <Select value={filter} onValueChange={setFilter}>
+          <SelectTrigger className="h-8 w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All roles</SelectItem>
+            <SelectItem value="ceo">CEO</SelectItem>
+            <SelectItem value="incharge">Incharge</SelectItem>
+            <SelectItem value="qa">QA</SelectItem>
+            <SelectItem value="member">Member</SelectItem>
+            <SelectItem value="no-role">No role</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+        <p>
+          You can reset a user's password here. The new temporary password is shown once — copy
+          it and share it via WhatsApp/email. The user is forced to change it on next sign-in.
+        </p>
+      </div>
+      {filtered.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            No matching users.
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {filtered.map((m) => (
+                <TeamRow
+                  key={m.id}
+                  member={m}
+                  franchiseName={franchiseName(m.franchise_id)}
+                  onChanged={onChanged}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+function TeamRow({
+  member,
+  franchiseName,
+  onChanged,
+}: {
+  member: TeamMember;
+  franchiseName: string;
+  onChanged: () => void;
+}) {
+  const [resetOpen, setResetOpen] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [newPw, setNewPw] = React.useState(() => generatePassword());
+  const [done, setDone] = React.useState(false);
+  const confirm = useConfirm();
+  const resetFn = useServerFn(adminResetPassword);
+
+  async function doReset() {
+    setBusy(true);
+    const res = await resetFn({ data: { userId: member.id, newPassword: newPw } });
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    setDone(true);
+    toast.success("Password reset — share the new one");
   }
 
-  const confirm = useConfirm();
-  async function revoke() {
+  function copyShare() {
+    const text = `IRM Academy login\n\nName: ${member.full_name ?? ""}\nEmail: ${member.email ?? ""}\nNew temporary password: ${newPw}\n\nSign in at ${window.location.origin}/login — you'll be asked to change your password.`;
+    navigator.clipboard.writeText(text);
+    toast.success("Copied");
+  }
+
+  async function removeUser() {
     const ok = await confirm({
-      title: "Delete invite?",
-      description: "This invite link will stop working.",
-      confirmLabel: "Delete",
+      title: "Remove from franchise?",
+      description: `Detach ${member.full_name ?? member.email ?? "this user"} from their franchise? Their account stays.`,
+      confirmLabel: "Remove",
       variant: "destructive",
     });
     if (!ok) return;
-    const { error } = await supabase.from("invites").delete().eq("id", invite.id);
-    if (error) {
-      toast.error(error.message);
-      return;
+    const { error } = await supabase.rpc("remove_member_from_franchise", { _user_id: member.id });
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Removed");
+      onChanged();
     }
-    toast.success("Invite deleted");
-    onChange();
   }
 
   return (
     <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-0.5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate font-medium">{invite.email}</span>
-          <Badge variant="outline" className="capitalize">
-            {invite.role}
-          </Badge>
-          <Badge variant={status.variant}>{status.label}</Badge>
+          <span className="truncate font-medium">{member.full_name ?? "Unnamed"}</span>
+          {member.roles.length === 0 ? (
+            <Badge variant="outline">No role</Badge>
+          ) : (
+            member.roles.map((r) => (
+              <Badge key={r} variant="secondary" className="capitalize">
+                {r}
+              </Badge>
+            ))
+          )}
         </div>
-        <div className="text-xs text-muted-foreground">
-          {franchise ? franchise.name : "No franchise"} ·{" "}
-          {invite.accepted_at
-            ? `Joined ${new Date(invite.accepted_at).toLocaleDateString()}`
-            : `Expires ${new Date(invite.expires_at).toLocaleDateString()}`}
+        <div className="truncate text-xs text-muted-foreground">
+          {member.email ?? "no email"} · {franchiseName}
         </div>
       </div>
       <div className="flex shrink-0 gap-2">
-        {!invite.accepted_at && !expired && (
-          <Button size="sm" variant="outline" onClick={copy}>
-            <Copy className="h-3.5 w-3.5" /> Copy link
+        <Dialog
+          open={resetOpen}
+          onOpenChange={(o) => {
+            setResetOpen(o);
+            if (!o) {
+              setNewPw(generatePassword());
+              setDone(false);
+            }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline">
+              <KeyRound className="h-3.5 w-3.5" /> Reset password
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            {done ? (
+              <>
+                <DialogHeader>
+                  <DialogTitle>New temporary password</DialogTitle>
+                  <DialogDescription>
+                    Share this with {member.full_name ?? member.email}. They'll change it on
+                    sign-in.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="rounded-lg border border-border/60 bg-muted/40 p-3 font-mono text-sm space-y-1">
+                  <div>Email: {member.email}</div>
+                  <div>Password: {newPw}</div>
+                </div>
+                <DialogFooter className="gap-2 sm:gap-2">
+                  <Button variant="outline" onClick={copyShare}>
+                    <Copy className="h-4 w-4" /> Copy share-text
+                  </Button>
+                  <Button onClick={() => setResetOpen(false)}>Done</Button>
+                </DialogFooter>
+              </>
+            ) : (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Reset password</DialogTitle>
+                  <DialogDescription>
+                    Generate a new temporary password for {member.full_name ?? member.email}.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-1.5">
+                  <Label>New password</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newPw}
+                      onChange={(e) => setNewPw(e.target.value)}
+                      minLength={8}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setNewPw(generatePassword())}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={doReset} disabled={busy || newPw.length < 8}>
+                    {busy ? "Resetting…" : "Reset password"}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+        {member.franchise_id && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={removeUser}
+            className="text-destructive"
+            aria-label="Remove from franchise"
+          >
+            <Archive className="h-3.5 w-3.5" />
           </Button>
         )}
-        <Button size="sm" variant="ghost" onClick={revoke} className="text-destructive">
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
       </div>
     </div>
   );

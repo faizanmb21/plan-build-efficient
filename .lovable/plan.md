@@ -1,121 +1,79 @@
 ## Goal
+Drop the invite-link / invite-email flow entirely. Instead:
+- **CEO** creates accounts directly for **QA, Incharge, and members** (any role) — sets email + temporary password, assigns franchise, hands credentials to the person.
+- **Incharge** creates accounts directly for **members** in their own franchise.
+- New user signs in with the temporary password, is prompted to change it on first login.
 
-Restructure the unified CEO dashboard so the top section visually combines the two screenshots:
+This is simpler operationally (no DNS, no email domain, no waiting for an invite to arrive) and lines up with how IRM actually onboards people.
 
-- The **donut/franchise summary cards** (currently in the "Franchises" section lower down) move to the **top** of the dashboard.
-- Beneath each donut, list **up to 10 members** of that franchise with their `[avatar] Name ─ grade-distribution bar ─ avg %` row (the same layout shown in screenshot 2).
-- If a franchise has **more than 10 members**, show a "View all N members →" row that navigates to that franchise detail page.
-- Clicking **any member row** opens the **member's grade report dialog directly on the CEO dashboard** (no navigation away), reusing the existing `MemberGradeReport` component already used in `ceo.franchises.$id.tsx`.
+## Why this works
+- We already have `SUPABASE_SERVICE_ROLE_KEY` configured.
+- Using `supabase.auth.admin.createUser({ email, password, email_confirm: true })` from a server function creates the auth user instantly, skips email verification, and returns the user id — we then insert the profile + `user_roles` row in the same call.
+- No need for the `invites` table or `accept_invite` RPC at all.
 
-## New top section: "Franchise overview"
+## Plan
 
-Replaces the current `InchargeMemberStrip` (which is plain text rows) and supersedes the donut cards in `FranchisesAndInvitesSection`'s grid for the active-franchise view.
+### 1. Build the admin-create server function
+Create `src/lib/admin-users.functions.ts` with one server fn: `createUserAccount`.
+- Input (Zod): `{ email, password, fullName, role: 'ceo'|'incharge'|'member'|'qa', franchiseId?: uuid }`.
+- Middleware `requireSupabaseAuth` to identify the caller.
+- Authorization in the handler:
+  - CEO → can create any role, any franchise.
+  - Incharge → can only create `member` role, franchise locked to their own `get_user_franchise`.
+  - Anyone else → reject.
+- Uses `supabaseAdmin` (service role) to:
+  1. `auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name, must_change_password: true } })`.
+  2. The existing `handle_new_user` trigger creates the profile row.
+  3. Update `profiles.franchise_id` + `full_name`.
+  4. Insert into `user_roles (user_id, role, franchise_id)`.
+- Returns `{ userId, email }` plus the temp password echoed back once so the UI can show "Copy credentials".
 
-Each card contains:
+### 2. CEO UI — "Create user" replaces "Create invite"
+In `src/components/ceo/FranchisesAndInvitesSection.tsx`:
+- Rename section to **"Team & accounts"**.
+- Replace the "New invite" dialog with a **"Create account"** dialog:
+  - Fields: Full name, Email, Role (CEO / Incharge / QA / Member), Franchise (required for incharge/member, hidden for CEO/QA), Temporary password (auto-generated, editable, "Regenerate" + "Copy" buttons).
+  - Submit → calls `createUserAccount`.
+  - Success → show credentials card with **Copy email + password** button and a reminder: "Share these with the user. They'll be asked to change the password on first login."
+- Remove the invites list. Replace with a **People list**: queries `profiles + user_roles` joined with `auth.users.email` via a new RPC `list_team_members()` (CEO sees all; Incharge sees their franchise).
+  - Each row: name, email, role, franchise, "Reset password" + "Remove" actions.
 
-```text
-┌──────────────────────────────────────┐
-│ 🏢 IRM Sargodha                      │
-│ 📍 Sargodha, Pakistan                │
-│                                      │
-│           [ 64% donut ]              │
-│  • A+ 72  • A 64  • B 56  • Redo 61  │
-│                                      │
-│ 🛡 Sargodha Incharge · 👥 8 members   │
-│ ───────────────────────────────────  │
-│ [SJ] Sana Javed   ████████░░  85%    │ ← clickable
-│ [HS] Hassan Sheikh ██████░░░░  70%   │
-│ ... (up to 10)                       │
-│ View all 12 members →                │ (only if > 10)
-│ ───────────────────────────────────  │
-│ Click for more details →             │
-│ [Archive]                            │
-└──────────────────────────────────────┘
-```
+### 3. Incharge UI — same dialog, scoped
+In `src/routes/incharge.members.tsx`:
+- Add "Create member" button using the same dialog component (role locked to `member`, franchise locked to incharge's franchise).
+- Member list already exists — add a "Reset password" action per row.
 
-- Donut: existing `GradePieCard` with `size={150}` and the 4-color stats already present.
-- Member rows: existing `MiniAvatar` + `GradeDistributionBar` + avg percent (same primitives used today in `InchargeMemberStrip`), sorted graded-first by avg desc then ungraded by name (same sort as today).
-- Member row is a `<button>` that calls `onMemberClick(memberId)` on the parent — NOT a `Link`. The parent owns a `gradeMember` state and renders the existing grade dialog.
-- "View all N members →" row only renders when `members.length > 10`. Links to `/ceo/franchises/$id`.
-- "Click for more details" footer link to `/ceo/franchises/$id` (preserved from current franchise card).
-- Archive button preserved at the bottom of each card.
+### 4. Reset-password admin action
+Second server fn: `adminResetPassword({ userId, newPassword })`.
+- CEO can reset anyone; Incharge can reset members in their franchise only.
+- Uses `supabase.auth.admin.updateUserById(userId, { password, user_metadata: { must_change_password: true } })`.
+- UI returns the new temp password to copy + share.
 
-## Member grade dialog on the dashboard
+### 5. First-login password change
+- After sign-in in `src/lib/auth.tsx`, read `user_metadata.must_change_password`.
+- If true, redirect to a new `/change-password` route that forces `supabase.auth.updateUser({ password })` and clears the flag via a tiny server fn `clearMustChangePassword()` (uses admin client to update metadata).
+- Block navigation to other routes until done (guard inside `AppShell`).
 
-Reuse the exact dialog already used in `src/routes/ceo.franchises.$id.tsx` (lines 467–479):
+### 6. Remove the invite flow
+- Delete route `src/routes/invite.$token.tsx`.
+- Drop the `invites` table + `accept_invite` RPC via migration (after confirming nothing else reads them).
+- Remove the `Invites` UI bits from any dashboard.
+- Update `src/routes/index.tsx` "Waiting for an invite" empty state → "Ask your CEO or incharge to create your account."
 
-```tsx
-<Dialog open={!!gradeMember} onOpenChange={(o) => !o && setGradeMember(null)}>
-  <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-    <DialogHeader><DialogTitle>Member grade report</DialogTitle></DialogHeader>
-    {gradeMember && <MemberGradeReport userId={gradeMember.id} ... />}
-  </DialogContent>
-</Dialog>
-```
+### 7. Auth settings
+- Keep email signup **enabled** so existing flows work, but the public `/login` page becomes sign-in-only (we hide the "Sign up" toggle). Self-signup will then be possible by URL but won't grant any role — without a role the user lands on the "no role" placeholder, harmless.
+- Optional: call `configure_auth` to leave auto-confirm **off** for self-signup, while our admin-create path uses `email_confirm: true` so admin-created users are pre-verified.
 
-State + handler live in `ceo.index.tsx`. The dashboard already has each member's `userId` and `fullName` in `inchargeBlocks`, so no extra fetching is needed to open the dialog — `MemberGradeReport` fetches its own data by `userId`.
+### 8. Launch checklist (v1)
+- Fix the lingering `TSNonNullExpression` build error from earlier (sweep route files).
+- Smoke test on the published URL:
+  1. CEO signs in → creates an Incharge with temp password → copies creds.
+  2. Incharge signs in with temp password → forced to change password → lands on `/incharge` → creates a member.
+  3. Member signs in → forced to change password → lands on `/member`.
+  4. CEO resets a user's password → user signs in with new temp password → forced to change again.
+- Publish.
 
-## Sections after the change (top → bottom)
-
-1. Header (IRM Academy)
-2. KPI strip (unchanged)
-3. **NEW unified "Franchise overview" grid** (donut + member list per franchise + archive action) — replaces both the current `InchargeMemberStrip` AND the donut grid inside `FranchisesAndInvitesSection`.
-4. Franchises management controls — "Show archived (N)", "New franchise", "New invite" buttons + Archived list (when toggled) + Invites list. Pulled out of `FranchisesAndInvitesSection` and lives below the overview grid.
-5. Course bottlenecks table (unchanged)
-6. Members needing attention table (unchanged)
-7. Incharge scorecard (unchanged)
-
-## Technical changes
-
-### `src/components/ceo/InchargeMemberStrip.tsx` — rewritten
-
-- Renamed conceptually to a "Franchise overview" grid (filename kept to minimize churn, or rename to `FranchiseOverviewGrid.tsx` — happy with either; I'll keep the existing filename to avoid touching `ceo.index.tsx` import paths beyond what's needed).
-- New props:
-  ```ts
-  interface FranchiseOverviewItem {
-    franchiseId: string;
-    franchiseName: string;
-    location: string | null;
-    inchargeName: string | null;
-    agg: GradeAggregate;       // franchise-level aggregate for donut
-    members: InchargeMember[]; // already sorted
-    isArchived: boolean;
-    archivedAt: string | null;
-    autoDeleteAt: string | null;
-  }
-  interface Props {
-    items: FranchiseOverviewItem[];
-    onMemberClick: (userId: string, fullName: string | null) => void;
-    onArchive: (id: string, name: string) => void;
-    onRestore: (id: string) => void;
-    onPurge: (id: string, name: string, force: boolean) => void;
-  }
-  ```
-- Renders `GradePieCard` (size 150), the 4-color legend (A+/A/B/Redo counts) like the screenshot, member list sliced to 10, "View all N →" link when overflow, archive/restore action row, "Click for more details" link wrapping the donut+member-list area.
-- Member row uses a `<button>` triggering `onMemberClick`.
-
-### `src/routes/ceo.index.tsx`
-
-- Extend `inchargeBlocks` build to include `agg` (franchise aggregate, already computed in `perFranchise`), `location`, `isArchived` flag — i.e. produce `FranchiseOverviewItem[]` directly. Easiest: also fetch `location, archived_at, auto_delete_at` in the franchises query (currently only `id,name,manager_id` is selected; expand to include those columns — no schema change).
-- Add local state `const [gradeMember, setGradeMember] = React.useState<{id: string; name: string | null} | null>(null)`.
-- Render the new grid with `onMemberClick={(id, name) => setGradeMember({id, name})}`.
-- Render the grade dialog (same JSX as in `ceo.franchises.$id.tsx`).
-- Move archive/restore/purge handlers up from `FranchisesAndInvitesSection` (or pass through) so the new grid can wire them.
-
-### `src/components/ceo/FranchisesAndInvitesSection.tsx`
-
-- Remove the active franchise donut grid (lines ~243–368).
-- Keep: archived list (when `showArchived` is on), the toolbar (`Show archived` toggle, `New franchise`, `New invite` buttons), the `Invites` section, and the dialogs.
-- This component becomes "Franchise admin & invites".
-
-### Member click target (decision, per the user's "open the members chart and all details")
-
-- Open the existing `MemberGradeReport` dialog **inline on `/ceo`**. This matches "open the member's chart and all details" — `MemberGradeReport` already shows the member's grade pie, course breakdown, and detailed submissions. No navigation away.
-- The "View all N members →" overflow link still goes to `/ceo/franchises/$id` for the full franchise view.
-
-## Out of scope
-
-- No DB schema changes.
-- No changes to `MemberGradeReport`, `GradePieCard`, `GradeDistributionBar`, or the franchise detail page.
-- No changes to invites flow.
-- Archived franchises continue to live in the "Show archived" toggle inside the franchise admin section, not in the new top grid.
+## Open questions
+1. Should the temp password be **auto-generated** (12 random chars, e.g. `xkcd-style`) and shown once, or do you want to **type your own**? (I'll default to auto-generated + editable.)
+2. Want the credentials card to also generate a **shareable text snippet** ("Hi {name}, your IRM Academy login: …") for WhatsApp/copy-paste? Useful in your context.
+3. Confirm we can **delete the `invites` table** — anything else depending on it that I should preserve as audit history?
