@@ -15,6 +15,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as MemberRouteImport } from './routes/member'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InchargeRouteImport } from './routes/incharge'
+import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as CeoRouteImport } from './routes/ceo'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as QaIndexRouteImport } from './routes/qa.index'
@@ -74,6 +75,11 @@ const LoginRoute = LoginRouteImport.update({
 const InchargeRoute = InchargeRouteImport.update({
   id: '/incharge',
   path: '/incharge',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChangePasswordRoute = ChangePasswordRouteImport.update({
+  id: '/change-password',
+  path: '/change-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CeoRoute = CeoRouteImport.update({
@@ -230,6 +236,7 @@ const CeoCoursesIdEditRoute = CeoCoursesIdEditRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ceo': typeof CeoRouteWithChildren
+  '/change-password': typeof ChangePasswordRoute
   '/incharge': typeof InchargeRouteWithChildren
   '/login': typeof LoginRoute
   '/member': typeof MemberRouteWithChildren
@@ -267,6 +274,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/change-password': typeof ChangePasswordRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -302,6 +310,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/ceo': typeof CeoRouteWithChildren
+  '/change-password': typeof ChangePasswordRoute
   '/incharge': typeof InchargeRouteWithChildren
   '/login': typeof LoginRoute
   '/member': typeof MemberRouteWithChildren
@@ -342,6 +351,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/ceo'
+    | '/change-password'
     | '/incharge'
     | '/login'
     | '/member'
@@ -379,6 +389,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/change-password'
     | '/login'
     | '/profile'
     | '/reset-password'
@@ -413,6 +424,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/ceo'
+    | '/change-password'
     | '/incharge'
     | '/login'
     | '/member'
@@ -452,6 +464,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CeoRoute: typeof CeoRouteWithChildren
+  ChangePasswordRoute: typeof ChangePasswordRoute
   InchargeRoute: typeof InchargeRouteWithChildren
   LoginRoute: typeof LoginRoute
   MemberRoute: typeof MemberRouteWithChildren
@@ -502,6 +515,13 @@ declare module '@tanstack/react-router' {
       path: '/incharge'
       fullPath: '/incharge'
       preLoaderRoute: typeof InchargeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/change-password': {
+      id: '/change-password'
+      path: '/change-password'
+      fullPath: '/change-password'
+      preLoaderRoute: typeof ChangePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ceo': {
@@ -831,6 +851,7 @@ const QaRouteWithChildren = QaRoute._addFileChildren(QaRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CeoRoute: CeoRouteWithChildren,
+  ChangePasswordRoute: ChangePasswordRoute,
   InchargeRoute: InchargeRouteWithChildren,
   LoginRoute: LoginRoute,
   MemberRoute: MemberRouteWithChildren,
