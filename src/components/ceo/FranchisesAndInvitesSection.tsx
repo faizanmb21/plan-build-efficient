@@ -415,7 +415,7 @@ export function CreateAccountDialog({
   lockFranchiseId = null,
   triggerLabel,
 }: {
-  franchises: Franchise[];
+  franchises: { id: string; name: string }[];
   onCreated: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
