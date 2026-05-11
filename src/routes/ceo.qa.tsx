@@ -292,8 +292,8 @@ function CreateQaDialog({
   };
 
   const submit = async () => {
-    if (!name.trim() || !email.trim()) {
-      toast.error("Name and email are required");
+    if (!name.trim()) {
+      toast.error("Name is required");
       return;
     }
     if (!orgWide && selected.size === 0) {
@@ -304,7 +304,7 @@ function CreateQaDialog({
     try {
       const r = (await create({
         data: {
-          email: email.trim(),
+          email: generatedEmail,
           fullName: name.trim(),
           franchiseIds: orgWide ? [] : [...selected],
         },
