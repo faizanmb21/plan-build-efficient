@@ -200,50 +200,6 @@ export type Database = {
         }
         Relationships: []
       }
-      invites: {
-        Row: {
-          accepted_at: string | null
-          created_at: string
-          email: string
-          expires_at: string
-          franchise_id: string | null
-          id: string
-          invited_by: string | null
-          role: Database["public"]["Enums"]["app_role"]
-          token: string
-        }
-        Insert: {
-          accepted_at?: string | null
-          created_at?: string
-          email: string
-          expires_at?: string
-          franchise_id?: string | null
-          id?: string
-          invited_by?: string | null
-          role: Database["public"]["Enums"]["app_role"]
-          token?: string
-        }
-        Update: {
-          accepted_at?: string | null
-          created_at?: string
-          email?: string
-          expires_at?: string
-          franchise_id?: string | null
-          id?: string
-          invited_by?: string | null
-          role?: Database["public"]["Enums"]["app_role"]
-          token?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "invites_franchise_id_fkey"
-            columns: ["franchise_id"]
-            isOneToOne: false
-            referencedRelation: "franchises"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       lesson_progress: {
         Row: {
           completed: boolean
@@ -707,7 +663,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      accept_invite: { Args: { _token: string }; Returns: Json }
       archive_franchise: { Args: { _franchise_id: string }; Returns: Json }
       backfill_grading_demo_data: { Args: never; Returns: Json }
       claim_first_ceo: { Args: never; Returns: boolean }
