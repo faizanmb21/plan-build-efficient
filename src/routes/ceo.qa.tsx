@@ -57,9 +57,13 @@ function CeoQaPage() {
 
   const load = React.useCallback(async () => {
     setLoading(true);
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token ?? "";
     const [{ data: fr }, listRes] = await Promise.all([
       supabase.from("franchises").select("id,name").is("archived_at", null).order("name"),
-      listQa().catch(() => ({ ok: false as const, error: "load failed" })),
+      token
+        ? listQa({ data: { accessToken: token } }).catch(() => ({ ok: false as const, error: "load failed", reviewers: [] }))
+        : Promise.resolve({ ok: false as const, error: "no session", reviewers: [] }),
     ]);
     setFranchises(fr ?? []);
 
