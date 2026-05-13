@@ -57,9 +57,13 @@ function CeoQaPage() {
 
   const load = React.useCallback(async () => {
     setLoading(true);
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token ?? "";
     const [{ data: fr }, listRes] = await Promise.all([
       supabase.from("franchises").select("id,name").is("archived_at", null).order("name"),
-      listQa().catch(() => ({ ok: false as const, error: "load failed" })),
+      token
+        ? listQa({ data: { accessToken: token } }).catch(() => ({ ok: false as const, error: "load failed", reviewers: [] }))
+        : Promise.resolve({ ok: false as const, error: "no session", reviewers: [] }),
     ]);
     setFranchises(fr ?? []);
 
@@ -149,35 +153,47 @@ function CeoQaPage() {
         onCreated={(c) => { setCreds(c); load(); }}
       />
 
-      {creds && (
-        <Card className="border-success/40 bg-success/5">
-          <CardHeader>
-            <CardTitle className="text-base">QA login ready</CardTitle>
-            <CardDescription>
-              Share these credentials with {creds.name}. They'll be asked to set a new password on first sign in.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex flex-wrap items-center gap-3">
-              <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{creds.email}</code>
-              <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{creds.password}</code>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `Hi ${creds.name}, your IRM Academy QA login:\nEmail: ${creds.email}\nPassword: ${creds.password}\nYou'll be asked to set a new password on first sign in.`,
-                  );
-                  toast.success("Shareable message copied");
-                }}
-              >
-                <Copy className="h-3.5 w-3.5" /> Copy share message
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setCreds(null)}>Dismiss</Button>
+      <Dialog open={!!creds} onOpenChange={(v) => { if (!v) setCreds(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>QA login created</DialogTitle>
+            <DialogDescription>
+              Share these credentials with {creds?.name}. They'll be asked to set a new password on first sign in.
+            </DialogDescription>
+          </DialogHeader>
+          {creds && (
+            <div className="space-y-3 text-sm">
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Name</Label>
+                <code className="rounded bg-muted px-3 py-2 font-mono text-xs">{creds.name}</code>
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Email</Label>
+                <code className="rounded bg-muted px-3 py-2 font-mono text-xs">{creds.email}</code>
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Temporary password</Label>
+                <code className="rounded bg-muted px-3 py-2 font-mono text-xs">{creds.password}</code>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!creds) return;
+                navigator.clipboard.writeText(
+                  `Hi ${creds.name}, your IRM Academy QA login:\nEmail: ${creds.email}\nPassword: ${creds.password}\nSign in at ${window.location.origin}/login — you'll be asked to set a new password on first sign in.`,
+                );
+                toast.success("Shareable message copied");
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy share message
+            </Button>
+            <Button onClick={() => setCreds(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -260,6 +276,7 @@ function CreateQaDialog({
   const [orgWide, setOrgWide] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = React.useState(false);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const create = useServerFn(createQaAccount);
 
   React.useEffect(() => {
@@ -267,6 +284,7 @@ function CreateQaDialog({
       setName("");
       setOrgWide(false);
       setSelected(new Set());
+      setErrorMsg(null);
     }
   }, [open]);
 
@@ -279,7 +297,7 @@ function CreateQaDialog({
       .slice(0, 24);
     const rand = Math.random().toString(36).slice(2, 6);
     const base = slug ? `qa.${slug}` : "qa.reviewer";
-    return `${base}.${rand}@irmacademy.qa`;
+    return `${base}.${rand}@irmacademy.test`;
   }, [name, open]);
 
   const toggle = (id: string) => {
@@ -292,32 +310,41 @@ function CreateQaDialog({
   };
 
   const submit = async () => {
+    setErrorMsg(null);
     if (!name.trim()) {
-      toast.error("Name is required");
+      setErrorMsg("Name is required");
       return;
     }
     if (!orgWide && selected.size === 0) {
-      toast.error("Pick at least one centre, or check Org-wide access");
+      setErrorMsg("Pick at least one centre, or check Org-wide access");
       return;
     }
     setSubmitting(true);
     try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      if (!token) {
+        setErrorMsg("Your session has expired. Please sign in again.");
+        setSubmitting(false);
+        return;
+      }
       const r = (await create({
         data: {
+          accessToken: token,
           email: generatedEmail,
           fullName: name.trim(),
           franchiseIds: orgWide ? [] : [...selected],
         },
       })) as { ok: true; email: string; password: string } | { ok: false; error: string };
       if (!r.ok) {
-        toast.error(r.error);
+        setErrorMsg(r.error);
       } else {
         toast.success("QA login created");
         onCreated({ email: r.email, password: r.password, name: name.trim() });
         onOpenChange(false);
       }
     } catch (e: any) {
-      toast.error(e?.message || "Failed");
+      setErrorMsg(e?.message || "Failed to create QA login");
     } finally {
       setSubmitting(false);
     }
@@ -365,6 +392,12 @@ function CreateQaDialog({
               })}
             </div>
           </div>
+
+          {errorMsg && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {errorMsg}
+            </div>
+          )}
         </div>
 
         <DialogFooter>

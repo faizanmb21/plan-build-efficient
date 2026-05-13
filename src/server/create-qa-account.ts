@@ -1,49 +1,68 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
 
 const InputSchema = z.object({
+  accessToken: z.string().min(10),
   email: z.string().email().max(255),
   fullName: z.string().min(1).max(120),
   franchiseIds: z.array(z.string().uuid()).max(50).default([]),
+});
+
+const ListInputSchema = z.object({
+  accessToken: z.string().min(10),
 });
 
 function generatePassword(len = 14) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   const symbols = "!@#$%^&*";
   let out = "";
-  const cryptoObj = globalThis.crypto;
   const buf = new Uint32Array(len);
-  cryptoObj.getRandomValues(buf);
+  globalThis.crypto.getRandomValues(buf);
   for (let i = 0; i < len - 2; i++) out += chars[buf[i] % chars.length];
   out += symbols[buf[len - 2] % symbols.length];
   out += String(buf[len - 1] % 10);
   return out;
 }
 
+async function verifyCeo(accessToken: string): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const SUPABASE_PUBLISHABLE_KEY =
+    process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    return { ok: false, error: "Server not configured (missing Supabase URL/key)." };
+  }
+  const client = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await client.auth.getUser(accessToken);
+  if (error || !data.user) return { ok: false, error: "Your session has expired. Please sign in again." };
+  const userId = data.user.id;
+  const { data: roleRow } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "ceo")
+    .maybeSingle();
+  if (!roleRow) return { ok: false, error: "Only the CEO can create QA accounts." };
+  return { ok: true, userId };
+}
+
 export const createQaAccount = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((input) => InputSchema.parse(input))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
     try {
-      const { userId } = context;
       if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        return { ok: false as const, error: "Backend admin secret is not configured." };
+        return { ok: false as const, error: "Backend admin secret is not configured on the server." };
       }
 
-      const { data: roleRow } = await supabaseAdmin
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .eq("role", "ceo")
-        .maybeSingle();
-      if (!roleRow) {
-        return { ok: false as const, error: "Only the CEO can create QA accounts." };
-      }
+      const auth = await verifyCeo(data.accessToken);
+      if (!auth.ok) return { ok: false as const, error: auth.error };
 
       const password = generatePassword();
-
       const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
         email: data.email,
         password,
@@ -65,20 +84,26 @@ export const createQaAccount = createServerFn({ method: "POST" })
       const { error: rErr } = await supabaseAdmin
         .from("user_roles")
         .upsert({ user_id: newUserId, role: "qa" }, { onConflict: "user_id,role" });
-      if (rErr) console.error("[createQaAccount] role upsert", rErr);
+      if (rErr) {
+        console.error("[createQaAccount] role upsert", rErr);
+        return { ok: false as const, error: `Role assignment failed: ${rErr.message}` };
+      }
 
       if (data.franchiseIds.length > 0) {
         const rows = data.franchiseIds.map((fid) => ({
           user_id: newUserId,
           franchise_id: fid,
-          assigned_by: userId,
+          assigned_by: auth.userId,
         }));
         const { error: aerr } = await supabaseAdmin
           .from("qa_franchise_assignments")
           .insert(rows);
         if (aerr) {
           console.error("[createQaAccount] assignment insert", aerr);
-          return { ok: false as const, error: `User created, but franchise scope failed: ${aerr.message}` };
+          return {
+            ok: false as const,
+            error: `User created, but franchise scope failed: ${aerr.message}`,
+          };
         }
       }
 
@@ -94,17 +119,11 @@ export const createQaAccount = createServerFn({ method: "POST" })
     }
   });
 
-export const listQaReviewers = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { userId } = context;
-    const { data: roleRow } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("role", "ceo")
-      .maybeSingle();
-    if (!roleRow) return { ok: false as const, error: "Forbidden" };
+export const listQaReviewers = createServerFn({ method: "POST" })
+  .inputValidator((input) => ListInputSchema.parse(input))
+  .handler(async ({ data }) => {
+    const auth = await verifyCeo(data.accessToken);
+    if (!auth.ok) return { ok: false as const, error: auth.error, reviewers: [] };
 
     const { data: qaRoles } = await supabaseAdmin
       .from("user_roles")
@@ -121,13 +140,12 @@ export const listQaReviewers = createServerFn({ method: "GET" })
         .in("user_id", ids),
     ]);
 
-    // Fetch emails via admin listUsers (paginate)
     const emailMap: Record<string, string | null> = {};
     let page = 1;
     while (true) {
-      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+      const { data: usersPage, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
       if (error) break;
-      const users = data?.users ?? [];
+      const users = usersPage?.users ?? [];
       for (const u of users) {
         if (ids.includes(u.id)) emailMap[u.id] = u.email ?? null;
       }
