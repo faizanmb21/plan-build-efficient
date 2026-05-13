@@ -392,6 +392,12 @@ function CreateQaDialog({
               })}
             </div>
           </div>
+
+          {errorMsg && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {errorMsg}
+            </div>
+          )}
         </div>
 
         <DialogFooter>
