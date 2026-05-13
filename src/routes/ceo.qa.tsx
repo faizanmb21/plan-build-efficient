@@ -276,6 +276,7 @@ function CreateQaDialog({
   const [orgWide, setOrgWide] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = React.useState(false);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const create = useServerFn(createQaAccount);
 
   React.useEffect(() => {
@@ -283,6 +284,7 @@ function CreateQaDialog({
       setName("");
       setOrgWide(false);
       setSelected(new Set());
+      setErrorMsg(null);
     }
   }, [open]);
 
@@ -295,7 +297,7 @@ function CreateQaDialog({
       .slice(0, 24);
     const rand = Math.random().toString(36).slice(2, 6);
     const base = slug ? `qa.${slug}` : "qa.reviewer";
-    return `${base}.${rand}@irmacademy.qa`;
+    return `${base}.${rand}@irmacademy.test`;
   }, [name, open]);
 
   const toggle = (id: string) => {
@@ -308,32 +310,41 @@ function CreateQaDialog({
   };
 
   const submit = async () => {
+    setErrorMsg(null);
     if (!name.trim()) {
-      toast.error("Name is required");
+      setErrorMsg("Name is required");
       return;
     }
     if (!orgWide && selected.size === 0) {
-      toast.error("Pick at least one centre, or check Org-wide access");
+      setErrorMsg("Pick at least one centre, or check Org-wide access");
       return;
     }
     setSubmitting(true);
     try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      if (!token) {
+        setErrorMsg("Your session has expired. Please sign in again.");
+        setSubmitting(false);
+        return;
+      }
       const r = (await create({
         data: {
+          accessToken: token,
           email: generatedEmail,
           fullName: name.trim(),
           franchiseIds: orgWide ? [] : [...selected],
         },
       })) as { ok: true; email: string; password: string } | { ok: false; error: string };
       if (!r.ok) {
-        toast.error(r.error);
+        setErrorMsg(r.error);
       } else {
         toast.success("QA login created");
         onCreated({ email: r.email, password: r.password, name: name.trim() });
         onOpenChange(false);
       }
     } catch (e: any) {
-      toast.error(e?.message || "Failed");
+      setErrorMsg(e?.message || "Failed to create QA login");
     } finally {
       setSubmitting(false);
     }
