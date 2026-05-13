@@ -153,35 +153,47 @@ function CeoQaPage() {
         onCreated={(c) => { setCreds(c); load(); }}
       />
 
-      {creds && (
-        <Card className="border-success/40 bg-success/5">
-          <CardHeader>
-            <CardTitle className="text-base">QA login ready</CardTitle>
-            <CardDescription>
-              Share these credentials with {creds.name}. They'll be asked to set a new password on first sign in.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex flex-wrap items-center gap-3">
-              <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{creds.email}</code>
-              <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{creds.password}</code>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `Hi ${creds.name}, your IRM Academy QA login:\nEmail: ${creds.email}\nPassword: ${creds.password}\nYou'll be asked to set a new password on first sign in.`,
-                  );
-                  toast.success("Shareable message copied");
-                }}
-              >
-                <Copy className="h-3.5 w-3.5" /> Copy share message
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setCreds(null)}>Dismiss</Button>
+      <Dialog open={!!creds} onOpenChange={(v) => { if (!v) setCreds(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>QA login created</DialogTitle>
+            <DialogDescription>
+              Share these credentials with {creds?.name}. They'll be asked to set a new password on first sign in.
+            </DialogDescription>
+          </DialogHeader>
+          {creds && (
+            <div className="space-y-3 text-sm">
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Name</Label>
+                <code className="rounded bg-muted px-3 py-2 font-mono text-xs">{creds.name}</code>
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Email</Label>
+                <code className="rounded bg-muted px-3 py-2 font-mono text-xs">{creds.email}</code>
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Temporary password</Label>
+                <code className="rounded bg-muted px-3 py-2 font-mono text-xs">{creds.password}</code>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!creds) return;
+                navigator.clipboard.writeText(
+                  `Hi ${creds.name}, your IRM Academy QA login:\nEmail: ${creds.email}\nPassword: ${creds.password}\nSign in at ${window.location.origin}/login — you'll be asked to set a new password on first sign in.`,
+                );
+                toast.success("Shareable message copied");
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy share message
+            </Button>
+            <Button onClick={() => setCreds(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
