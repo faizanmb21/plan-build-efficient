@@ -62,6 +62,15 @@ export const createQaAccount = createServerFn({ method: "POST" })
       const auth = await verifyCeo(data.accessToken);
       if (!auth.ok) return { ok: false as const, error: auth.error };
 
+      const domain = data.email.split("@")[1]?.toLowerCase() ?? "";
+      const tld = domain.split(".").pop() ?? "";
+      if (["test", "example", "invalid", "localhost"].includes(tld)) {
+        return {
+          ok: false as const,
+          error: `Email domain .${tld} is not accepted by the auth provider. Pick a real domain.`,
+        };
+      }
+
       const password = generatePassword();
       const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
         email: data.email,
