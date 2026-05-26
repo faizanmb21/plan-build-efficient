@@ -501,6 +501,13 @@ export function CreateAccountDialog({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
+    if (!accessToken) {
+      setBusy(false);
+      toast.error("Your session has expired. Please sign in again.");
+      return;
+    }
     const res = await createFn({
       data: {
         email: email.trim(),
@@ -511,6 +518,7 @@ export function CreateAccountDialog({
           role === "ceo" || role === "qa"
             ? null
             : (lockFranchiseId ?? franchiseId) || null,
+        accessToken,
       },
     });
     setBusy(false);
