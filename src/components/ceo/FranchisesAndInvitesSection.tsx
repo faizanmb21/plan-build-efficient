@@ -502,17 +502,8 @@ export function CreateAccountDialog({
     return `IRM Academy login\n\nName: ${name}\nEmail: ${em}\nTemporary password: ${pw}\n\nSign in at ${window.location.origin}/login — you'll be asked to change your password on first sign-in.`;
   }
 
-  function copyValue(value: string, label: string) {
-    if (!value) return;
-    navigator.clipboard.writeText(value);
-    toast.success(`${label} copied`);
-  }
+  // copy helpers used only in the post-create success view (buildShareText below)
 
-  function copyShareDraft() {
-    if (!email || !password) return;
-    navigator.clipboard.writeText(buildShareText(email, password, fullName.trim()));
-    toast.success("Share message copied — paste in WhatsApp/email");
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
