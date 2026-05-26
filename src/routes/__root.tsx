@@ -88,9 +88,26 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <MustChangePasswordGuard />
         <Outlet />
         <Toaster richColors position="top-right" />
       </AuthProvider>
     </QueryClientProvider>
   );
+}
+
+function MustChangePasswordGuard() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  React.useEffect(() => {
+    if (loading || !user) return;
+    const mustChange = Boolean(
+      (user.user_metadata as { must_change_password?: boolean } | null)?.must_change_password,
+    );
+    if (mustChange && pathname !== "/change-password" && pathname !== "/login") {
+      navigate({ to: "/change-password" });
+    }
+  }, [loading, user, pathname, navigate]);
+  return null;
 }
