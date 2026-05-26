@@ -22,9 +22,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, BadgeCheck, Globe2, Save, UserPlus, Copy, RefreshCw, Mail } from "lucide-react";
+import { Loader2, BadgeCheck, Globe2, Save, UserPlus, Copy, RefreshCw, Mail, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { createQaAccount, listQaReviewers } from "@/server/create-qa-account";
+import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/server/create-qa-account";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
@@ -51,9 +52,12 @@ function CeoQaPage() {
   const [assignments, setAssignments] = React.useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = React.useState(true);
   const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const listQa = useServerFn(listQaReviewers);
+  const deleteQa = useServerFn(deleteQaAccount);
+  const confirm = useConfirm();
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -128,6 +132,40 @@ function CeoQaPage() {
     toast.success("QA franchise scope updated");
     setSavingId(null);
   };
+
+  const remove = async (qa: Qa) => {
+    const ok = await confirm({
+      title: `Delete ${qa.full_name ?? "this QA"}?`,
+      description: `This permanently removes their login and revokes all access. They will not be able to sign in again. This cannot be undone.`,
+      confirmLabel: "Delete QA",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setDeletingId(qa.id);
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    if (!token) {
+      toast.error("Your session has expired. Please sign in again.");
+      setDeletingId(null);
+      return;
+    }
+    try {
+      const r = (await deleteQa({ data: { accessToken: token, userId: qa.id } })) as
+        | { ok: true }
+        | { ok: false; error: string };
+      if (!r.ok) {
+        toast.error(r.error);
+      } else {
+        toast.success("QA login deleted");
+        await load();
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete QA");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
 
   return (
     <div className="space-y-6">
@@ -233,10 +271,21 @@ function CeoQaPage() {
                       )}
                     </CardDescription>
                   </div>
-                  <Button size="sm" onClick={() => save(qa.id)} disabled={savingId === qa.id}>
-                    {savingId === qa.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                    Save
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={() => save(qa.id)} disabled={savingId === qa.id}>
+                      {savingId === qa.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => remove(qa)}
+                      disabled={deletingId === qa.id}
+                    >
+                      {deletingId === qa.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Delete
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">

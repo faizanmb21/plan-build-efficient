@@ -15,6 +15,11 @@ const ListInputSchema = z.object({
   accessToken: z.string().min(10),
 });
 
+const DeleteInputSchema = z.object({
+  accessToken: z.string().min(10),
+  userId: z.string().uuid(),
+});
+
 function generatePassword(len = 14) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   const symbols = "!@#$%^&*";
@@ -174,3 +179,40 @@ export const listQaReviewers = createServerFn({ method: "POST" })
 
     return { ok: true as const, reviewers };
   });
+
+export const deleteQaAccount = createServerFn({ method: "POST" })
+  .inputValidator((input) => DeleteInputSchema.parse(input))
+  .handler(async ({ data }) => {
+    try {
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return { ok: false as const, error: "Backend admin secret is not configured on the server." };
+      }
+      const auth = await verifyCeo(data.accessToken);
+      if (!auth.ok) return { ok: false as const, error: auth.error };
+
+      // Confirm target really is a QA (don't allow deleting other roles via this endpoint)
+      const { data: roleRow } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.userId)
+        .eq("role", "qa")
+        .maybeSingle();
+      if (!roleRow) return { ok: false as const, error: "User is not a QA reviewer." };
+
+      // Remove scope, role, profile, then auth user (this revokes all sessions).
+      await supabaseAdmin.from("qa_franchise_assignments").delete().eq("user_id", data.userId);
+      await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId).eq("role", "qa");
+      await supabaseAdmin.from("profiles").delete().eq("id", data.userId);
+
+      const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
+      if (delErr) {
+        console.error("[deleteQaAccount] auth delete failed", delErr);
+        return { ok: false as const, error: delErr.message };
+      }
+      return { ok: true as const };
+    } catch (e: any) {
+      console.error("[deleteQaAccount] unhandled", e);
+      return { ok: false as const, error: e?.message || "Unexpected server error" };
+    }
+  });
+
