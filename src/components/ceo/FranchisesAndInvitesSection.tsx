@@ -445,8 +445,31 @@ export function CreateAccountDialog({
 
   const needsFranchise = role !== "ceo" && role !== "qa";
   const franchiseSatisfied = !needsFranchise || !!lockFranchiseId || !!franchiseId;
+  const effectiveFranchiseId = lockFranchiseId ?? franchiseId;
+  const canGenerate = franchiseSatisfied && fullName.trim().length > 0;
 
   const createFn = useServerFn(createUserAccount);
+
+  function slug(str: string, max = 24) {
+    return str
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, max);
+  }
+
+  function deriveEmail(): string {
+    const firstNameRaw = fullName.trim().split(/\s+/)[0] ?? "";
+    let first = slug(firstNameRaw);
+    if (!first) first = `user${Math.floor(1000 + Math.random() * 9000)}`;
+    if (role === "ceo" || role === "qa") {
+      return `${role}.${first}@irmacademy.app`;
+    }
+    const franchiseName =
+      franchises.find((f) => f.id === effectiveFranchiseId)?.name ?? "";
+    const franchiseSlug = slug(franchiseName) || "franchise";
+    return `${role}.${first}.${franchiseSlug}@irmacademy.app`;
+  }
 
   function reset() {
     setEmail("");
@@ -463,6 +486,11 @@ export function CreateAccountDialog({
       toast.error("Select a franchise first");
       return;
     }
+    if (!fullName.trim()) {
+      toast.error("Enter the full name first");
+      return;
+    }
+    setEmail(deriveEmail());
     setPassword(generatePassword());
     setCredentialsReady(true);
   }
