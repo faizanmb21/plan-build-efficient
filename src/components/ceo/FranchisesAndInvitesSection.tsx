@@ -716,6 +716,14 @@ export function CreateAccountDialog({
                       <Button
                         type="button"
                         variant="outline"
+                        onClick={() => copyValue(email, "Email")}
+                        title="Copy email"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
                         onClick={() => setEmail(deriveEmail())}
                         title="Regenerate email from full name"
                       >
@@ -739,6 +747,14 @@ export function CreateAccountDialog({
                       <Button
                         type="button"
                         variant="outline"
+                        onClick={() => copyValue(password, "Password")}
+                        title="Copy password"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
                         onClick={() => setPassword(generatePassword())}
                       >
                         <RefreshCw className="h-4 w-4" />
@@ -748,6 +764,22 @@ export function CreateAccountDialog({
                       Auto-generated. User will be forced to change it on first sign-in.
                     </p>
                   </div>
+
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Copy a ready-to-send message with the name, email and password — paste straight into WhatsApp or email.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={copyShareDraft}
+                      className="w-full sm:w-auto"
+                    >
+                      <Copy className="h-4 w-4" /> Copy share-text
+                    </Button>
+                  </div>
+
                   <DialogFooter>
                     <Button
                       type="submit"
