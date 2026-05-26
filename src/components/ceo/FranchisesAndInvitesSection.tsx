@@ -433,7 +433,8 @@ export function CreateAccountDialog({
     callerScope === "incharge" ? "member" : "member",
   );
   const [franchiseId, setFranchiseId] = React.useState<string>(lockFranchiseId ?? "");
-  const [password, setPassword] = React.useState(() => generatePassword());
+  const [password, setPassword] = React.useState("");
+  const [credentialsReady, setCredentialsReady] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<{
     email: string;
@@ -442,6 +443,9 @@ export function CreateAccountDialog({
     role: string;
   } | null>(null);
 
+  const needsFranchise = role !== "ceo" && role !== "qa";
+  const franchiseSatisfied = !needsFranchise || !!lockFranchiseId || !!franchiseId;
+
   const createFn = useServerFn(createUserAccount);
 
   function reset() {
@@ -449,9 +453,20 @@ export function CreateAccountDialog({
     setFullName("");
     setRole(callerScope === "incharge" ? "member" : "member");
     setFranchiseId(lockFranchiseId ?? "");
-    setPassword(generatePassword());
+    setPassword("");
+    setCredentialsReady(false);
     setResult(null);
   }
+
+  function generateCredentials() {
+    if (!franchiseSatisfied) {
+      toast.error("Select a franchise first");
+      return;
+    }
+    setPassword(generatePassword());
+    setCredentialsReady(true);
+  }
+
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
