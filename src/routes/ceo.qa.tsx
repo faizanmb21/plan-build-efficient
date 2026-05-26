@@ -133,6 +133,40 @@ function CeoQaPage() {
     setSavingId(null);
   };
 
+  const remove = async (qa: Qa) => {
+    const ok = await confirm({
+      title: `Delete ${qa.full_name ?? "this QA"}?`,
+      description: `This permanently removes their login and revokes all access. They will not be able to sign in again. This cannot be undone.`,
+      confirmLabel: "Delete QA",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setDeletingId(qa.id);
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    if (!token) {
+      toast.error("Your session has expired. Please sign in again.");
+      setDeletingId(null);
+      return;
+    }
+    try {
+      const r = (await deleteQa({ data: { accessToken: token, userId: qa.id } })) as
+        | { ok: true }
+        | { ok: false; error: string };
+      if (!r.ok) {
+        toast.error(r.error);
+      } else {
+        toast.success("QA login deleted");
+        await load();
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete QA");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
