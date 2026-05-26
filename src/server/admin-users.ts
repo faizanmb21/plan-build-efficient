@@ -214,8 +214,10 @@ export const adminResetPassword = createServerFn({ method: "POST" })
     return { ok: true as const, password: data.newPassword };
   });
 
-export const listTeam = createServerFn({ method: "POST" }).handler(async () => {
-  const ctx = await getCallerContext();
+export const listTeam = createServerFn({ method: "POST" })
+  .inputValidator((d: ListInput) => d ?? {})
+  .handler(async ({ data }) => {
+  const ctx = await getCallerContext(data?.accessToken);
   if (!ctx.ok) return { ok: false as const, error: ctx.error, members: [] };
 
   // Pull profiles + roles + auth emails
