@@ -36,7 +36,7 @@ function ChangePasswordPage() {
     if (error) return toast.error(error.message);
     toast.success("Password updated");
     await refresh();
-    navigate({ to: "/" });
+    navigate({ to: primaryRole ? homeForRole(primaryRole) : "/" });
   }
 
   return (
