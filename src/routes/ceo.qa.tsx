@@ -297,7 +297,7 @@ function CreateQaDialog({
       .slice(0, 24);
     const rand = Math.random().toString(36).slice(2, 6);
     const base = slug ? `qa.${slug}` : "qa.reviewer";
-    return `${base}.${rand}@irmacademy.test`;
+    return `${base}.${rand}@qa.irmacademy.app`;
   }, [name, open]);
 
   const toggle = (id: string) => {
