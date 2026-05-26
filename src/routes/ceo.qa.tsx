@@ -52,9 +52,12 @@ function CeoQaPage() {
   const [assignments, setAssignments] = React.useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = React.useState(true);
   const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const listQa = useServerFn(listQaReviewers);
+  const deleteQa = useServerFn(deleteQaAccount);
+  const confirm = useConfirm();
 
   const load = React.useCallback(async () => {
     setLoading(true);
