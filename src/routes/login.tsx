@@ -22,6 +22,13 @@ function LoginPage() {
 
   React.useEffect(() => {
     if (authLoading || !session) return;
+    const mustChange = Boolean(
+      (session.user.user_metadata as { must_change_password?: boolean } | null)?.must_change_password,
+    );
+    if (mustChange) {
+      navigate({ to: "/change-password" });
+      return;
+    }
     navigate({ to: primaryRole ? homeForRole(primaryRole) : "/" });
   }, [authLoading, session, primaryRole, navigate]);
 
@@ -29,9 +36,13 @@ function LoginPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       await refresh();
+      const mustChange = Boolean(
+        (data.user?.user_metadata as { must_change_password?: boolean } | null)?.must_change_password,
+      );
+      if (mustChange) navigate({ to: "/change-password" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Authentication failed";
       toast.error(msg);

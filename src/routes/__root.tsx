@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Outlet, Link, createRootRoute, HeadContent, Scripts, useRouterState, useNavigate } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import appCss from "../styles.css?url";
-import { AuthProvider } from "@/lib/auth";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -88,9 +88,26 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <MustChangePasswordGuard />
         <Outlet />
         <Toaster richColors position="top-right" />
       </AuthProvider>
     </QueryClientProvider>
   );
+}
+
+function MustChangePasswordGuard() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  React.useEffect(() => {
+    if (loading || !user) return;
+    const mustChange = Boolean(
+      (user.user_metadata as { must_change_password?: boolean } | null)?.must_change_password,
+    );
+    if (mustChange && pathname !== "/change-password" && pathname !== "/login") {
+      navigate({ to: "/change-password" });
+    }
+  }, [loading, user, pathname, navigate]);
+  return null;
 }

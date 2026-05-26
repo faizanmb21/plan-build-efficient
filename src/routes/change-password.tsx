@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
+import { useAuth, homeForRole } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/change-password")({
 
 function ChangePasswordPage() {
   const navigate = useNavigate();
-  const { user, refresh } = useAuth();
+  const { user, primaryRole, refresh } = useAuth();
   const [pw, setPw] = React.useState("");
   const [pw2, setPw2] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -36,7 +36,7 @@ function ChangePasswordPage() {
     if (error) return toast.error(error.message);
     toast.success("Password updated");
     await refresh();
-    navigate({ to: "/" });
+    navigate({ to: primaryRole ? homeForRole(primaryRole) : "/" });
   }
 
   return (
