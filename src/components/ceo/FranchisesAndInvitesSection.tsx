@@ -498,48 +498,71 @@ export function CreateAccountDialog({
   }
 
 
+  function buildShareText(em: string, pw: string, name: string) {
+    return `IRM Academy login\n\nName: ${name}\nEmail: ${em}\nTemporary password: ${pw}\n\nSign in at ${window.location.origin}/login — you'll be asked to change your password on first sign-in.`;
+  }
+
+  function copyValue(value: string, label: string) {
+    if (!value) return;
+    navigator.clipboard.writeText(value);
+    toast.success(`${label} copied`);
+  }
+
+  function copyShareDraft() {
+    if (!email || !password) return;
+    navigator.clipboard.writeText(buildShareText(email, password, fullName.trim()));
+    toast.success("Share message copied — paste in WhatsApp/email");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const { data: sess } = await supabase.auth.getSession();
-    const accessToken = sess.session?.access_token;
-    if (!accessToken) {
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const accessToken = sess.session?.access_token;
+      if (!accessToken) {
+        setBusy(false);
+        toast.error("Your session has expired. Please sign in again.");
+        return;
+      }
+      const res = await createFn({
+        data: {
+          email: email.trim(),
+          password,
+          fullName: fullName.trim(),
+          role,
+          franchiseId:
+            role === "ceo" || role === "qa"
+              ? null
+              : (lockFranchiseId ?? franchiseId) || null,
+          accessToken,
+        },
+      });
       setBusy(false);
-      toast.error("Your session has expired. Please sign in again.");
-      return;
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Account created");
+      setResult({
+        email: res.email,
+        password: res.password,
+        fullName: res.fullName,
+        role: res.role,
+      });
+      onCreated();
+    } catch (err: any) {
+      setBusy(false);
+      console.error("Create account failed:", err);
+      toast.error(err?.message || "Failed to create account");
     }
-    const res = await createFn({
-      data: {
-        email: email.trim(),
-        password,
-        fullName: fullName.trim(),
-        role,
-        franchiseId:
-          role === "ceo" || role === "qa"
-            ? null
-            : (lockFranchiseId ?? franchiseId) || null,
-        accessToken,
-      },
-    });
-    setBusy(false);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success("Account created");
-    setResult({
-      email: res.email,
-      password: res.password,
-      fullName: res.fullName,
-      role: res.role,
-    });
-    onCreated();
   }
 
   function copyAll() {
     if (!result) return;
-    const text = `IRM Academy login\n\nName: ${result.fullName}\nEmail: ${result.email}\nTemporary password: ${result.password}\n\nSign in at ${window.location.origin}/login — you'll be asked to change your password on first login.`;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(
+      buildShareText(result.email, result.password, result.fullName),
+    );
     toast.success("Credentials copied — paste in WhatsApp/email");
   }
 
