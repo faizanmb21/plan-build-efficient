@@ -556,31 +556,18 @@ export function CreateAccountDialog({
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={submit} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="acc-name">Full name</Label>
-                <Input
-                  id="acc-name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="acc-email">Email</Label>
-                <Input
-                  id="acc-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
               {callerScope === "ceo" && (
                 <div className="space-y-1.5">
                   <Label>Role</Label>
                   <Select
                     value={role}
-                    onValueChange={(v) => setRole(v as "ceo" | "incharge" | "member" | "qa")}
+                    onValueChange={(v) => {
+                      setRole(v as "ceo" | "incharge" | "member" | "qa");
+                      setCredentialsReady(false);
+                      setPassword("");
+                      setEmail("");
+                      setFullName("");
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -594,10 +581,19 @@ export function CreateAccountDialog({
                   </Select>
                 </div>
               )}
-              {role !== "ceo" && role !== "qa" && !lockFranchiseId && (
+              {needsFranchise && !lockFranchiseId && (
                 <div className="space-y-1.5">
-                  <Label>Franchise</Label>
-                  <Select value={franchiseId} onValueChange={setFranchiseId}>
+                  <Label>
+                    Franchise <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={franchiseId}
+                    onValueChange={(v) => {
+                      setFranchiseId(v);
+                      setCredentialsReady(false);
+                      setPassword("");
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select franchise" />
                     </SelectTrigger>
@@ -609,36 +605,88 @@ export function CreateAccountDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Required — credentials are scoped to this franchise.
+                  </p>
                 </div>
               )}
-              <div className="space-y-1.5">
-                <Label htmlFor="acc-pw">Temporary password</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="acc-pw"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={8}
-                  />
+
+              {!credentialsReady ? (
+                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-center space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {franchiseSatisfied
+                      ? `Ready to generate credentials for a new ${role}.`
+                      : "Select a franchise to continue."}
+                  </p>
                   <Button
                     type="button"
-                    variant="outline"
-                    onClick={() => setPassword(generatePassword())}
+                    onClick={generateCredentials}
+                    disabled={!franchiseSatisfied}
+                    size="sm"
                   >
-                    <RefreshCw className="h-4 w-4" />
+                    <RefreshCw className="h-4 w-4" /> Generate credentials
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Auto-generated. User will be forced to change it on first sign-in.
-                </p>
-              </div>
-              <DialogFooter>
-                <Button type="submit" disabled={busy || !email.trim() || !fullName.trim()}>
-                  {busy ? "Creating…" : "Create account"}
-                </Button>
-              </DialogFooter>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="acc-name">Full name</Label>
+                    <Input
+                      id="acc-name"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="acc-email">Email</Label>
+                    <Input
+                      id="acc-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="acc-pw">Temporary password</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="acc-pw"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={8}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setPassword(generatePassword())}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Auto-generated. User will be forced to change it on first sign-in.
+                    </p>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type="submit"
+                      disabled={
+                        busy ||
+                        !email.trim() ||
+                        !fullName.trim() ||
+                        !franchiseSatisfied
+                      }
+                    >
+                      {busy ? "Creating…" : "Create account"}
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
             </form>
+
           </>
         )}
       </DialogContent>
