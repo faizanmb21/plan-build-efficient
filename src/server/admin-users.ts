@@ -12,20 +12,29 @@ interface CreateInput {
   fullName: string;
   role: Role;
   franchiseId?: string | null;
+  accessToken?: string;
 }
 
 interface ResetInput {
   userId: string;
   newPassword: string;
+  accessToken?: string;
 }
 
-async function getCallerContext() {
-  const req = getRequest();
-  const auth = req?.headers?.get("authorization");
-  if (!auth || !auth.startsWith("Bearer ")) {
+interface ListInput {
+  accessToken?: string;
+}
+
+async function getCallerContext(explicitToken?: string) {
+  let token = explicitToken;
+  if (!token) {
+    const req = getRequest();
+    const auth = req?.headers?.get("authorization");
+    if (auth && auth.startsWith("Bearer ")) token = auth.slice(7);
+  }
+  if (!token) {
     return { ok: false as const, error: "Unauthorized" };
   }
-  const token = auth.slice(7);
   const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const SUPABASE_PUBLISHABLE_KEY =
     process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
