@@ -897,6 +897,35 @@ function TeamRow({
     }
   }
 
+  async function deleteAccount() {
+    const ok = await confirm({
+      title: "Delete account permanently?",
+      description: `Permanently delete ${member.full_name ?? member.email ?? "this account"}? This removes their login, profile and roles. This cannot be undone.`,
+      confirmLabel: "Delete permanently",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
+    if (!accessToken) {
+      toast.error("Your session has expired. Please sign in again.");
+      return;
+    }
+    try {
+      const res = await deleteFn({ data: { userId: member.id, accessToken } });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Account deleted");
+      onChanged();
+    } catch (err: any) {
+      console.error("Delete account failed:", err);
+      toast.error(err?.message || "Failed to delete account");
+    }
+  }
+
+
   return (
     <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-0.5">
