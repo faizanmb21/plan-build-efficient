@@ -271,10 +271,21 @@ function CeoQaPage() {
                       )}
                     </CardDescription>
                   </div>
-                  <Button size="sm" onClick={() => save(qa.id)} disabled={savingId === qa.id}>
-                    {savingId === qa.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                    Save
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={() => save(qa.id)} disabled={savingId === qa.id}>
+                      {savingId === qa.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => remove(qa)}
+                      disabled={deletingId === qa.id}
+                    >
+                      {deletingId === qa.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Delete
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
