@@ -12,20 +12,29 @@ interface CreateInput {
   fullName: string;
   role: Role;
   franchiseId?: string | null;
+  accessToken?: string;
 }
 
 interface ResetInput {
   userId: string;
   newPassword: string;
+  accessToken?: string;
 }
 
-async function getCallerContext() {
-  const req = getRequest();
-  const auth = req?.headers?.get("authorization");
-  if (!auth || !auth.startsWith("Bearer ")) {
+interface ListInput {
+  accessToken?: string;
+}
+
+async function getCallerContext(explicitToken?: string) {
+  let token = explicitToken;
+  if (!token) {
+    const req = getRequest();
+    const auth = req?.headers?.get("authorization");
+    if (auth && auth.startsWith("Bearer ")) token = auth.slice(7);
+  }
+  if (!token) {
     return { ok: false as const, error: "Unauthorized" };
   }
-  const token = auth.slice(7);
   const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const SUPABASE_PUBLISHABLE_KEY =
     process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -74,7 +83,7 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
 export const createUserAccount = createServerFn({ method: "POST" })
   .inputValidator((d: CreateInput) => d)
   .handler(async ({ data }) => {
-    const ctx = await getCallerContext();
+    const ctx = await getCallerContext(data.accessToken);
     if (!ctx.ok) return { ok: false as const, error: ctx.error };
 
     const email = data.email.trim().toLowerCase();
@@ -168,7 +177,7 @@ export const createUserAccount = createServerFn({ method: "POST" })
 export const adminResetPassword = createServerFn({ method: "POST" })
   .inputValidator((d: ResetInput) => d)
   .handler(async ({ data }) => {
-    const ctx = await getCallerContext();
+    const ctx = await getCallerContext(data.accessToken);
     if (!ctx.ok) return { ok: false as const, error: ctx.error };
 
     if (!data.newPassword || data.newPassword.length < 8) {
@@ -205,8 +214,10 @@ export const adminResetPassword = createServerFn({ method: "POST" })
     return { ok: true as const, password: data.newPassword };
   });
 
-export const listTeam = createServerFn({ method: "POST" }).handler(async () => {
-  const ctx = await getCallerContext();
+export const listTeam = createServerFn({ method: "POST" })
+  .inputValidator((d: ListInput) => d ?? {})
+  .handler(async ({ data }) => {
+  const ctx = await getCallerContext(data?.accessToken);
   if (!ctx.ok) return { ok: false as const, error: ctx.error, members: [] };
 
   // Pull profiles + roles + auth emails

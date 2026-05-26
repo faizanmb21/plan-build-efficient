@@ -108,11 +108,13 @@ export function FranchisesAndInvitesSection() {
   const listTeamFn = useServerFn(listTeam);
 
   const load = React.useCallback(async () => {
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
     const [f, p, r, t] = await Promise.all([
       supabase.from("franchises").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, franchise_id"),
       supabase.from("user_roles").select("user_id, role"),
-      listTeamFn().catch(() => ({ ok: false as const, members: [], error: "" })),
+      listTeamFn({ data: { accessToken } }).catch(() => ({ ok: false as const, members: [], error: "" })),
     ]);
 
     const allF = (f.data as Franchise[]) ?? [];
@@ -499,6 +501,13 @@ export function CreateAccountDialog({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
+    if (!accessToken) {
+      setBusy(false);
+      toast.error("Your session has expired. Please sign in again.");
+      return;
+    }
     const res = await createFn({
       data: {
         email: email.trim(),
@@ -509,6 +518,7 @@ export function CreateAccountDialog({
           role === "ceo" || role === "qa"
             ? null
             : (lockFranchiseId ?? franchiseId) || null,
+        accessToken,
       },
     });
     setBusy(false);
@@ -829,7 +839,14 @@ function TeamRow({
 
   async function doReset() {
     setBusy(true);
-    const res = await resetFn({ data: { userId: member.id, newPassword: newPw } });
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
+    if (!accessToken) {
+      setBusy(false);
+      toast.error("Your session has expired. Please sign in again.");
+      return;
+    }
+    const res = await resetFn({ data: { userId: member.id, newPassword: newPw, accessToken } });
     setBusy(false);
     if (!res.ok) {
       toast.error(res.error);
