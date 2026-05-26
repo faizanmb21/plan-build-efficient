@@ -177,7 +177,7 @@ export const createUserAccount = createServerFn({ method: "POST" })
 export const adminResetPassword = createServerFn({ method: "POST" })
   .inputValidator((d: ResetInput) => d)
   .handler(async ({ data }) => {
-    const ctx = await getCallerContext();
+    const ctx = await getCallerContext(data.accessToken);
     if (!ctx.ok) return { ok: false as const, error: ctx.error };
 
     if (!data.newPassword || data.newPassword.length < 8) {
