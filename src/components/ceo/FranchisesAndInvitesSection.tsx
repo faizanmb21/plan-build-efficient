@@ -854,6 +854,7 @@ function TeamRow({
   const [done, setDone] = React.useState(false);
   const confirm = useConfirm();
   const resetFn = useServerFn(adminResetPassword);
+  const deleteFn = useServerFn(deleteUserAccount);
 
   async function doReset() {
     setBusy(true);
