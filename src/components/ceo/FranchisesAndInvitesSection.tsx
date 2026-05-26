@@ -108,11 +108,13 @@ export function FranchisesAndInvitesSection() {
   const listTeamFn = useServerFn(listTeam);
 
   const load = React.useCallback(async () => {
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
     const [f, p, r, t] = await Promise.all([
       supabase.from("franchises").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, franchise_id"),
       supabase.from("user_roles").select("user_id, role"),
-      listTeamFn().catch(() => ({ ok: false as const, members: [], error: "" })),
+      listTeamFn({ data: { accessToken } }).catch(() => ({ ok: false as const, members: [], error: "" })),
     ]);
 
     const allF = (f.data as Franchise[]) ?? [];
