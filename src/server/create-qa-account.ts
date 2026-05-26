@@ -15,6 +15,11 @@ const ListInputSchema = z.object({
   accessToken: z.string().min(10),
 });
 
+const DeleteInputSchema = z.object({
+  accessToken: z.string().min(10),
+  userId: z.string().uuid(),
+});
+
 function generatePassword(len = 14) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   const symbols = "!@#$%^&*";
