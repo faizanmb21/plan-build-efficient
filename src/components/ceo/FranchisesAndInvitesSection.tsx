@@ -839,7 +839,14 @@ function TeamRow({
 
   async function doReset() {
     setBusy(true);
-    const res = await resetFn({ data: { userId: member.id, newPassword: newPw } });
+    const { data: sess } = await supabase.auth.getSession();
+    const accessToken = sess.session?.access_token;
+    if (!accessToken) {
+      setBusy(false);
+      toast.error("Your session has expired. Please sign in again.");
+      return;
+    }
+    const res = await resetFn({ data: { userId: member.id, newPassword: newPw, accessToken } });
     setBusy(false);
     if (!res.ok) {
       toast.error(res.error);
