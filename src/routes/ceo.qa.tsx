@@ -22,9 +22,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, BadgeCheck, Globe2, Save, UserPlus, Copy, RefreshCw, Mail } from "lucide-react";
+import { Loader2, BadgeCheck, Globe2, Save, UserPlus, Copy, RefreshCw, Mail, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { createQaAccount, listQaReviewers } from "@/server/create-qa-account";
+import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/server/create-qa-account";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
