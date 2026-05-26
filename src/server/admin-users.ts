@@ -83,7 +83,7 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
 export const createUserAccount = createServerFn({ method: "POST" })
   .inputValidator((d: CreateInput) => d)
   .handler(async ({ data }) => {
-    const ctx = await getCallerContext();
+    const ctx = await getCallerContext(data.accessToken);
     if (!ctx.ok) return { ok: false as const, error: ctx.error };
 
     const email = data.email.trim().toLowerCase();
