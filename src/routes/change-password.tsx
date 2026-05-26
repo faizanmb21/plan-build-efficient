@@ -14,7 +14,7 @@ export const Route = createFileRoute("/change-password")({
 
 function ChangePasswordPage() {
   const navigate = useNavigate();
-  const { user, refresh } = useAuth();
+  const { user, primaryRole, refresh } = useAuth();
   const [pw, setPw] = React.useState("");
   const [pw2, setPw2] = React.useState("");
   const [busy, setBusy] = React.useState(false);
