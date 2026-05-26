@@ -1021,12 +1021,24 @@ function TeamRow({
             size="sm"
             variant="ghost"
             onClick={removeUser}
-            className="text-destructive"
+            className="text-muted-foreground hover:text-foreground"
             aria-label="Remove from franchise"
+            title="Detach from franchise (keeps account)"
           >
             <Archive className="h-3.5 w-3.5" />
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={deleteAccount}
+          className="text-destructive hover:text-destructive"
+          aria-label="Delete account"
+          title="Delete account permanently"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+
       </div>
     </div>
   );
