@@ -260,3 +260,33 @@ export const listTeam = createServerFn({ method: "POST" })
 
   return { ok: true as const, members: rows };
 });
+
+interface DeleteInput {
+  userId: string;
+  accessToken?: string;
+}
+
+export const deleteUserAccount = createServerFn({ method: "POST" })
+  .inputValidator((d: DeleteInput) => d)
+  .handler(async ({ data }) => {
+    const ctx = await getCallerContext(data.accessToken);
+    if (!ctx.ok) return { ok: false as const, error: ctx.error };
+    if (!ctx.isCeo) return { ok: false as const, error: "Only CEO can delete accounts" };
+    if (data.userId === ctx.callerId) {
+      return { ok: false as const, error: "You cannot delete your own account" };
+    }
+
+    // Clear any franchise.manager_id references first
+    await supabaseAdmin
+      .from("franchises")
+      .update({ manager_id: null })
+      .eq("manager_id", data.userId);
+
+    await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId);
+    await supabaseAdmin.from("profiles").delete().eq("id", data.userId);
+
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
+    if (error) return { ok: false as const, error: error.message };
+
+    return { ok: true as const };
+  });
