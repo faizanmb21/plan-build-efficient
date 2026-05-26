@@ -445,8 +445,31 @@ export function CreateAccountDialog({
 
   const needsFranchise = role !== "ceo" && role !== "qa";
   const franchiseSatisfied = !needsFranchise || !!lockFranchiseId || !!franchiseId;
+  const effectiveFranchiseId = lockFranchiseId ?? franchiseId;
+  const canGenerate = franchiseSatisfied && fullName.trim().length > 0;
 
   const createFn = useServerFn(createUserAccount);
+
+  function slug(str: string, max = 24) {
+    return str
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, max);
+  }
+
+  function deriveEmail(): string {
+    const firstNameRaw = fullName.trim().split(/\s+/)[0] ?? "";
+    let first = slug(firstNameRaw);
+    if (!first) first = `user${Math.floor(1000 + Math.random() * 9000)}`;
+    if (role === "ceo" || role === "qa") {
+      return `${role}.${first}@irmacademy.app`;
+    }
+    const franchiseName =
+      franchises.find((f) => f.id === effectiveFranchiseId)?.name ?? "";
+    const franchiseSlug = slug(franchiseName) || "franchise";
+    return `${role}.${first}.${franchiseSlug}@irmacademy.app`;
+  }
 
   function reset() {
     setEmail("");
@@ -463,6 +486,11 @@ export function CreateAccountDialog({
       toast.error("Select a franchise first");
       return;
     }
+    if (!fullName.trim()) {
+      toast.error("Enter the full name first");
+      return;
+    }
+    setEmail(deriveEmail());
     setPassword(generatePassword());
     setCredentialsReady(true);
   }
@@ -611,17 +639,30 @@ export function CreateAccountDialog({
                 </div>
               )}
 
+              <div className="space-y-1.5">
+                <Label htmlFor="acc-name">Full name</Label>
+                <Input
+                  id="acc-name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Faizan Ahmed"
+                  required
+                />
+              </div>
+
               {!credentialsReady ? (
                 <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-center space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    {franchiseSatisfied
-                      ? `Ready to generate credentials for a new ${role}.`
-                      : "Select a franchise to continue."}
+                    {!franchiseSatisfied
+                      ? "Select a franchise to continue."
+                      : !fullName.trim()
+                        ? "Enter the full name to continue."
+                        : `Ready to generate credentials for a new ${role}.`}
                   </p>
                   <Button
                     type="button"
                     onClick={generateCredentials}
-                    disabled={!franchiseSatisfied}
+                    disabled={!canGenerate}
                     size="sm"
                   >
                     <RefreshCw className="h-4 w-4" /> Generate credentials
@@ -630,23 +671,27 @@ export function CreateAccountDialog({
               ) : (
                 <>
                   <div className="space-y-1.5">
-                    <Label htmlFor="acc-name">Full name</Label>
-                    <Input
-                      id="acc-name"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
                     <Label htmlFor="acc-email">Email</Label>
-                    <Input
-                      id="acc-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        id="acc-email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setEmail(deriveEmail())}
+                        title="Regenerate email from full name"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Auto-generated from name{role !== "ceo" && role !== "qa" ? " + franchise" : ""}. Editable.
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="acc-pw">Temporary password</Label>

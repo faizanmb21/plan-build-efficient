@@ -1,98 +1,60 @@
+## Goal
 
-## Goals
+When clicking **Generate credentials**, both the email and the temporary password should be filled in automatically (currently only the password is). The same dialog is already shared with the Incharge → Members screen, so the change benefits both flows.
 
-Bring the QA reviewer experience up to the same quality bar as the CEO dashboard, scoped to the franchises the QA is assigned to (via `qa_franchise_assignments`, which RLS already enforces).
+## Changes — `src/components/ceo/FranchisesAndInvitesSection.tsx` (`CreateAccountDialog`)
 
-Two pages get the redesign:
+### 1. Reorder fields so Full name is captured *before* Generate
 
-1. `/qa` — Dashboard (franchise + member progress overview)
-2. `/qa/submissions` — Review workspace (clean grading queue)
+New top-to-bottom order inside the form:
 
----
+1. **Role** (CEO scope only — Incharge scope locks to `member`)
+2. **Franchise** (required for `member` / `incharge`; locked for Incharge scope)
+3. **Full name** (always shown — needed to derive email)
+4. **Generate credentials** button (disabled until role, franchise (if required), and full name are all set)
+5. After generation: **Email** + **Temporary password** appear, both editable, each with a refresh icon to regenerate just that field
+6. **Create account** submit button
 
-## 1. QA Dashboard (`src/routes/qa.index.tsx`)
+### 2. Email generator
 
-Mirror the CEO dashboard's information architecture, scoped to assigned franchises.
-
-**Layout:**
-
-```text
-┌─ Header: "QA Review · {QA name}" + month label ────────────┐
-├─ KPI strip (4 tiles) ──────────────────────────────────────┤
-│  Members in scope | Avg completion | Avg grade | Pending   │
-├─ Franchise overview (grid of cards, 1-3 cols) ─────────────┤
-│  Per franchise: grade-distribution pie, A+/A/B/Redo legend,│
-│  incharge name, member count, member roster (clickable).   │
-│  Clicking a member opens MemberGradeReport dialog.         │
-├─ Members needing attention (table) ────────────────────────┤
-│  Low avg / overdue / stale activity — sorted by issue count│
-└────────────────────────────────────────────────────────────┘
-```
-
-**Reuses (no new components needed):**
-- `KpiTile`, `MiniAvatar`, `GradeDistributionBar` from `ProgressPrimitives`
-- `InchargeMemberStrip` + `InchargeBlock` from `components/ceo/InchargeMemberStrip`
-- `MemberGradeReport` for the click-through member dialog
-- `aggregateGrades`, `combineAggregates`, `computeMemberRisk`, `fetchCompletionSummary`, `fetchOverdueCounts`
-
-**Data fetch:** A new `fetchQaPerformance()` function (mirrors `fetchOrgPerformance`) but scoped to the QA's assigned franchises only. RLS handles enforcement — we just iterate over rows returned. No need for "incharge scorecards" or "courses" tables (those are CEO-only concerns).
-
-**Differences from CEO version:**
-- No archive/restore/purge actions on franchise cards (pass `onArchive` undefined)
-- No "Submissions admin" or "Manage" buttons — replace overflow link with `Link to="/qa/submissions"` filtered by franchise
-- KPIs reflect only assigned-franchise scope
-
----
-
-## 2. Submissions Review Workspace (`src/routes/qa.submissions.tsx`)
-
-Replace the current card-list-clutter with a focused two-pane workspace.
-
-**Layout (desktop):**
+Pattern (confirmed with user): `role.firstname.franchise@irmacademy.app`
 
 ```text
-┌─ Header: title + franchise filter + refresh ───────────────┐
-├─ Filter rail (chips): Pending · Revision · Approved · All ─┤
-│  Sub-chips: Course practicals / Project submissions        │
-├──────────────┬──────────────────────────────────────────────┤
-│ Queue list   │  Review pane                                 │
-│ (left, 380px)│  ┌─ Member header (avatar, name, franchise)─┐│
-│              │  │ Lesson/Project title · submitted date    ││
-│ Compact rows:│  ├──────────────────────────────────────────┤│
-│ ▸ Member     │  │ File preview (img/pdf/video/download)    ││
-│   Lesson     │  │                                          ││
-│   franchise  │  ├──────────────────────────────────────────┤│
-│   • status   │  │ Grading form: letter, %, feedback, save  ││
-│              │  └──────────────────────────────────────────┘│
-└──────────────┴──────────────────────────────────────────────┘
+slug(str)   = lowercase, ASCII-only, strip everything except a-z0-9, max 24 chars
+firstName   = first whitespace-separated token of Full name
+franchise   = slug of the selected franchise's name (lookup by id)
+
+CEO  → ceo.{firstname}@irmacademy.app
+QA   → qa.{firstname}@irmacademy.app
+Incharge → incharge.{firstname}.{franchise}@irmacademy.app
+Member   → member.{firstname}.{franchise}@irmacademy.app
 ```
 
-On mobile the right pane collapses into a full-screen sheet when a row is selected.
+If the generated local-part is empty after slugging (e.g. name is all non-ASCII), fall back to `role.user{4-random-digits}.{franchise}`. The Email field stays editable so the operator can tweak before submitting.
 
-**Reuses:**
-- Grading logic stays inside `LessonReviewDialog` / `ProjectGradeDialog`. We extract their **inner form bodies** into `LessonReviewPanel` / `ProjectReviewPanel` (the dialog versions become thin wrappers). The new workspace renders the panel inline on the right; mobile still uses the dialog.
-- File preview becomes a small `SubmissionFilePreview` component (handles image, pdf iframe, video, generic download link).
-- Existing data load (`load()`) is kept; only the rendering changes.
+### 3. Regenerate behaviour
 
-**Wins over current UI:**
-- Reviewer never loses queue context when opening a submission
-- Status chips replace the double `Tabs` stack (kind + status) for a less cluttered top
-- Queue rows are denser (24-28px tall vs full cards), letting many more fit on screen
-- Inline review pane = one click less per grading, plus visible file while typing feedback
+- **Generate credentials** button → fills email + password, flips the form to the editable state.
+- Refresh icon next to **Email** → re-derives the email (useful if user edits Full name afterward).
+- Refresh icon next to **Temporary password** → already exists, unchanged.
+- Changing Role, Franchise, or Full name after generation does NOT auto-overwrite the email (user may have edited it) — the refresh icon is the explicit way to regenerate.
 
----
+### 4. Validation
 
-## Out of scope (call out, don't build)
+- Generate button disabled unless: role set, franchise satisfied (when required), full name non-empty.
+- Submit button keeps existing checks (`email`, `fullName`, `franchiseSatisfied`).
 
-- No DB schema or RLS changes — current QA policies already scope reads/updates correctly.
-- No new server functions; everything stays client-side using the existing `supabase` client + RLS.
-- No changes to `LessonReviewDialog`/`ProjectGradeDialog` public APIs other than extracting the inner panel for reuse.
+## Incharge flow
 
----
+`src/routes/incharge.members.tsx` already mounts the same `CreateAccountDialog` with `callerScope="incharge"` and `lockFranchiseId={profile.franchise_id}`. With the reorder above:
 
-## Technical notes (for the build step)
+- Role is hidden (locked to `member`)
+- Franchise is hidden (locked to the Incharge's own franchise)
+- Incharge sees: Full name → Generate credentials → auto-filled Email + Password → Create
 
-- Extract grading form body into `src/components/grading/LessonReviewPanel.tsx` and `ProjectReviewPanel.tsx`. Dialogs render `<Panel ... />` inside `DialogContent`. The workspace renders the same panel directly in the right pane.
-- Add `fetchQaPerformance()` in `qa.index.tsx` (or `src/lib/qa-performance.ts` if cleaner) — same shape as `fetchOrgPerformance` minus CEO-only sections. Use a React Query key `["qa", "performance"]`.
-- Submissions workspace: keep current `load()` but track `selectedId` + `selectedKind`; pass selected row's data into the inline panel. Use a `useMediaQuery('(min-width: 1024px)')` (via `use-mobile`) to switch between split view and dialog mode on small screens.
+No code changes needed in `incharge.members.tsx` — it inherits the new behavior automatically.
 
+## Out of scope
+
+- No DB / server-function changes. `createUserAccount` already accepts an email; we just pre-fill it on the client.
+- No collision check against existing users — the email field remains editable, so the operator can resolve any duplicate before submitting (the server already returns a clear error on conflict).
