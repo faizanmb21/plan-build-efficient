@@ -430,14 +430,11 @@ export function CreateAccountDialog({
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
 
-  const [email, setEmail] = React.useState("");
   const [fullName, setFullName] = React.useState("");
   const [role, setRole] = React.useState<"ceo" | "incharge" | "member" | "qa">(
     callerScope === "incharge" ? "member" : "member",
   );
   const [franchiseId, setFranchiseId] = React.useState<string>(lockFranchiseId ?? "");
-  const [password, setPassword] = React.useState("");
-  const [credentialsReady, setCredentialsReady] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<{
     email: string;
@@ -449,7 +446,7 @@ export function CreateAccountDialog({
   const needsFranchise = role !== "ceo" && role !== "qa";
   const franchiseSatisfied = !needsFranchise || !!lockFranchiseId || !!franchiseId;
   const effectiveFranchiseId = lockFranchiseId ?? franchiseId;
-  const canGenerate = franchiseSatisfied && fullName.trim().length > 0;
+  const canSubmit = franchiseSatisfied && fullName.trim().length > 0 && !busy;
 
   const createFn = useServerFn(createUserAccount);
 
@@ -465,49 +462,30 @@ export function CreateAccountDialog({
     const firstNameRaw = fullName.trim().split(/\s+/)[0] ?? "";
     let first = slug(firstNameRaw);
     if (!first) first = `user${Math.floor(1000 + Math.random() * 9000)}`;
+    const suffix = Math.random().toString(36).slice(2, 6);
     if (role === "ceo" || role === "qa") {
-      return `${role}.${first}@irmacademy.app`;
+      return `${role}.${first}.${suffix}@irmacademy.app`;
     }
     const franchiseName =
       franchises.find((f) => f.id === effectiveFranchiseId)?.name ?? "";
     const franchiseSlug = slug(franchiseName) || "franchise";
-    return `${role}.${first}.${franchiseSlug}@irmacademy.app`;
+    return `${role}.${first}.${franchiseSlug}.${suffix}@irmacademy.app`;
   }
 
   function reset() {
-    setEmail("");
     setFullName("");
     setRole(callerScope === "incharge" ? "member" : "member");
     setFranchiseId(lockFranchiseId ?? "");
-    setPassword("");
-    setCredentialsReady(false);
     setResult(null);
   }
-
-  function generateCredentials() {
-    if (!franchiseSatisfied) {
-      toast.error("Select a franchise first");
-      return;
-    }
-    if (!fullName.trim()) {
-      toast.error("Enter the full name first");
-      return;
-    }
-    setEmail(deriveEmail());
-    setPassword(generatePassword());
-    setCredentialsReady(true);
-  }
-
 
   function buildShareText(em: string, pw: string, name: string) {
     return `IRM Academy login\n\nName: ${name}\nEmail: ${em}\nTemporary password: ${pw}\n\nSign in at ${window.location.origin}/login — you'll be asked to change your password on first sign-in.`;
   }
 
-  // copy helpers used only in the post-create success view (buildShareText below)
-
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!canSubmit) return;
     setBusy(true);
     try {
       const { data: sess } = await supabase.auth.getSession();
@@ -517,9 +495,11 @@ export function CreateAccountDialog({
         toast.error("Your session has expired. Please sign in again.");
         return;
       }
+      const email = deriveEmail();
+      const password = generatePassword();
       const res = await createFn({
         data: {
-          email: email.trim(),
+          email,
           password,
           fullName: fullName.trim(),
           role,
