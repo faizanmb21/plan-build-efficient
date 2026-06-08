@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, BadgeCheck, Globe2, Save, UserPlus, Copy, RefreshCw, Mail, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/server/create-qa-account";
+import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/lib/create-qa-account.functions";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export const Route = createFileRoute("/ceo/qa")({

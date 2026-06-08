@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader2, Sparkles } from "lucide-react";
-import { reviewSubmission } from "@/server/review-submission";
+import { reviewSubmission } from "@/lib/review-submission.functions";
 import { SubmissionFilePreview } from "./SubmissionFilePreview";
 
 export type LessonSubmission = {

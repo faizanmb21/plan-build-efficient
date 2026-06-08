@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
-import { seedDemo } from "@/server/seed-demo";
+import { seedDemo } from "@/lib/seed-demo.functions";
 
 export const Route = createFileRoute("/ceo/seed")({
   component: SeedPage,

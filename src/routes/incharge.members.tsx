@@ -29,7 +29,7 @@ import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { formatRelative } from "@/lib/grade-utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useServerFn } from "@tanstack/react-start";
-import { adminResetPassword } from "@/server/admin-users";
+import { adminResetPassword } from "@/lib/admin-users.functions";
 import { CreateAccountDialog } from "@/components/ceo/FranchisesAndInvitesSection";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
