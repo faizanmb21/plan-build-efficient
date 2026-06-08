@@ -6,7 +6,7 @@ import {
   adminResetPassword,
   listTeam,
   deleteUserAccount,
-} from "@/server/admin-users";
+} from "@/lib/admin-users.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
