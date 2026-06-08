@@ -34,6 +34,7 @@ import { CreateAccountDialog } from "@/components/ceo/FranchisesAndInvitesSectio
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { RosterTable } from "@/components/progress/RosterTable";
 
 export const Route = createFileRoute("/incharge/members")({
   component: InchargeMembers,
@@ -200,6 +201,8 @@ function InchargeMembers() {
           triggerLabel="Create member"
         />
       </header>
+
+      <RosterTable scope="incharge" detailRoutePrefix="/incharge/members" />
 
       <Card>
         <CardHeader>
