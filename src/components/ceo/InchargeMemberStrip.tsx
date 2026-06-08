@@ -50,7 +50,7 @@ export function InchargeMemberStrip({
   onPurge,
 }: {
   blocks: InchargeBlock[];
-  onMemberClick: (userId: string, fullName: string | null) => void;
+  onMemberClick: (userId: string, fullName: string | null, franchiseName: string) => void;
   onArchive?: (id: string, name: string) => void;
   onRestore?: (id: string) => void;
   onPurge?: (id: string, name: string, force: boolean) => void;
@@ -175,7 +175,7 @@ export function InchargeMemberStrip({
                             <li key={m.userId}>
                               <button
                                 type="button"
-                                onClick={() => onMemberClick(m.userId, m.fullName)}
+                                onClick={() => onMemberClick(m.userId, m.fullName, b.franchiseName)}
                                 className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                               >
                                 <MiniAvatar name={m.fullName} tone={tone} />

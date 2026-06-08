@@ -100,7 +100,7 @@ async function fetchQaPerformance(qaUserId: string): Promise<QaPerformance> {
     };
   }
 
-  const [{ data: franchises }, { data: profiles }, { data: roles }, { data: subs }] =
+  const [{ data: franchises }, { data: profiles }] =
     await Promise.all([
       supabase
         .from("franchises")
@@ -112,17 +112,7 @@ async function fetchQaPerformance(qaUserId: string): Promise<QaPerformance> {
         .from("profiles")
         .select("id,full_name,franchise_id")
         .in("franchise_id", franchiseIds),
-      supabase.from("user_roles").select("user_id,role"),
-      supabase
-        .from("submissions")
-        .select(
-          "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-        ),
     ]);
-
-  const memberRoleSet = new Set(
-    (roles ?? []).filter((r) => r.role === "member").map((r) => r.user_id),
-  );
 
   const profileById = new Map<
     string,
@@ -131,6 +121,27 @@ async function fetchQaPerformance(qaUserId: string): Promise<QaPerformance> {
   for (const p of profiles ?? []) {
     profileById.set(p.id, { full_name: p.full_name, franchise_id: p.franchise_id });
   }
+
+  const profileIds = Array.from(profileById.keys());
+
+  // Scope roles and submissions to only the users in these franchises
+  const [{ data: roles }, { data: subs }] = await Promise.all([
+    profileIds.length
+      ? supabase.from("user_roles").select("user_id,role").in("user_id", profileIds)
+      : Promise.resolve({ data: [] as { user_id: string; role: string }[] }),
+    profileIds.length
+      ? supabase
+          .from("submissions")
+          .select(
+            "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
+          )
+          .in("user_id", profileIds)
+      : Promise.resolve({ data: [] as GradedRow[] }),
+  ]);
+
+  const memberRoleSet = new Set(
+    (roles ?? []).filter((r) => r.role === "member").map((r) => r.user_id),
+  );
 
   // Members in scope = profiles in scope AND with member role
   const memberIds = Array.from(profileById.keys()).filter((id) =>
@@ -279,6 +290,7 @@ function QaDashboard() {
   const [gradeMember, setGradeMember] = React.useState<{
     id: string;
     name: string | null;
+    franchiseName: string | null;
   } | null>(null);
 
   const monthLabel = new Intl.DateTimeFormat(undefined, {
@@ -399,7 +411,7 @@ function QaDashboard() {
           {/* Franchise overview */}
           <InchargeMemberStrip
             blocks={perf?.inchargeBlocks ?? []}
-            onMemberClick={(id, name) => setGradeMember({ id, name })}
+            onMemberClick={(id, name, franchiseName) => setGradeMember({ id, name, franchiseName })}
           />
 
           {/* Members needing attention */}
@@ -437,7 +449,7 @@ function QaDashboard() {
                           key={m.userId}
                           className="cursor-pointer hover:bg-white/[0.02]"
                           onClick={() =>
-                            setGradeMember({ id: m.userId, name: m.fullName })
+                            setGradeMember({ id: m.userId, name: m.fullName, franchiseName: m.franchiseName ?? null })
                           }
                         >
                           <TableCell>
@@ -515,7 +527,7 @@ function QaDashboard() {
             <MemberGradeReport
               userId={gradeMember.id}
               fullName={gradeMember.name}
-              franchiseName={null}
+              franchiseName={gradeMember.franchiseName}
             />
           )}
         </DialogContent>

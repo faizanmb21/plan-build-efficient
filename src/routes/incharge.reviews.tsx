@@ -33,7 +33,7 @@ type ProjectSubRow = ProjectSubmission & {
 };
 
 function ReviewsPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [kind, setKind] = React.useState<"lesson" | "project">("lesson");
   const [statusTab, setStatusTab] = React.useState<SubmissionStatus | "all">("pending");
 
@@ -45,12 +45,30 @@ function ReviewsPage() {
   const [activeProject, setActiveProject] = React.useState<ProjectSubRow | null>(null);
 
   const load = React.useCallback(async () => {
+    if (!profile?.franchise_id || !user) return;
     setLoading(true);
 
-    // ----- Lesson practical submissions -----
+    const franchiseId = profile.franchise_id;
+
+    // Resolve member IDs for this franchise so we can scope queries explicitly
+    const { data: memberProfiles } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("franchise_id", franchiseId);
+    const memberIds = (memberProfiles ?? []).map((p) => p.id);
+
+    if (memberIds.length === 0) {
+      setLessonRows([]);
+      setProjectRows([]);
+      setLoading(false);
+      return;
+    }
+
+    // ----- Lesson practical submissions (scoped to franchise members) -----
     const { data: subs, error } = await supabase
       .from("submissions")
       .select("id,status,file_url,grade,letter_grade,feedback,created_at,reviewed_at,user_id,lesson_id")
+      .in("user_id", memberIds)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -62,10 +80,11 @@ function ReviewsPage() {
     const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
     const userIds = Array.from(new Set((subs ?? []).map((s) => s.user_id)));
 
-    // ----- Project submissions (RLS scopes them to franchise automatically) -----
+    // ----- Project submissions (scoped to franchise members) -----
     const { data: psubs } = await supabase
       .from("project_submissions")
       .select("id,project_id,user_id,file_url,status,letter_grade,grade,feedback,reviewed_at,created_at")
+      .in("user_id", memberIds)
       .order("created_at", { ascending: false });
 
     const projIds = Array.from(new Set((psubs ?? []).map((s) => s.project_id)));
@@ -121,7 +140,7 @@ function ReviewsPage() {
     setLessonRows(enrichedLessons);
     setProjectRows(enrichedProjects);
     setLoading(false);
-  }, []);
+  }, [profile?.franchise_id, user]);
 
   React.useEffect(() => {
     load();

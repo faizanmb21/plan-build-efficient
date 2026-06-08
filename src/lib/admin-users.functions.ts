@@ -263,19 +263,23 @@ export const listTeam = createServerFn({ method: "POST" })
   const ctx = await getCallerContext(data?.accessToken);
   if (!ctx.ok) return { ok: false as const, error: ctx.error, members: [] };
 
-  // Pull profiles + roles + auth emails
-  const [{ data: profiles }, { data: roles }, { data: usersData }] = await Promise.all([
+  // Pull profiles + roles + auth emails (paginated to handle >1000 users)
+  const [{ data: profiles }, { data: roles }] = await Promise.all([
     supabaseAdmin
       .from("profiles")
       .select("id, full_name, franchise_id, created_at"),
     supabaseAdmin.from("user_roles").select("user_id, role, franchise_id"),
-    supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
   ]);
 
   const emailById = new Map<string, string>();
-  (usersData?.users ?? []).forEach((u) => {
-    if (u.email) emailById.set(u.id, u.email);
-  });
+  let authPage = 1;
+  while (true) {
+    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ page: authPage, perPage: 200 });
+    const users = usersData?.users ?? [];
+    users.forEach((u) => { if (u.email) emailById.set(u.id, u.email); });
+    if (users.length < 200) break;
+    authPage += 1;
+  }
 
   const rolesByUser = new Map<string, Role[]>();
   (roles ?? []).forEach((r) => {

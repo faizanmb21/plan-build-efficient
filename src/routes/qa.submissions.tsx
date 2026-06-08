@@ -113,21 +113,50 @@ function QaSubmissionsPage() {
   );
 
   const load = React.useCallback(async () => {
+    if (!user) return;
     setLoading(true);
 
+    // Resolve QA's assigned franchises first, then scope all queries to those members
+    const { data: assignments } = await supabase
+      .from("qa_franchise_assignments")
+      .select("franchise_id")
+      .eq("user_id", user.id);
+    const franchiseIds = (assignments ?? []).map((r) => r.franchise_id);
+
+    if (franchiseIds.length === 0) {
+      setLessonRows([]);
+      setProjectRows([]);
+      setFranchises([]);
+      setLoading(false);
+      return;
+    }
+
+    // Get member IDs for assigned franchises
+    const { data: memberProfiles } = await supabase
+      .from("profiles")
+      .select("id")
+      .in("franchise_id", franchiseIds);
+    const memberIds = (memberProfiles ?? []).map((p) => p.id);
+
     const [{ data: subs, error: sErr }, { data: psubs }] = await Promise.all([
-      supabase
-        .from("submissions")
-        .select(
-          "id,status,file_url,grade,letter_grade,feedback,created_at,reviewed_at,user_id,lesson_id",
-        )
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("project_submissions")
-        .select(
-          "id,project_id,user_id,file_url,status,letter_grade,grade,feedback,reviewed_at,created_at",
-        )
-        .order("created_at", { ascending: false }),
+      memberIds.length
+        ? supabase
+            .from("submissions")
+            .select(
+              "id,status,file_url,grade,letter_grade,feedback,created_at,reviewed_at,user_id,lesson_id",
+            )
+            .in("user_id", memberIds)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] as any[], error: null }),
+      memberIds.length
+        ? supabase
+            .from("project_submissions")
+            .select(
+              "id,project_id,user_id,file_url,status,letter_grade,grade,feedback,reviewed_at,created_at",
+            )
+            .in("user_id", memberIds)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] as any[] }),
     ]);
 
     if (sErr) {
@@ -165,6 +194,7 @@ function QaSubmissionsPage() {
         supabase
           .from("franchises")
           .select("id,name")
+          .in("id", franchiseIds)
           .is("archived_at", null)
           .order("name"),
       ]);
@@ -232,7 +262,7 @@ function QaSubmissionsPage() {
     );
 
     setLoading(false);
-  }, []);
+  }, [user]);
 
   React.useEffect(() => {
     load();

@@ -402,6 +402,7 @@ function CeoDashboard() {
   const [gradeMember, setGradeMember] = React.useState<{
     id: string;
     name: string | null;
+    franchiseName: string | null;
   } | null>(null);
 
   const handleArchive = React.useCallback(
@@ -498,7 +499,7 @@ function CeoDashboard() {
       {/* Franchise overview — donut + member roster, click member to open grade report */}
       <InchargeMemberStrip
         blocks={perf?.inchargeBlocks ?? []}
-        onMemberClick={(id, name) => setGradeMember({ id, name })}
+        onMemberClick={(id, name, franchiseName) => setGradeMember({ id, name, franchiseName })}
         onArchive={handleArchive}
       />
 
@@ -609,7 +610,7 @@ function CeoDashboard() {
             <MemberGradeReport
               userId={gradeMember.id}
               fullName={gradeMember.name}
-              franchiseName={null}
+              franchiseName={gradeMember.franchiseName}
             />
           )}
         </DialogContent>

@@ -46,12 +46,39 @@ export const Route = createFileRoute("/member/courses/$id")({
 });
 
 type LessonType = "video" | "pdf" | "quiz" | "practical";
+
+type QuizQuestion = {
+  id: string;
+  type: "mcq" | "tf" | "short";
+  prompt: string;
+  options?: string[];
+  answer: number | string;
+};
+
+/** Flat optional bag — content shape varies by lesson type and all access uses optional chaining */
+type LessonContent = {
+  // video / pdf
+  path?: string;
+  url?: string;
+  // quiz
+  questions?: QuizQuestion[];
+  passing_score?: number;
+  // practical
+  brief?: string;
+  assignment?: {
+    brief: string;
+    attachment_path?: string | null;
+    attachment_name?: string | null;
+  };
+};
+type QuizContent = { questions: QuizQuestion[]; passing_score?: number };
+
 type Lesson = {
   id: string;
   title: string;
   type: LessonType;
   position: number;
-  content: any;
+  content: LessonContent;
   section_id: string;
 };
 type Section = { id: string; title: string; position: number; lessons: Lesson[] };
@@ -495,9 +522,9 @@ function LessonView({
             <p className="text-sm font-semibold">📋 Assignment submission</p>
             <PracticalSubmit
               lessonId={lesson.id}
-              brief={lesson.content.assignment.brief}
-              attachmentPath={lesson.content.assignment.attachment_path ?? null}
-              attachmentName={lesson.content.assignment.attachment_name ?? null}
+              brief={lesson.content.assignment?.brief ?? ""}
+              attachmentPath={lesson.content.assignment?.attachment_path ?? null}
+              attachmentName={lesson.content.assignment?.attachment_name ?? null}
               userId={userId}
               onSubmitted={onSubmissionSaved}
             />
@@ -510,7 +537,7 @@ function LessonView({
         {lesson.type === "pdf" && <PdfViewer path={lesson.content?.path} />}
         {lesson.type === "quiz" && (
           <QuizRunner
-            content={lesson.content}
+            content={{ questions: lesson.content.questions ?? [], passing_score: lesson.content.passing_score }}
             onPass={hasAssignment ? () => {} : onComplete}
             done={done}
           />
@@ -658,20 +685,12 @@ function EmptyMedia({ label }: { label: string }) {
   );
 }
 
-type QuizQuestion = {
-  id: string;
-  type: "mcq" | "tf" | "short";
-  prompt: string;
-  options?: string[];
-  answer: number | string;
-};
-
 function QuizRunner({
   content,
   onPass,
   done,
 }: {
-  content: any;
+  content: QuizContent;
   onPass: () => void;
   done: boolean;
 }) {
@@ -809,7 +828,7 @@ function PracticalSubmit({
 
   React.useEffect(() => {
     (async () => {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("submissions")
         .select("id,status,file_url,feedback,grade,letter_grade")
         .eq("lesson_id", lessonId)
@@ -848,7 +867,7 @@ function PracticalSubmit({
       toast.error(upErr.message);
       return;
     }
-    const { data: ins, error: insErr } = await (supabase as any)
+    const { data: ins, error: insErr } = await supabase
       .from("submissions")
       .insert({
         lesson_id: lessonId,

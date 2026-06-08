@@ -278,11 +278,6 @@ function MemberHome() {
   });
 
   // Map lesson → course for the submissions
-  const courseLetterMap = React.useMemo(() => {
-    const out = new Map<string, { letter: string | null; pct: number; pending: number }>();
-    return out;
-  }, []);
-
   // We compute letter per course by averaging numeric % of letter grades.
   const lessonCourseQuery = useQuery({
     queryKey: ["member", "lesson-course", assignments.map((a) => a.course_id).join(",")],
