@@ -112,7 +112,7 @@ export function MemberDetailView({ userId }: Props) {
                     />
                     <Bar dataKey="hours" radius={[0, 4, 4, 0]}>
                       {chartData.map((_, i) => (
-                        <Cell key={i} fill="hsl(var(--primary))" />
+                        <Cell key={i} fill="oklch(0.62 0.24 268)" />
                       ))}
                     </Bar>
                   </BarChart>
