@@ -108,7 +108,7 @@ export function MemberDetailView({ userId }: Props) {
                     <YAxis type="category" dataKey="title" width={140} tick={{ fontSize: 11 }} />
                     <Tooltip
                       formatter={(v: number) => [`${v}h`, "Hours"]}
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                      contentStyle={{ background: "rgba(20,20,25,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
                     />
                     <Bar dataKey="hours" radius={[0, 4, 4, 0]}>
                       {chartData.map((_, i) => (
