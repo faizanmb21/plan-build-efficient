@@ -1,4 +1,3 @@
-import * as React from "react";
 import { completionColor } from "@/lib/member-progress";
 import { cn } from "@/lib/utils";
 
