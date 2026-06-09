@@ -55,6 +55,7 @@ import { GradePieCard } from "@/components/grading/GradePieCard";
 import { fetchGradeSummaries, combineAggregates } from "@/lib/grade-summary";
 import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { BulkCreateAccountsDialog } from "@/components/ceo/BulkCreateAccountsDialog";
 
 interface Franchise {
   id: string;
