@@ -100,26 +100,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [loadUserData]);
 
+  const [viewAsFranchiseId, setViewAsFranchiseIdState] = React.useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.sessionStorage.getItem(VIEW_AS_KEY);
+  });
+  const setViewAsFranchiseId = React.useCallback((id: string | null) => {
+    setViewAsFranchiseIdState(id);
+    if (typeof window === "undefined") return;
+    if (id) window.sessionStorage.setItem(VIEW_AS_KEY, id);
+    else window.sessionStorage.removeItem(VIEW_AS_KEY);
+  }, []);
+
   const signOut = React.useCallback(async () => {
     await supabase.auth.signOut();
     setSession(null);
     setProfile(null);
     setRoles([]);
-  }, []);
+    setViewAsFranchiseId(null);
+  }, [setViewAsFranchiseId]);
+
+  const isCeo = roles.includes("ceo");
+  const effectiveProfile: Profile | null =
+    profile && isCeo && viewAsFranchiseId
+      ? { ...profile, franchise_id: viewAsFranchiseId }
+      : profile;
 
   const value: AuthState = {
     loading,
     session,
     user: session?.user ?? null,
-    profile,
+    profile: effectiveProfile,
     roles,
     primaryRole: pickPrimary(roles),
     refresh,
     signOut,
+    viewAsFranchiseId: isCeo ? viewAsFranchiseId : null,
+    setViewAsFranchiseId,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
 
 export function useAuth(): AuthState {
   const ctx = React.useContext(AuthContext);
