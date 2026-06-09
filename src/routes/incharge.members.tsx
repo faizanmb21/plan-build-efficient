@@ -85,7 +85,9 @@ function generatePassword(): string {
 }
 
 function InchargeMembers() {
-  const { profile, user } = useAuth();
+  const { profile, realProfile, user, viewAsFranchiseId } = useAuth();
+  const effectiveFranchiseId =
+    viewAsFranchiseId ?? realProfile?.franchise_id ?? profile?.franchise_id ?? null;
   const [members, setMembers] = React.useState<MemberRow[]>([]);
   const [franchise, setFranchise] = React.useState<Franchise | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -93,10 +95,10 @@ function InchargeMembers() {
   const [resetFor, setResetFor] = React.useState<MemberRow | null>(null);
 
   const load = React.useCallback(async () => {
-    if (!profile?.franchise_id || !user) return;
+    if (!effectiveFranchiseId || !user) return;
     setLoading(true);
 
-    const franchiseId = profile.franchise_id;
+    const franchiseId = effectiveFranchiseId;
 
     const [profsRes, franchiseRes, emailsRes] = await Promise.all([
       supabase
@@ -161,7 +163,7 @@ function InchargeMembers() {
     setMembers(enriched);
     setFranchise((franchiseRes.data ?? null) as Franchise | null);
     setLoading(false);
-  }, [profile?.franchise_id, user]);
+  }, [effectiveFranchiseId, user]);
 
   React.useEffect(() => {
     load();
@@ -199,14 +201,14 @@ function InchargeMembers() {
             franchises={franchise ? [franchise] : []}
             onCreated={load}
             callerScope="incharge"
-            lockFranchiseId={profile?.franchise_id ?? null}
+            lockFranchiseId={effectiveFranchiseId}
             triggerLabel="Create member"
           />
           <BulkCreateAccountsDialog
             franchises={franchise ? [franchise] : []}
             onCreated={load}
             callerScope="incharge"
-            lockFranchiseId={profile?.franchise_id ?? null}
+            lockFranchiseId={effectiveFranchiseId}
           />
         </div>
       </header>

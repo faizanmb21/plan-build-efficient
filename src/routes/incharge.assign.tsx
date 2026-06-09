@@ -60,8 +60,8 @@ type Assignment = {
 type Scope = "members" | "franchise";
 
 function InchargeAssignPage() {
-  const { user, profile } = useAuth();
-  const franchiseId = profile?.franchise_id ?? null;
+  const { user, realProfile, profile, viewAsFranchiseId } = useAuth();
+  const franchiseId = viewAsFranchiseId ?? realProfile?.franchise_id ?? profile?.franchise_id ?? null;
 
   const [courses, setCourses] = React.useState<Course[]>([]);
   const [members, setMembers] = React.useState<Member[]>([]);
