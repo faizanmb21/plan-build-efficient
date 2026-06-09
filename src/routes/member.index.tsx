@@ -43,6 +43,8 @@ import {
 } from "@/lib/grade-summary";
 import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
 import { fetchCompletionSummary } from "@/lib/completion-summary";
+import { WorkSessionCard } from "@/components/work/WorkSessionCard";
+
 
 export const Route = createFileRoute("/member/")({
   validateSearch: (search: Record<string, unknown>): { previewMember?: string } =>
