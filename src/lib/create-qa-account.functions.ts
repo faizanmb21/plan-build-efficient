@@ -215,3 +215,78 @@ export const deleteQaAccount = createServerFn({ method: "POST" })
       return { ok: false as const, error: e?.message || "Unexpected server error" };
     }
   });
+
+const ChangeRoleSchema = z.object({
+  accessToken: z.string().min(10),
+  userId: z.string().uuid(),
+  newRole: z.enum(["incharge", "member"]),
+  franchiseId: z.string().uuid(),
+});
+
+export const changeQaRole = createServerFn({ method: "POST" })
+  .inputValidator((input) => ChangeRoleSchema.parse(input))
+  .handler(async ({ data }) => {
+    try {
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return { ok: false as const, error: "Backend admin secret is not configured on the server." };
+      }
+      const auth = await verifyCeo(data.accessToken);
+      if (!auth.ok) return { ok: false as const, error: auth.error };
+
+      // Confirm target is a QA
+      const { data: qaRole } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.userId)
+        .eq("role", "qa")
+        .maybeSingle();
+      if (!qaRole) return { ok: false as const, error: "User is not a QA reviewer." };
+
+      // Verify franchise exists
+      const { data: fr } = await supabaseAdmin
+        .from("franchises")
+        .select("id")
+        .eq("id", data.franchiseId)
+        .maybeSingle();
+      if (!fr) return { ok: false as const, error: "Franchise not found." };
+
+      // Remove QA scope rows (no longer relevant once they leave QA)
+      await supabaseAdmin.from("qa_franchise_assignments").delete().eq("user_id", data.userId);
+
+      // Remove QA role
+      const { error: dErr } = await supabaseAdmin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", data.userId)
+        .eq("role", "qa");
+      if (dErr) return { ok: false as const, error: dErr.message };
+
+      // Add new role
+      const { error: iErr } = await supabaseAdmin
+        .from("user_roles")
+        .upsert(
+          { user_id: data.userId, role: data.newRole, franchise_id: data.franchiseId },
+          { onConflict: "user_id,role" },
+        );
+      if (iErr) return { ok: false as const, error: iErr.message };
+
+      // Attach to franchise on profile
+      await supabaseAdmin
+        .from("profiles")
+        .update({ franchise_id: data.franchiseId })
+        .eq("id", data.userId);
+
+      // If becoming incharge, set franchise.manager_id (don't overwrite if already set unless empty)
+      if (data.newRole === "incharge") {
+        await supabaseAdmin
+          .from("franchises")
+          .update({ manager_id: data.userId })
+          .eq("id", data.franchiseId);
+      }
+
+      return { ok: true as const };
+    } catch (e: any) {
+      console.error("[changeQaRole] unhandled", e);
+      return { ok: false as const, error: e?.message || "Unexpected server error" };
+    }
+  });
