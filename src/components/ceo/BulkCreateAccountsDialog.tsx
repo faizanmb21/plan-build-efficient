@@ -44,6 +44,7 @@ export function BulkCreateAccountsDialog({
   const [franchiseId, setFranchiseId] = React.useState(lockFranchiseId ?? "");
   const [count, setCount] = React.useState(10);
   const [prefix, setPrefix] = React.useState("Member");
+  const [expectedHours, setExpectedHours] = React.useState(8);
   const [busy, setBusy] = React.useState(false);
   const [created, setCreated] = React.useState<Cred[] | null>(null);
   const [failed, setFailed] = React.useState<{ index: number; error: string }[]>([]);
@@ -53,9 +54,11 @@ export function BulkCreateAccountsDialog({
     setFranchiseId(lockFranchiseId ?? "");
     setCount(10);
     setPrefix("Member");
+    setExpectedHours(8);
     setCreated(null);
     setFailed([]);
   }
+
 
   const effectiveFranchiseId = lockFranchiseId ?? franchiseId;
   const canSubmit =
@@ -78,9 +81,11 @@ export function BulkCreateAccountsDialog({
           franchiseId: effectiveFranchiseId,
           count,
           namePrefix: prefix.trim() || "Member",
+          expectedDailyHours: expectedHours,
           accessToken,
         },
       });
+
       if (!res.ok) {
         toast.error(res.error);
         setBusy(false);
@@ -267,6 +272,22 @@ export function BulkCreateAccountsDialog({
                   "{(prefix.trim() || "Member")} 2"… Numbering continues from existing accounts.
                 </p>
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bulk-hours">Expected daily hours</Label>
+                <Input
+                  id="bulk-hours"
+                  type="number"
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  value={expectedHours}
+                  onChange={(e) => setExpectedHours(Number(e.target.value) || 0)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Baseline used in target vs actual reports. Default 8h.
+                </p>
+              </div>
+
               <DialogFooter>
                 <Button type="submit" disabled={!canSubmit}>
                   {busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</> : `Create ${count} accounts`}
