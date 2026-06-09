@@ -334,7 +334,8 @@ interface BulkCreateInput {
   franchiseId: string;
   count: number;
   namePrefix?: string;
-  expectedDailyHours?: number;
+  workStartTime?: string | null;
+  workEndTime?: string | null;
   workingDays?: string[] | null;
   accessToken?: string;
 }
