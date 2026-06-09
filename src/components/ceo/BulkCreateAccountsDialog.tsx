@@ -44,8 +44,8 @@ export function BulkCreateAccountsDialog({
   const [franchiseId, setFranchiseId] = React.useState(lockFranchiseId ?? "");
   const [count, setCount] = React.useState(10);
   const [prefix, setPrefix] = React.useState("Member");
-  const [workStart, setWorkStart] = React.useState<string>("");
-  const [workEnd, setWorkEnd] = React.useState<string>("");
+  const [workStart, setWorkStart] = React.useState<string>("09:00");
+  const [workEnd, setWorkEnd] = React.useState<string>("17:00");
   const DAY_OPTIONS = [
     { key: "mon", label: "Mon" },
     { key: "tue", label: "Tue" },
@@ -55,6 +55,20 @@ export function BulkCreateAccountsDialog({
     { key: "sat", label: "Sat" },
     { key: "sun", label: "Sun" },
   ] as const;
+  const TIME_OPTIONS = (() => {
+    const opts: { value: string; label: string }[] = [];
+    for (let h = 6; h <= 23; h++) {
+      for (const m of [0, 30] as const) {
+        if (h === 23 && m === 30) break;
+        const value = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+        const ampm = h < 12 ? "AM" : "PM";
+        const displayH = h % 12 || 12;
+        const displayM = m === 0 ? "00" : "30";
+        opts.push({ value, label: `${displayH}:${displayM} ${ampm}` });
+      }
+    }
+    return opts;
+  })();
   const [workingDays, setWorkingDays] = React.useState<string[]>(["mon", "tue", "wed", "thu", "fri"]);
   const [busy, setBusy] = React.useState(false);
   const [created, setCreated] = React.useState<Cred[] | null>(null);
@@ -65,8 +79,8 @@ export function BulkCreateAccountsDialog({
     setFranchiseId(lockFranchiseId ?? "");
     setCount(10);
     setPrefix("Member");
-    setWorkStart("");
-    setWorkEnd("");
+    setWorkStart("09:00");
+    setWorkEnd("17:00");
     setWorkingDays(["mon", "tue", "wed", "thu", "fri"]);
     setCreated(null);
     setFailed([]);
@@ -306,21 +320,29 @@ export function BulkCreateAccountsDialog({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="bulk-start">Work start time</Label>
-                  <Input
-                    id="bulk-start"
-                    type="time"
-                    value={workStart}
-                    onChange={(e) => setWorkStart(e.target.value)}
-                  />
+                  <Select value={workStart} onValueChange={(v) => setWorkStart(v)}>
+                    <SelectTrigger id="bulk-start">
+                      <SelectValue placeholder="Select start time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_OPTIONS.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="bulk-end">Work end time</Label>
-                  <Input
-                    id="bulk-end"
-                    type="time"
-                    value={workEnd}
-                    onChange={(e) => setWorkEnd(e.target.value)}
-                  />
+                  <Select value={workEnd} onValueChange={(v) => setWorkEnd(v)}>
+                    <SelectTrigger id="bulk-end">
+                      <SelectValue placeholder="Select end time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_OPTIONS.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-1.5">
