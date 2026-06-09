@@ -286,6 +286,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          expected_daily_hours: number
           franchise_id: string | null
           full_name: string | null
           id: string
@@ -295,6 +296,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          expected_daily_hours?: number
           franchise_id?: string | null
           full_name?: string | null
           id: string
@@ -304,6 +306,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          expected_daily_hours?: number
           franchise_id?: string | null
           full_name?: string | null
           id?: string
@@ -519,10 +522,12 @@ export type Database = {
       study_sessions: {
         Row: {
           active_seconds: number
+          ai_summary: string | null
           blur_count: number
           client_info: Json
           course_id: string | null
           created_at: string
+          end_reason: string | null
           ended_at: string | null
           id: string
           idle_seconds: number
@@ -533,10 +538,12 @@ export type Database = {
         }
         Insert: {
           active_seconds?: number
+          ai_summary?: string | null
           blur_count?: number
           client_info?: Json
           course_id?: string | null
           created_at?: string
+          end_reason?: string | null
           ended_at?: string | null
           id?: string
           idle_seconds?: number
@@ -547,10 +554,12 @@ export type Database = {
         }
         Update: {
           active_seconds?: number
+          ai_summary?: string | null
           blur_count?: number
           client_info?: Json
           course_id?: string | null
           created_at?: string
+          end_reason?: string | null
           ended_at?: string | null
           id?: string
           idle_seconds?: number
