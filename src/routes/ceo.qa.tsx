@@ -22,11 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, BadgeCheck, Globe2, UserPlus, Copy, Mail, Trash2, Settings2 } from "lucide-react";
+import { Loader2, BadgeCheck, Globe2, UserPlus, Copy, Mail, Trash2, Settings2, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/lib/create-qa-account.functions";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EditQaAccessDialog } from "@/components/ceo/EditQaAccessDialog";
+import { ChangeQaRoleDialog } from "@/components/ceo/ChangeQaRoleDialog";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
