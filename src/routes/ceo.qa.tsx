@@ -22,10 +22,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, BadgeCheck, Globe2, Save, UserPlus, Copy, RefreshCw, Mail, Trash2 } from "lucide-react";
+import { Loader2, BadgeCheck, Globe2, UserPlus, Copy, Mail, Trash2, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/lib/create-qa-account.functions";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { EditQaAccessDialog } from "@/components/ceo/EditQaAccessDialog";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
@@ -51,8 +52,8 @@ function CeoQaPage() {
   const [franchises, setFranchises] = React.useState<Franchise[]>([]);
   const [assignments, setAssignments] = React.useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = React.useState(true);
-  const [savingId, setSavingId] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [editingQa, setEditingQa] = React.useState<Qa | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const listQa = useServerFn(listQaReviewers);
@@ -93,45 +94,7 @@ function CeoQaPage() {
     load();
   }, [load]);
 
-  const toggle = (qaId: string, franchiseId: string) => {
-    setAssignments((prev) => {
-      const next = { ...prev };
-      const set = new Set(next[qaId] ?? []);
-      if (set.has(franchiseId)) set.delete(franchiseId);
-      else set.add(franchiseId);
-      next[qaId] = set;
-      return next;
-    });
-  };
-
-  const save = async (qaId: string) => {
-    setSavingId(qaId);
-    const wanted = assignments[qaId] ?? new Set<string>();
-    const { data: current } = await supabase
-      .from("qa_franchise_assignments")
-      .select("franchise_id")
-      .eq("user_id", qaId);
-    const currentSet = new Set((current ?? []).map((r) => r.franchise_id));
-    const toAdd = [...wanted].filter((f) => !currentSet.has(f));
-    const toRemove = [...currentSet].filter((f) => !wanted.has(f));
-
-    if (toAdd.length) {
-      const { error } = await supabase
-        .from("qa_franchise_assignments")
-        .insert(toAdd.map((fid) => ({ user_id: qaId, franchise_id: fid })));
-      if (error) { toast.error(error.message); setSavingId(null); return; }
-    }
-    if (toRemove.length) {
-      const { error } = await supabase
-        .from("qa_franchise_assignments")
-        .delete()
-        .eq("user_id", qaId)
-        .in("franchise_id", toRemove);
-      if (error) { toast.error(error.message); setSavingId(null); return; }
-    }
-    toast.success("QA franchise scope updated");
-    setSavingId(null);
-  };
+  // (toggle/save handled inside EditQaAccessDialog now)
 
   const remove = async (qa: Qa) => {
     const ok = await confirm({
@@ -233,6 +196,15 @@ function CeoQaPage() {
         </DialogContent>
       </Dialog>
 
+      <EditQaAccessDialog
+        open={!!editingQa}
+        onOpenChange={(v) => { if (!v) setEditingQa(null); }}
+        qa={editingQa}
+        franchises={franchises}
+        initialSelected={editingQa ? (assignments[editingQa.id] ?? new Set()) : new Set()}
+        onSaved={load}
+      />
+
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -272,9 +244,9 @@ function CeoQaPage() {
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={() => save(qa.id)} disabled={savingId === qa.id}>
-                      {savingId === qa.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      Save
+                    <Button size="sm" variant="outline" onClick={() => setEditingQa(qa)}>
+                      <Settings2 className="h-3.5 w-3.5" />
+                      Edit access
                     </Button>
                     <Button
                       size="sm"
@@ -288,18 +260,21 @@ function CeoQaPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {franchises.map((f) => {
-                      const checked = set.has(f.id);
-                      return (
-                        <label key={f.id} className="flex cursor-pointer items-center gap-3 rounded-md border bg-card p-3 hover:bg-muted/40">
-                          <Checkbox checked={checked} onCheckedChange={() => toggle(qa.id, f.id)} />
-                          <span className="text-sm">{f.name}</span>
-                          {checked && <Badge variant="secondary" className="ml-auto">assigned</Badge>}
-                        </label>
-                      );
-                    })}
-                  </div>
+                  {orgWide ? (
+                    <p className="text-xs text-muted-foreground">
+                      No centres selected — this QA can review submissions across the whole organization.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {[...set].map((fid) => {
+                        const f = franchises.find((x) => x.id === fid);
+                        if (!f) return null;
+                        return (
+                          <Badge key={fid} variant="secondary">{f.name}</Badge>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );

@@ -1,105 +1,52 @@
-## Scope
+# Audit + Build Plan
 
-Build a comprehensive Member Progress Tracking system across CEO, Incharge, and Member roles. All data fits the existing schema — **no migrations required**.
+## What exists today
 
-## Rules (confirmed)
+### Feature 1 — Account creation
+- `createUserAccount` (in `src/lib/admin-users.functions.ts`) creates **one** account per call. No bulk variant.
+- UI is a single-account dialog `CreateAccountDialog` inside `src/components/ceo/FranchisesAndInvitesSection.tsx`, also used by the Incharge screen. After success it shows one credential card with a Copy button.
+- Email format is auto-derived client-side: `member.<firstname>.<franchiseslug>.<4charrand>@irmacademy.app`. Password is a 12-char random string.
+- `xlsx` package is already a dependency.
 
-- **Off days**: Sat + Sun (gray cells in 14-day strip)
-- **Late**: first `study_sessions.started_at` that day > 10:00 AM Asia/Karachi → amber
-- **Pending QA**: count from both `submissions` and `project_submissions` where `status = 'pending'`
-- **Status flag thresholds**:
-  - At risk = attendance <70% OR progress >40pp behind expected pace OR pending QA ≥4
-  - Slipping = any one signal amber (attendance 70–84% / progress 20–40pp behind / pending QA 2–3)
-  - On track = all green
-- **Expected pace**: linear from `assignment.created_at` → `assignment.deadline`. Skip the pace signal when no deadline exists.
-- **Color bands** for completion %: green ≥70, amber 45–69, red <45
+### Feature 2 — QA franchise access
+- QA scope lives in `public.qa_franchise_assignments(user_id, franchise_id, assigned_by, created_at)`. Empty rows = org-wide access (see `qa_can_access_franchise` RPC and the comment in `/ceo/qa`).
+- `/ceo/qa` (`src/routes/ceo.qa.tsx`) **already renders per-QA franchise checkboxes inline** with a per-row **Save** button that diffs and writes to `qa_franchise_assignments`. It works but is always-open on the card — no "Edit access" modal.
+- Changing assignments is pure data writes against `qa_franchise_assignments`; no RLS or password/session impact. Existing sessions stay valid.
+- `/ceo/qa` is the correct location.
 
-## New shared library
+## What needs to be built
 
-`src/lib/member-progress.functions.ts` — server functions (use `requireSupabaseAuth`):
+### Feature 1 — Bulk member creation
+1. **Server fn** `createUserAccountsBulk` in `src/lib/admin-users.functions.ts`:
+   - Input: `{ accessToken, franchiseId, count (1–50), namePrefix? }`.
+   - Authorization: CEO can target any franchise; Incharge is forced to their own franchise and `role='member'` (mirrors existing `createUserAccount` rules).
+   - Loops `count` times, generating `member<N>.<franchiseslug>.<rand>@irmacademy.app` + 12-char password + display name `Member <N>` (or `<prefix> <N>`). Picks `<N>` by counting existing members in the franchise so numbering continues.
+   - Reuses the same insert path as `createUserAccount` (auth.admin.createUser → profile upsert → user_roles upsert with `role='member', franchise_id`).
+   - Returns `{ ok, created: [{name, email, password}], failed: [{index, error}] }` — partial success allowed.
+2. **UI** `BulkCreateAccountsDialog` (new component, sibling to `CreateAccountDialog`):
+   - Inputs: franchise select (locked for incharge), count (number, 1–50), optional name prefix.
+   - On submit, calls bulk fn, then renders the credentials table: Name | Email | Password | per-row Copy.
+   - Top toolbar: **Copy all** (formatted `Name | Email | Password` lines) and **Download CSV** (uses `xlsx` to write a `.xlsx` — same library handles CSV via `XLSX.write(..., {bookType:'csv'})`, or just a plain `.xlsx` with one sheet; pick `.xlsx` for consistency with member-progress export).
+   - Big warning: "Save these now — passwords cannot be retrieved later."
+3. **Wire it in**:
+   - Add a "Create bulk accounts" button next to the existing "Create account" in `FranchisesAndInvitesSection` (CEO) and in the Incharge members page (`src/routes/incharge.members.tsx`), passing `callerScope` and `lockFranchiseId` like today.
 
-1. `getRosterForScope({ scope })` — `scope: "ceo" | "incharge"`. Returns one row per visible member:
-   ```ts
-   { userId, fullName, franchiseId, franchiseName, completionPct, hoursThisWeek, attendancePct14d, avgGrade, pendingQa, status: "on_track"|"slipping"|"at_risk" }
-   ```
-   Queries: `profiles` + `user_roles` (filter `role='member'`) → batch `lesson_progress`/`assignments`/`sections`/`lessons` (reuse `completion-summary.ts`) → `study_sessions` last 7d sum → distinct working days with sessions in last 14d → `submissions` avg grade → `submissions`+`project_submissions` pending count.
-
-2. `getMemberDetail({ userId })` — RLS-checked. Returns:
-   ```ts
-   { profile, kpis, hoursByCourse: [{courseId,title,seconds}],
-     courses: [{courseId,title,completionPct,qaStatus,grade}],
-     attendance14d: [{date,state:"present"|"late"|"absent"|"off"}] }
-   ```
-
-3. `getMyMemberDetail()` — convenience wrapper that calls `getMemberDetail` with `context.userId`.
-
-4. `exportRosterXlsx({ scope })` — returns base64-encoded xlsx buffer. Two sheets:
-   - **Summary**: name, franchise, completion%, total hours (week), attendance%, avg grade, pending QA, status
-   - **Hours by Course**: rows = members, columns = courses, cells = hours this week
-
-## New shared utility
-
-`src/lib/attendance-utils.ts` — pure functions:
-- `buildAttendanceStrip(sessions, today)` → 14-day array with PKT day bucketing, Sat/Sun = off
-- `classifyDay(sessionsForDay)` → "absent" | "late" | "present" (late if earliest > 10:00 PKT)
-
-## New components
-
-- `src/components/progress/RosterTable.tsx` — sortable table (name, franchise [CEO only], completion bar, hours/wk, attendance%, avg grade, pending QA, status badge, drill-down link). "Export report" button calls `exportRosterXlsx`.
-- `src/components/progress/MemberDetailView.tsx` — reusable detail view rendering KPI cards, horizontal bar chart (recharts, already in deps), per-course breakdown, 14-day attendance strip. Used by all three drill-down routes.
-- `src/components/progress/AttendanceStrip.tsx` — 14 colored cells with date tooltips.
-- `src/components/progress/CompletionBar.tsx` — progress bar with color band.
-- `src/components/progress/StatusBadge.tsx` — on track / slipping / at risk pill.
-
-## New routes
-
-- `src/routes/ceo.members.tsx` — roster (all franchises, with franchise column + filter)
-- `src/routes/ceo.members.$userId.tsx` — drill-down (CEO view)
-- `src/routes/incharge.members.$userId.tsx` — drill-down (Incharge view)
-- `src/routes/member.progress.tsx` — self-view using `getMyMemberDetail`
-
-## Modified routes
-
-- `src/routes/incharge.members.tsx` — replace current implementation with new `RosterTable` (scope=incharge). Rows link to `/incharge/members/$userId`.
-- `src/routes/ceo.tsx` & `src/routes/incharge.tsx` — add "Members" nav link.
-- `src/routes/member.tsx` — add "My Progress" nav link.
-
-## Excel export (server-side)
-
-Use `xlsx` package inside `exportRosterXlsx` server fn:
-```ts
-const wb = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Summary");
-XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hoursPivot), "Hours by Course");
-const buf = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
-return { filename: `member-progress-${date}.xlsx`, base64: buf };
-```
-Client converts base64 → Blob → download (pattern already in `grade-export.ts`).
-
-## Data dependencies (verified, all exist)
-
-| Need | Source |
-|---|---|
-| Completion % | `lesson_progress` + `lessons` + `sections` + `assignments` |
-| Hours / hours-by-course | `study_sessions.active_seconds`, `course_id` |
-| Attendance | `study_sessions.started_at` bucketed by PKT date |
-| Avg grade | `submissions.grade` |
-| Pending QA | `submissions` + `project_submissions` `status='pending'` |
-| Pace | `assignments.created_at` + `deadline` |
+### Feature 2 — QA franchise access modal
+1. Refactor `/ceo/qa` so each QA card no longer renders the checkbox grid inline. Replace with an **"Edit access"** button (and keep the existing Delete button).
+2. New component `EditQaAccessDialog`:
+   - Props: `qa`, `franchises`, `initialSelected: Set<string>`, `onSaved`.
+   - Body: same checkbox grid currently inline, plus the existing "no selection = org-wide" hint.
+   - Footer: Cancel / Save. Save reuses the existing diff-and-write logic (insert toAdd, delete toRemove on `qa_franchise_assignments`). No server fn needed; client RLS already allows CEO to manage `qa_franchise_assignments`.
+3. No schema/RLS/password/session changes.
 
 ## Build order
+1. Server fn `createUserAccountsBulk` (+ small Zod validator).
+2. `BulkCreateAccountsDialog` component with credentials table, Copy row, Copy all, Download xlsx.
+3. Wire "Create bulk accounts" button into CEO `FranchisesAndInvitesSection` and `incharge.members.tsx`.
+4. Extract `EditQaAccessDialog` from `/ceo/qa`, replace inline grid with an "Edit access" button.
+5. Smoke test: create 5 members into a test franchise → verify rows in `profiles` / `user_roles`, CSV downloads, Copy-all formats correctly; open a QA's Edit access, toggle franchises, save, refresh, confirm persisted and that QA session is unaffected.
 
-1. **Shared lib** — `attendance-utils.ts` + `member-progress.functions.ts` (no UI yet; verify with a quick server-fn invoke).
-2. **Primitives** — `CompletionBar`, `StatusBadge`, `AttendanceStrip`.
-3. **Roster** — `RosterTable` + replace `incharge.members.tsx` + new `ceo.members.tsx`. Wire export button.
-4. **Drill-down** — `MemberDetailView` + three routes that pass the right `userId`.
-5. **Member self-view** — `member.progress.tsx` + nav link.
-6. **Excel export** — finalize two-sheet xlsx and download on click.
-7. **Nav + polish** — sidebar links, RLS smoke test for each role.
-
-## Out of scope (call out explicitly)
-
-- No new tables, no schema changes.
-- No "late" config UI — 10:00 AM PKT is hardcoded for v1.
-- No working-schedule table — Sat+Sun hardcoded as off days.
-- No realtime updates — relies on TanStack Query staleTime; refresh button on roster.
+## Out of scope
+- Sending the credentials by email.
+- Editing individual generated names/emails before creation (prefix only).
+- Bulk QA edits (one QA at a time).

@@ -31,6 +31,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useServerFn } from "@tanstack/react-start";
 import { adminResetPassword } from "@/lib/admin-users.functions";
 import { CreateAccountDialog } from "@/components/ceo/FranchisesAndInvitesSection";
+import { BulkCreateAccountsDialog } from "@/components/ceo/BulkCreateAccountsDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -193,13 +194,21 @@ function InchargeMembers() {
             change it on first login.
           </p>
         </div>
-        <CreateAccountDialog
-          franchises={franchise ? [franchise] : []}
-          onCreated={load}
-          callerScope="incharge"
-          lockFranchiseId={profile?.franchise_id ?? null}
-          triggerLabel="Create member"
-        />
+        <div className="flex flex-wrap gap-2">
+          <CreateAccountDialog
+            franchises={franchise ? [franchise] : []}
+            onCreated={load}
+            callerScope="incharge"
+            lockFranchiseId={profile?.franchise_id ?? null}
+            triggerLabel="Create member"
+          />
+          <BulkCreateAccountsDialog
+            franchises={franchise ? [franchise] : []}
+            onCreated={load}
+            callerScope="incharge"
+            lockFranchiseId={profile?.franchise_id ?? null}
+          />
+        </div>
       </header>
 
       <RosterTable scope="incharge" detailRoutePrefix="/incharge/members" />
