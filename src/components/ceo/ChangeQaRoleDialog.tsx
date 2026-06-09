@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { changeQaRole } from "@/lib/create-qa-account.functions";
@@ -39,6 +40,7 @@ export function ChangeQaRoleDialog({
 }) {
   const [newRole, setNewRole] = React.useState<"incharge" | "member">("member");
   const [franchiseId, setFranchiseId] = React.useState<string>("");
+  const [keepQa, setKeepQa] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const change = useServerFn(changeQaRole);
 
@@ -46,6 +48,7 @@ export function ChangeQaRoleDialog({
     if (open) {
       setNewRole("member");
       setFranchiseId("");
+      setKeepQa(false);
     }
   }, [open]);
 
@@ -64,13 +67,14 @@ export function ChangeQaRoleDialog({
     }
     try {
       const r = (await change({
-        data: { accessToken: token, userId: qa.id, newRole, franchiseId },
+        data: { accessToken: token, userId: qa.id, newRole, franchiseId, keepQa },
       })) as { ok: true } | { ok: false; error: string };
       if (!r.ok) {
         toast.error(r.error);
       } else {
+        const roleLabel = newRole === "incharge" ? "an Incharge" : "a Member";
         toast.success(
-          `${qa.full_name ?? "User"} is now ${newRole === "incharge" ? "an Incharge" : "a Member"}`,
+          `${qa.full_name ?? "User"} is now ${roleLabel}${keepQa ? " (QA access kept)" : ""}`,
         );
         onChanged();
         onOpenChange(false);
@@ -122,6 +126,21 @@ export function ChangeQaRoleDialog({
               </p>
             )}
           </div>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-md border bg-card p-3 hover:bg-muted/40">
+            <Checkbox
+              checked={keepQa}
+              onCheckedChange={(v) => setKeepQa(!!v)}
+              className="mt-0.5"
+            />
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Also keep QA reviewer access</div>
+              <p className="text-xs text-muted-foreground">
+                Leave the user's existing QA role and franchise scope intact, so they
+                act as both {newRole === "incharge" ? "Incharge" : "Member"} <em>and</em> QA reviewer.
+              </p>
+            </div>
+          </label>
         </div>
 
         <DialogFooter>

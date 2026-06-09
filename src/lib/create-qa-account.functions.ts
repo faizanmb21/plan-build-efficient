@@ -221,6 +221,7 @@ const ChangeRoleSchema = z.object({
   userId: z.string().uuid(),
   newRole: z.enum(["incharge", "member"]),
   franchiseId: z.string().uuid(),
+  keepQa: z.boolean().optional().default(false),
 });
 
 export const changeQaRole = createServerFn({ method: "POST" })
@@ -250,16 +251,16 @@ export const changeQaRole = createServerFn({ method: "POST" })
         .maybeSingle();
       if (!fr) return { ok: false as const, error: "Franchise not found." };
 
-      // Remove QA scope rows (no longer relevant once they leave QA)
-      await supabaseAdmin.from("qa_franchise_assignments").delete().eq("user_id", data.userId);
-
-      // Remove QA role
-      const { error: dErr } = await supabaseAdmin
-        .from("user_roles")
-        .delete()
-        .eq("user_id", data.userId)
-        .eq("role", "qa");
-      if (dErr) return { ok: false as const, error: dErr.message };
+      // If keepQa is false, remove QA scope + QA role. If true, leave QA access intact.
+      if (!data.keepQa) {
+        await supabaseAdmin.from("qa_franchise_assignments").delete().eq("user_id", data.userId);
+        const { error: dErr } = await supabaseAdmin
+          .from("user_roles")
+          .delete()
+          .eq("user_id", data.userId)
+          .eq("role", "qa");
+        if (dErr) return { ok: false as const, error: dErr.message };
+      }
 
       // Add new role
       const { error: iErr } = await supabaseAdmin
