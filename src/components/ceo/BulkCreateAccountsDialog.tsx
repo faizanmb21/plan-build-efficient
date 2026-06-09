@@ -93,6 +93,7 @@ export function BulkCreateAccountsDialog({
           count,
           namePrefix: prefix.trim() || "Member",
           expectedDailyHours: expectedHours,
+          workingDays,
           accessToken,
         },
       });
