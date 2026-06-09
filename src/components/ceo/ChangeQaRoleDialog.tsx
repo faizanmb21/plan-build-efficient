@@ -67,13 +67,14 @@ export function ChangeQaRoleDialog({
     }
     try {
       const r = (await change({
-        data: { accessToken: token, userId: qa.id, newRole, franchiseId },
+        data: { accessToken: token, userId: qa.id, newRole, franchiseId, keepQa },
       })) as { ok: true } | { ok: false; error: string };
       if (!r.ok) {
         toast.error(r.error);
       } else {
+        const roleLabel = newRole === "incharge" ? "an Incharge" : "a Member";
         toast.success(
-          `${qa.full_name ?? "User"} is now ${newRole === "incharge" ? "an Incharge" : "a Member"}`,
+          `${qa.full_name ?? "User"} is now ${roleLabel}${keepQa ? " (QA access kept)" : ""}`,
         );
         onChanged();
         onOpenChange(false);
