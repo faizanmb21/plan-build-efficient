@@ -299,6 +299,41 @@ export function BulkCreateAccountsDialog({
                   Baseline used in target vs actual reports. Default 8h.
                 </p>
               </div>
+              <div className="space-y-1.5">
+                <Label>Working days</Label>
+                <div className="flex flex-wrap gap-2">
+                  {DAY_OPTIONS.map((d) => {
+                    const checked = workingDays.includes(d.key);
+                    return (
+                      <label
+                        key={d.key}
+                        className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
+                          checked
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-background text-muted-foreground"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5"
+                          checked={checked}
+                          onChange={(e) => {
+                            setWorkingDays((prev) =>
+                              e.target.checked
+                                ? Array.from(new Set([...prev, d.key]))
+                                : prev.filter((x) => x !== d.key),
+                            );
+                          }}
+                        />
+                        {d.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Days these members are expected to work. Default Mon–Fri.
+                </p>
+              </div>
 
               <DialogFooter>
                 <Button type="submit" disabled={!canSubmit}>
