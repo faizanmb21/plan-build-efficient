@@ -295,8 +295,10 @@ interface BulkCreateInput {
   franchiseId: string;
   count: number;
   namePrefix?: string;
+  expectedDailyHours?: number;
   accessToken?: string;
 }
+
 
 function slugify(s: string, max = 16) {
   return s
@@ -381,9 +383,14 @@ export const createUserAccountsBulk = createServerFn({ method: "POST" })
           continue;
         }
         const uid = createdUser.user.id;
+        const expected = Math.max(0, Math.min(24, Number(data.expectedDailyHours ?? 8) || 8));
         await supabaseAdmin
           .from("profiles")
-          .upsert({ id: uid, full_name: fullName, franchise_id: franchiseId }, { onConflict: "id" });
+          .upsert(
+            { id: uid, full_name: fullName, franchise_id: franchiseId, expected_daily_hours: expected },
+            { onConflict: "id" },
+          );
+
         const { error: rErr } = await supabaseAdmin
           .from("user_roles")
           .upsert(
