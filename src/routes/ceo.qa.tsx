@@ -55,6 +55,7 @@ function CeoQaPage() {
   const [loading, setLoading] = React.useState(true);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [editingQa, setEditingQa] = React.useState<Qa | null>(null);
+  const [roleQa, setRoleQa] = React.useState<Qa | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const listQa = useServerFn(listQaReviewers);
