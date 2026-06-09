@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useGradeNotifications } from "@/hooks/use-grade-notifications";
 import { WorkSessionProvider } from "@/hooks/use-work-session";
 import { SessionPausedOverlay } from "@/components/work/SessionPausedOverlay";
+import { IdleWarningModal } from "@/components/work/IdleWarningModal";
 
 const nav: NavItem[] = [
   { to: "/member", label: "My Courses", icon: LayoutDashboard },
@@ -37,6 +38,7 @@ function MemberLayout() {
             <Outlet />
           </AppShell>
           <SessionPausedOverlay />
+          <IdleWarningModal />
         </WorkSessionProvider>
       )}
     </RoleGuard>

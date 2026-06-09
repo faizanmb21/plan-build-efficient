@@ -6,13 +6,19 @@ import {
   clockIn as clockInFn,
   clockOut as clockOutFn,
   heartbeatSession as heartbeatFn,
+  pauseSession as pauseFn,
+  resumeSession as resumeFn,
 } from "@/lib/work-session.functions";
 import { toast } from "sonner";
 
 const GLOBAL_IDLE_MS = 3 * 60 * 1000; // 3 minutes
+const COURSE_IDLE_MS = 2 * 60 * 1000; // 2 minutes
+const WARNING_GRACE_MS = 30 * 1000; // 30-second warning
 const HEARTBEAT_MS = 30 * 1000;
 
 export type ClockOutReason = "manual" | "auto_idle_global" | "auto_idle_course";
+export type SessionStatus = "active" | "paused";
+export type IdleWarning = null | "global" | "course";
 
 export interface LastSessionSummary {
   sessionId: string;
@@ -30,14 +36,19 @@ interface Ctx {
   startedAt: number | null;
   activeSeconds: number;
   isClockedIn: boolean;
+  isPaused: boolean;
   isClockingIn: boolean;
   isClockingOut: boolean;
+  isPausing: boolean;
   pausedReason: ClockOutReason | null;
   lastSummary: LastSessionSummary | null;
+  idleWarning: IdleWarning;
   start: () => Promise<void>;
   stop: (reason?: ClockOutReason) => Promise<void>;
+  pause: () => Promise<void>;
+  resume: () => Promise<void>;
   dismissPaused: () => void;
-  /** Called by course pages to register a 2-min scroll/click idle watcher. */
+  dismissIdleWarning: () => void;
   registerCourseActivity: () => () => void;
 }
 
@@ -53,21 +64,32 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   const clockInRpc = useServerFn(clockInFn);
   const clockOutRpc = useServerFn(clockOutFn);
   const heartbeatRpc = useServerFn(heartbeatFn);
+  const pauseRpc = useServerFn(pauseFn);
+  const resumeRpc = useServerFn(resumeFn);
 
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [startedAt, setStartedAt] = React.useState<number | null>(null);
   const [activeSeconds, setActiveSeconds] = React.useState(0);
   const [isClockingIn, setIsClockingIn] = React.useState(false);
   const [isClockingOut, setIsClockingOut] = React.useState(false);
+  const [isPausing, setIsPausing] = React.useState(false);
+  const [isPaused, setIsPaused] = React.useState(false);
   const [pausedReason, setPausedReason] = React.useState<ClockOutReason | null>(null);
   const [lastSummary, setLastSummary] = React.useState<LastSessionSummary | null>(null);
+  const [idleWarning, setIdleWarning] = React.useState<IdleWarning>(null);
 
   const lastActivityRef = React.useRef<number>(Date.now());
+  const lastCourseActivityRef = React.useRef<number>(Date.now());
   const unsentActiveRef = React.useRef<number>(0);
   const sessionRef = React.useRef<string | null>(null);
-  const courseModeRef = React.useRef<number>(0); // ref count for course pages active
+  const pausedRef = React.useRef<boolean>(false);
+  const courseActiveRef = React.useRef<number>(0);
 
   const isClockedIn = !!sessionId;
+
+  React.useEffect(() => {
+    pausedRef.current = isPaused;
+  }, [isPaused]);
 
   // Resume an open session on mount
   React.useEffect(() => {
@@ -75,7 +97,7 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     (async () => {
       const { data } = await supabase
         .from("study_sessions")
-        .select("id, started_at, active_seconds")
+        .select("id, started_at, active_seconds, status")
         .eq("user_id", user.id)
         .is("ended_at", null)
         .order("started_at", { ascending: false })
@@ -86,15 +108,22 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
         sessionRef.current = data.id;
         setStartedAt(new Date(data.started_at).getTime());
         setActiveSeconds(data.active_seconds ?? 0);
+        const paused = (data as any).status === "paused";
+        setIsPaused(paused);
+        pausedRef.current = paused;
       }
     })();
   }, [user]);
 
-  // Activity listeners — only matter when clocked in
+  // Activity listeners — only matter when clocked in (we still listen while paused so
+  // resume detection works via dismissIdleWarning if user clicks "I'm here")
   React.useEffect(() => {
     if (!isClockedIn) return;
     const onActivity = () => {
       lastActivityRef.current = Date.now();
+      lastCourseActivityRef.current = Date.now();
+      // Activity dismisses any pending warning
+      setIdleWarning((w) => (w ? null : w));
     };
     window.addEventListener("mousemove", onActivity, { passive: true });
     window.addEventListener("keydown", onActivity);
@@ -115,13 +144,14 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
       const sid = sessionRef.current;
       if (!sid) return;
       setIsClockingOut(true);
+      setIdleWarning(null);
       try {
         const accessToken = await getToken();
         const res = await clockOutRpc({
           data: {
             sessionId: sid,
             endReason: reason,
-            deltaActiveSec: unsentActiveRef.current,
+            deltaActiveSec: pausedRef.current ? 0 : unsentActiveRef.current,
             accessToken,
           },
         });
@@ -142,6 +172,8 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
         setSessionId(null);
         setStartedAt(null);
         setActiveSeconds(0);
+        setIsPaused(false);
+        pausedRef.current = false;
         if (reason !== "manual") setPausedReason(reason);
       } catch (e) {
         console.error("clockOut failed", e);
@@ -153,17 +185,19 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     [clockOutRpc],
   );
 
-  // Heartbeat + idle detection
+  // Heartbeat + idle detection (global)
   React.useEffect(() => {
     if (!isClockedIn) return;
     const t = window.setInterval(async () => {
+      // While paused: no active accumulation, no idle triggers, no warning.
+      if (pausedRef.current) return;
+
       const sinceActivity = Date.now() - lastActivityRef.current;
       const delta = HEARTBEAT_MS / 1000;
       if (sinceActivity < HEARTBEAT_MS * 2) {
         setActiveSeconds((s) => s + delta);
         unsentActiveRef.current += delta;
       }
-      // Send heartbeat batch
       const sid = sessionRef.current;
       if (sid && unsentActiveRef.current > 0) {
         const toSend = unsentActiveRef.current;
@@ -171,16 +205,19 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
         try {
           const accessToken = await getToken();
           await heartbeatRpc({ data: { sessionId: sid, deltaActiveSec: toSend, accessToken } });
-        } catch (e) {
-          // Re-queue on failure
+        } catch {
           unsentActiveRef.current += toSend;
         }
       }
-      // Global 3-min idle trigger
+
+      // Global idle warning + auto clock-out
       if (sinceActivity >= GLOBAL_IDLE_MS) {
         stop("auto_idle_global");
+      } else if (sinceActivity >= GLOBAL_IDLE_MS - WARNING_GRACE_MS) {
+        // Don't override a course warning that already showed
+        setIdleWarning((w) => w ?? "global");
       }
-    }, HEARTBEAT_MS);
+    }, HEARTBEAT_MS / 6); // ~5s — finer granularity for warning timing
     return () => window.clearInterval(t);
   }, [isClockedIn, heartbeatRpc, stop]);
 
@@ -200,7 +237,10 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
       setSessionId(res.sessionId);
       setStartedAt(new Date(res.startedAt).getTime());
       setActiveSeconds(0);
+      setIsPaused(res.status === "paused");
+      pausedRef.current = res.status === "paused";
       lastActivityRef.current = Date.now();
+      lastCourseActivityRef.current = Date.now();
       unsentActiveRef.current = 0;
       toast.success("Clocked in. Work session started.");
     } catch (e) {
@@ -211,48 +251,107 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     }
   }, [clockInRpc]);
 
+  const pause = React.useCallback(async () => {
+    const sid = sessionRef.current;
+    if (!sid || pausedRef.current) return;
+    setIsPausing(true);
+    try {
+      const accessToken = await getToken();
+      const toSend = unsentActiveRef.current;
+      unsentActiveRef.current = 0;
+      const res = await pauseRpc({
+        data: { sessionId: sid, deltaActiveSec: toSend, accessToken },
+      });
+      if (!res.ok) {
+        toast.error(res.error || "Could not pause");
+        unsentActiveRef.current += toSend;
+        return;
+      }
+      setIsPaused(true);
+      pausedRef.current = true;
+      setIdleWarning(null);
+      toast.success("Session paused. Idle checks suspended.");
+    } finally {
+      setIsPausing(false);
+    }
+  }, [pauseRpc]);
+
+  const resume = React.useCallback(async () => {
+    const sid = sessionRef.current;
+    if (!sid || !pausedRef.current) return;
+    setIsPausing(true);
+    try {
+      const accessToken = await getToken();
+      const res = await resumeRpc({ data: { sessionId: sid, accessToken } });
+      if (!res.ok) {
+        toast.error(res.error || "Could not resume");
+        return;
+      }
+      setIsPaused(false);
+      pausedRef.current = false;
+      lastActivityRef.current = Date.now();
+      lastCourseActivityRef.current = Date.now();
+      toast.success("Resumed. Welcome back.");
+    } finally {
+      setIsPausing(false);
+    }
+  }, [resumeRpc]);
+
   const registerCourseActivity = React.useCallback(() => {
-    courseModeRef.current += 1;
-    let timer: number | null = null;
-    let lastCourseActivity = Date.now();
+    courseActiveRef.current += 1;
+    lastCourseActivityRef.current = Date.now();
 
     const reset = () => {
-      lastCourseActivity = Date.now();
+      lastCourseActivityRef.current = Date.now();
     };
 
-    const handlers = ["scroll", "click", "keydown", "touchstart"] as const;
+    const handlers = ["scroll", "click", "keydown", "touchstart", "mousemove"] as const;
     handlers.forEach((ev) =>
       window.addEventListener(ev, reset, { passive: true } as AddEventListenerOptions),
     );
 
-    timer = window.setInterval(() => {
-      if (!sessionRef.current) return;
-      if (Date.now() - lastCourseActivity >= 2 * 60 * 1000) {
+    const timer = window.setInterval(() => {
+      if (!sessionRef.current || pausedRef.current) return;
+      const since = Date.now() - lastCourseActivityRef.current;
+      if (since >= COURSE_IDLE_MS) {
         stop("auto_idle_course");
+      } else if (since >= COURSE_IDLE_MS - WARNING_GRACE_MS) {
+        setIdleWarning((w) => w ?? "course");
       }
-    }, 15_000);
+    }, 5_000);
 
     return () => {
-      courseModeRef.current = Math.max(0, courseModeRef.current - 1);
-      if (timer) window.clearInterval(timer);
+      courseActiveRef.current = Math.max(0, courseActiveRef.current - 1);
+      window.clearInterval(timer);
       handlers.forEach((ev) => window.removeEventListener(ev, reset));
     };
   }, [stop]);
 
   const dismissPaused = React.useCallback(() => setPausedReason(null), []);
+  const dismissIdleWarning = React.useCallback(() => {
+    lastActivityRef.current = Date.now();
+    lastCourseActivityRef.current = Date.now();
+    setIdleWarning(null);
+  }, []);
 
   const value: Ctx = {
     sessionId,
     startedAt,
     activeSeconds,
     isClockedIn,
+    isPaused,
     isClockingIn,
     isClockingOut,
+    isPausing,
     pausedReason,
     lastSummary,
+    idleWarning,
     start,
     stop,
+    pause,
+    resume,
     dismissPaused,
+    dismissIdleWarning,
     registerCourseActivity,
   };
 
