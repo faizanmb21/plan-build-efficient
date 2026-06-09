@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
+import { YouTubeEmbed } from "@/components/YouTubeEmbed";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
 import { useCourseInactivityClockOut } from "@/hooks/use-work-session";
 
