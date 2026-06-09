@@ -98,8 +98,9 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
   // Pull all profiles, then filter to user_roles 'member'.
   const [{ data: roles }, { data: profiles }, { data: franchises }] = await Promise.all([
     supabase.from("user_roles").select("user_id, role").eq("role", "member"),
-    supabase.from("profiles").select("id, full_name, franchise_id"),
+    supabase.from("profiles").select("id, full_name, franchise_id, expected_daily_hours"),
     supabase.from("franchises").select("id, name"),
+
   ]);
 
   const memberIds = new Set((roles ?? []).map((r) => r.user_id));
@@ -197,6 +198,17 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
     paceDeltasByUser.set(a.user_id, arr);
   }
 
+  // Weekdays elapsed in the current rolling 7d window (cap at 5).
+  const weekdaysElapsed = (() => {
+    let count = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(Date.now() - i * DAY_MS);
+      const day = d.getDay();
+      if (day !== 0 && day !== 6) count++;
+    }
+    return Math.min(5, count);
+  })();
+
   const rows: RosterRow[] = memberProfiles.map((p) => {
     const sec = hoursThisWeek.get(p.id) ?? 0;
     const hours = Math.round((sec / 3600) * 10) / 10;
@@ -212,6 +224,8 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
       deltas.length > 0
         ? Math.round(deltas.reduce((a, b) => a + b, 0) / deltas.length)
         : null;
+    const expectedDailyHours = Number((p as any).expected_daily_hours ?? 8);
+    const targetHoursWeek = Math.round(expectedDailyHours * weekdaysElapsed * 10) / 10;
 
     const base = {
       userId: p.id,
@@ -220,6 +234,8 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
       franchiseName: p.franchise_id ? franchiseNameById.get(p.franchise_id) ?? null : null,
       completionPct: compPct,
       hoursThisWeek: hours,
+      expectedDailyHours,
+      targetHoursWeek,
       attendancePct14d: attPct,
       avgGrade: avg,
       pendingQa: pending,
@@ -227,6 +243,7 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
     };
     return { ...base, status: statusFor(base) };
   });
+
 
   rows.sort((a, b) => a.fullName.localeCompare(b.fullName));
   return rows;
