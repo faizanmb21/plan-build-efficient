@@ -292,6 +292,7 @@ export type Database = {
           id: string
           phone: string | null
           updated_at: string
+          working_days: string[]
         }
         Insert: {
           avatar_url?: string | null
@@ -302,6 +303,7 @@ export type Database = {
           id: string
           phone?: string | null
           updated_at?: string
+          working_days?: string[]
         }
         Update: {
           avatar_url?: string | null
@@ -312,6 +314,7 @@ export type Database = {
           id?: string
           phone?: string | null
           updated_at?: string
+          working_days?: string[]
         }
         Relationships: [
           {

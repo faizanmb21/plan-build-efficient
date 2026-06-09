@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS working_days text[] NOT NULL DEFAULT ARRAY['mon','tue','wed','thu','fri']::text[];
