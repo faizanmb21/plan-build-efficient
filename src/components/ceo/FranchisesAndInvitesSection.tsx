@@ -516,6 +516,8 @@ export function CreateAccountDialog({
       }
       const email = deriveEmail();
       const password = generatePassword();
+      const expectedTrim = expectedHours.trim();
+      const expectedNum = expectedTrim === "" ? null : Number(expectedTrim);
       const res = await createFn({
         data: {
           email,
@@ -526,6 +528,9 @@ export function CreateAccountDialog({
             role === "ceo" || role === "qa"
               ? null
               : (lockFranchiseId ?? franchiseId) || null,
+          expectedDailyHours:
+            expectedNum === null || Number.isNaN(expectedNum) ? null : expectedNum,
+          workingDays: role === "member" ? workingDays : null,
           accessToken,
         },
       });
