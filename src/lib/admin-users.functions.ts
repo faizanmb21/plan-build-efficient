@@ -424,18 +424,27 @@ export const createUserAccountsBulk = createServerFn({ method: "POST" })
           continue;
         }
         const uid = createdUser.user.id;
-        const expected = Math.max(0, Math.min(24, Number(data.expectedDailyHours ?? 8) || 8));
         const validDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
         const workingDays =
           Array.isArray(data.workingDays) && data.workingDays.length > 0
             ? Array.from(new Set(data.workingDays.map((d) => String(d).toLowerCase()).filter((d) => validDays.includes(d))))
             : ["mon", "tue", "wed", "thu", "fri"];
+        const workStart = parseHm(data.workStartTime) !== null ? data.workStartTime!.trim() : null;
+        const workEnd = parseHm(data.workEndTime) !== null ? data.workEndTime!.trim() : null;
+        const dailyFromRange = dailyHoursFromRange(workStart, workEnd);
+        const expected = dailyFromRange ?? 8;
+        const profilePayload: Record<string, unknown> = {
+          id: uid,
+          full_name: fullName,
+          franchise_id: franchiseId,
+          expected_daily_hours: expected,
+          working_days: workingDays,
+        };
+        if (workStart) profilePayload.work_start_time = workStart;
+        if (workEnd) profilePayload.work_end_time = workEnd;
         await supabaseAdmin
           .from("profiles")
-          .upsert(
-            { id: uid, full_name: fullName, franchise_id: franchiseId, expected_daily_hours: expected, working_days: workingDays } as never,
-            { onConflict: "id" },
-          );
+          .upsert(profilePayload as never, { onConflict: "id" });
 
         const { error: rErr } = await supabaseAdmin
           .from("user_roles")
