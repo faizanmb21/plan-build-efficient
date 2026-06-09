@@ -612,6 +612,9 @@ function VideoPlayer({ path, url }: { path?: string; url?: string }) {
     if (parsed.provider === "direct") {
       return <NoSeekVideo src={parsed.embedUrl} />;
     }
+    if (parsed.provider === "youtube") {
+      return <YouTubeEmbed embedUrl={parsed.embedUrl} originalUrl={parsed.originalUrl} />;
+    }
     return (
       <iframe
         key={parsed.embedUrl}
@@ -622,6 +625,7 @@ function VideoPlayer({ path, url }: { path?: string; url?: string }) {
         title="Lesson video"
       />
     );
+
   }
 
   if (!path) return <EmptyMedia label="No video added yet" />;
