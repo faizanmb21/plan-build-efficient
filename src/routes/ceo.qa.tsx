@@ -59,6 +59,7 @@ function CeoQaPage() {
   const [roleQa, setRoleQa] = React.useState<Qa | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [grantOpen, setGrantOpen] = React.useState(false);
   const listQa = useServerFn(listQaReviewers);
   const deleteQa = useServerFn(deleteQaAccount);
   const confirm = useConfirm();
