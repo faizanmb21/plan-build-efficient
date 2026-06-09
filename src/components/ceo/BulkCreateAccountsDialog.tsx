@@ -45,6 +45,16 @@ export function BulkCreateAccountsDialog({
   const [count, setCount] = React.useState(10);
   const [prefix, setPrefix] = React.useState("Member");
   const [expectedHours, setExpectedHours] = React.useState(8);
+  const DAY_OPTIONS = [
+    { key: "mon", label: "Mon" },
+    { key: "tue", label: "Tue" },
+    { key: "wed", label: "Wed" },
+    { key: "thu", label: "Thu" },
+    { key: "fri", label: "Fri" },
+    { key: "sat", label: "Sat" },
+    { key: "sun", label: "Sun" },
+  ] as const;
+  const [workingDays, setWorkingDays] = React.useState<string[]>(["mon", "tue", "wed", "thu", "fri"]);
   const [busy, setBusy] = React.useState(false);
   const [created, setCreated] = React.useState<Cred[] | null>(null);
   const [failed, setFailed] = React.useState<{ index: number; error: string }[]>([]);
@@ -55,6 +65,7 @@ export function BulkCreateAccountsDialog({
     setCount(10);
     setPrefix("Member");
     setExpectedHours(8);
+    setWorkingDays(["mon", "tue", "wed", "thu", "fri"]);
     setCreated(null);
     setFailed([]);
   }
