@@ -12,6 +12,8 @@ interface CreateInput {
   fullName: string;
   role: Role;
   franchiseId?: string | null;
+  expectedDailyHours?: number | null;
+  workingDays?: string[] | null;
   accessToken?: string;
 }
 
@@ -140,12 +142,28 @@ export const createUserAccount = createServerFn({ method: "POST" })
     }
 
     // Upsert profile (the handle_new_user trigger fires on insert, but be defensive)
+    const validDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    const workingDays =
+      Array.isArray(data.workingDays) && data.workingDays.length > 0
+        ? Array.from(new Set(data.workingDays.map((d) => String(d).toLowerCase()).filter((d) => validDays.includes(d))))
+        : null;
+    const expectedHoursRaw = data.expectedDailyHours;
+    const expectedHours =
+      expectedHoursRaw === null || expectedHoursRaw === undefined || Number.isNaN(Number(expectedHoursRaw))
+        ? null
+        : Math.max(0, Math.min(24, Number(expectedHoursRaw)));
+
+    const profilePayload: Record<string, unknown> = {
+      id: userId,
+      full_name: fullName,
+      franchise_id: franchiseId,
+    };
+    if (expectedHours !== null) profilePayload.expected_daily_hours = expectedHours;
+    if (workingDays) profilePayload.working_days = workingDays;
+
     await supabaseAdmin
       .from("profiles")
-      .upsert(
-        { id: userId, full_name: fullName, franchise_id: franchiseId },
-        { onConflict: "id" },
-      );
+      .upsert(profilePayload as never, { onConflict: "id" });
 
     // Insert role
     const { error: roleErr } = await supabaseAdmin
@@ -296,6 +314,7 @@ interface BulkCreateInput {
   count: number;
   namePrefix?: string;
   expectedDailyHours?: number;
+  workingDays?: string[] | null;
   accessToken?: string;
 }
 
@@ -384,10 +403,15 @@ export const createUserAccountsBulk = createServerFn({ method: "POST" })
         }
         const uid = createdUser.user.id;
         const expected = Math.max(0, Math.min(24, Number(data.expectedDailyHours ?? 8) || 8));
+        const validDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+        const workingDays =
+          Array.isArray(data.workingDays) && data.workingDays.length > 0
+            ? Array.from(new Set(data.workingDays.map((d) => String(d).toLowerCase()).filter((d) => validDays.includes(d))))
+            : ["mon", "tue", "wed", "thu", "fri"];
         await supabaseAdmin
           .from("profiles")
           .upsert(
-            { id: uid, full_name: fullName, franchise_id: franchiseId, expected_daily_hours: expected },
+            { id: uid, full_name: fullName, franchise_id: franchiseId, expected_daily_hours: expected, working_days: workingDays } as never,
             { onConflict: "id" },
           );
 

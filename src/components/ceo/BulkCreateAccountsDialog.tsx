@@ -45,6 +45,16 @@ export function BulkCreateAccountsDialog({
   const [count, setCount] = React.useState(10);
   const [prefix, setPrefix] = React.useState("Member");
   const [expectedHours, setExpectedHours] = React.useState(8);
+  const DAY_OPTIONS = [
+    { key: "mon", label: "Mon" },
+    { key: "tue", label: "Tue" },
+    { key: "wed", label: "Wed" },
+    { key: "thu", label: "Thu" },
+    { key: "fri", label: "Fri" },
+    { key: "sat", label: "Sat" },
+    { key: "sun", label: "Sun" },
+  ] as const;
+  const [workingDays, setWorkingDays] = React.useState<string[]>(["mon", "tue", "wed", "thu", "fri"]);
   const [busy, setBusy] = React.useState(false);
   const [created, setCreated] = React.useState<Cred[] | null>(null);
   const [failed, setFailed] = React.useState<{ index: number; error: string }[]>([]);
@@ -55,6 +65,7 @@ export function BulkCreateAccountsDialog({
     setCount(10);
     setPrefix("Member");
     setExpectedHours(8);
+    setWorkingDays(["mon", "tue", "wed", "thu", "fri"]);
     setCreated(null);
     setFailed([]);
   }
@@ -82,6 +93,7 @@ export function BulkCreateAccountsDialog({
           count,
           namePrefix: prefix.trim() || "Member",
           expectedDailyHours: expectedHours,
+          workingDays,
           accessToken,
         },
       });
@@ -285,6 +297,41 @@ export function BulkCreateAccountsDialog({
                 />
                 <p className="text-xs text-muted-foreground">
                   Baseline used in target vs actual reports. Default 8h.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Working days</Label>
+                <div className="flex flex-wrap gap-2">
+                  {DAY_OPTIONS.map((d) => {
+                    const checked = workingDays.includes(d.key);
+                    return (
+                      <label
+                        key={d.key}
+                        className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
+                          checked
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-background text-muted-foreground"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5"
+                          checked={checked}
+                          onChange={(e) => {
+                            setWorkingDays((prev) =>
+                              e.target.checked
+                                ? Array.from(new Set([...prev, d.key]))
+                                : prev.filter((x) => x !== d.key),
+                            );
+                          }}
+                        />
+                        {d.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Days these members are expected to work. Default Mon–Fri.
                 </p>
               </div>
 

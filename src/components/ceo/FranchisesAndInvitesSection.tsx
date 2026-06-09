@@ -441,6 +441,17 @@ export function CreateAccountDialog({
     callerScope === "incharge" ? "member" : "member",
   );
   const [franchiseId, setFranchiseId] = React.useState<string>(lockFranchiseId ?? "");
+  const [expectedHours, setExpectedHours] = React.useState<string>("");
+  const DAY_OPTIONS = [
+    { key: "mon", label: "Mon" },
+    { key: "tue", label: "Tue" },
+    { key: "wed", label: "Wed" },
+    { key: "thu", label: "Thu" },
+    { key: "fri", label: "Fri" },
+    { key: "sat", label: "Sat" },
+    { key: "sun", label: "Sun" },
+  ] as const;
+  const [workingDays, setWorkingDays] = React.useState<string[]>(["mon", "tue", "wed", "thu", "fri"]);
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<{
     email: string;
@@ -482,6 +493,8 @@ export function CreateAccountDialog({
     setFullName("");
     setRole(callerScope === "incharge" ? "member" : "member");
     setFranchiseId(lockFranchiseId ?? "");
+    setExpectedHours("");
+    setWorkingDays(["mon", "tue", "wed", "thu", "fri"]);
     setResult(null);
   }
 
@@ -503,6 +516,8 @@ export function CreateAccountDialog({
       }
       const email = deriveEmail();
       const password = generatePassword();
+      const expectedTrim = expectedHours.trim();
+      const expectedNum = expectedTrim === "" ? null : Number(expectedTrim);
       const res = await createFn({
         data: {
           email,
@@ -513,6 +528,9 @@ export function CreateAccountDialog({
             role === "ceo" || role === "qa"
               ? null
               : (lockFranchiseId ?? franchiseId) || null,
+          expectedDailyHours:
+            expectedNum === null || Number.isNaN(expectedNum) ? null : expectedNum,
+          workingDays: role === "member" ? workingDays : null,
           accessToken,
         },
       });
@@ -652,6 +670,58 @@ export function CreateAccountDialog({
                   required
                 />
               </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="acc-hours">Expected daily hours</Label>
+                <Input
+                  id="acc-hours"
+                  type="number"
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  value={expectedHours}
+                  onChange={(e) => setExpectedHours(e.target.value)}
+                  placeholder="e.g. 6"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional — baseline used in target vs actual reports.
+                </p>
+              </div>
+
+              {role === "member" && (
+                <div className="space-y-1.5">
+                  <Label>Working days</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {DAY_OPTIONS.map((d) => {
+                      const checked = workingDays.includes(d.key);
+                      return (
+                        <label
+                          key={d.key}
+                          className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
+                            checked
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-background text-muted-foreground"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5"
+                            checked={checked}
+                            onChange={(e) => {
+                              setWorkingDays((prev) =>
+                                e.target.checked
+                                  ? Array.from(new Set([...prev, d.key]))
+                                  : prev.filter((x) => x !== d.key),
+                              );
+                            }}
+                          />
+                          {d.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <p className="text-xs text-muted-foreground">
                 A unique email and a secure temporary password will be generated
