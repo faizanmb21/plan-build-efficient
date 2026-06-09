@@ -221,6 +221,7 @@ const ChangeRoleSchema = z.object({
   userId: z.string().uuid(),
   newRole: z.enum(["incharge", "member"]),
   franchiseId: z.string().uuid(),
+  keepQa: z.boolean().optional().default(false),
 });
 
 export const changeQaRole = createServerFn({ method: "POST" })
