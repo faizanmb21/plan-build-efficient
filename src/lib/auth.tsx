@@ -21,9 +21,13 @@ interface AuthState {
   primaryRole: AppRole | null;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
+  viewAsFranchiseId: string | null;
+  setViewAsFranchiseId: (id: string | null) => void;
 }
 
 const AuthContext = React.createContext<AuthState | null>(null);
+const VIEW_AS_KEY = "lovable.viewAsFranchiseId";
+
 
 const ROLE_PRIORITY: AppRole[] = ["ceo", "incharge", "qa", "member"];
 
