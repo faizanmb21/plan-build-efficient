@@ -403,10 +403,15 @@ export const createUserAccountsBulk = createServerFn({ method: "POST" })
         }
         const uid = createdUser.user.id;
         const expected = Math.max(0, Math.min(24, Number(data.expectedDailyHours ?? 8) || 8));
+        const validDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+        const workingDays =
+          Array.isArray(data.workingDays) && data.workingDays.length > 0
+            ? Array.from(new Set(data.workingDays.map((d) => String(d).toLowerCase()).filter((d) => validDays.includes(d))))
+            : ["mon", "tue", "wed", "thu", "fri"];
         await supabaseAdmin
           .from("profiles")
           .upsert(
-            { id: uid, full_name: fullName, franchise_id: franchiseId, expected_daily_hours: expected },
+            { id: uid, full_name: fullName, franchise_id: franchiseId, expected_daily_hours: expected, working_days: workingDays } as never,
             { onConflict: "id" },
           );
 
