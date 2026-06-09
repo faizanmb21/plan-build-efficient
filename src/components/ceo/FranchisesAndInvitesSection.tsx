@@ -671,6 +671,58 @@ export function CreateAccountDialog({
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <Label htmlFor="acc-hours">Expected daily hours</Label>
+                <Input
+                  id="acc-hours"
+                  type="number"
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  value={expectedHours}
+                  onChange={(e) => setExpectedHours(e.target.value)}
+                  placeholder="e.g. 6"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional — baseline used in target vs actual reports.
+                </p>
+              </div>
+
+              {role === "member" && (
+                <div className="space-y-1.5">
+                  <Label>Working days</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {DAY_OPTIONS.map((d) => {
+                      const checked = workingDays.includes(d.key);
+                      return (
+                        <label
+                          key={d.key}
+                          className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
+                            checked
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-background text-muted-foreground"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5"
+                            checked={checked}
+                            onChange={(e) => {
+                              setWorkingDays((prev) =>
+                                e.target.checked
+                                  ? Array.from(new Set([...prev, d.key]))
+                                  : prev.filter((x) => x !== d.key),
+                              );
+                            }}
+                          />
+                          {d.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <p className="text-xs text-muted-foreground">
                 A unique email and a secure temporary password will be generated
                 automatically. Both will appear here for you to copy
