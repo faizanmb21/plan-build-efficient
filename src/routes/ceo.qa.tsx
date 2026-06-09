@@ -52,8 +52,8 @@ function CeoQaPage() {
   const [franchises, setFranchises] = React.useState<Franchise[]>([]);
   const [assignments, setAssignments] = React.useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = React.useState(true);
-  const [savingId, setSavingId] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [editingQa, setEditingQa] = React.useState<Qa | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const listQa = useServerFn(listQaReviewers);
@@ -94,45 +94,7 @@ function CeoQaPage() {
     load();
   }, [load]);
 
-  const toggle = (qaId: string, franchiseId: string) => {
-    setAssignments((prev) => {
-      const next = { ...prev };
-      const set = new Set(next[qaId] ?? []);
-      if (set.has(franchiseId)) set.delete(franchiseId);
-      else set.add(franchiseId);
-      next[qaId] = set;
-      return next;
-    });
-  };
-
-  const save = async (qaId: string) => {
-    setSavingId(qaId);
-    const wanted = assignments[qaId] ?? new Set<string>();
-    const { data: current } = await supabase
-      .from("qa_franchise_assignments")
-      .select("franchise_id")
-      .eq("user_id", qaId);
-    const currentSet = new Set((current ?? []).map((r) => r.franchise_id));
-    const toAdd = [...wanted].filter((f) => !currentSet.has(f));
-    const toRemove = [...currentSet].filter((f) => !wanted.has(f));
-
-    if (toAdd.length) {
-      const { error } = await supabase
-        .from("qa_franchise_assignments")
-        .insert(toAdd.map((fid) => ({ user_id: qaId, franchise_id: fid })));
-      if (error) { toast.error(error.message); setSavingId(null); return; }
-    }
-    if (toRemove.length) {
-      const { error } = await supabase
-        .from("qa_franchise_assignments")
-        .delete()
-        .eq("user_id", qaId)
-        .in("franchise_id", toRemove);
-      if (error) { toast.error(error.message); setSavingId(null); return; }
-    }
-    toast.success("QA franchise scope updated");
-    setSavingId(null);
-  };
+  // (toggle/save handled inside EditQaAccessDialog now)
 
   const remove = async (qa: Qa) => {
     const ok = await confirm({
