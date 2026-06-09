@@ -441,7 +441,8 @@ export function CreateAccountDialog({
     callerScope === "incharge" ? "member" : "member",
   );
   const [franchiseId, setFranchiseId] = React.useState<string>(lockFranchiseId ?? "");
-  const [expectedHours, setExpectedHours] = React.useState<string>("");
+  const [workStart, setWorkStart] = React.useState<string>("");
+  const [workEnd, setWorkEnd] = React.useState<string>("");
   const DAY_OPTIONS = [
     { key: "mon", label: "Mon" },
     { key: "tue", label: "Tue" },
