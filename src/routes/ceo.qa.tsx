@@ -239,7 +239,8 @@ function CeoQaPage() {
       ) : qas.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No QA reviewers yet. Click <span className="text-foreground font-medium">Create QA login</span> above.
+            No QA reviewers yet. Click <span className="text-foreground font-medium">Create QA login</span> for a brand-new account,
+            or <span className="text-foreground font-medium">Grant QA to existing user</span> to give an Incharge / Member QA powers too.
           </CardContent>
         </Card>
       ) : (
