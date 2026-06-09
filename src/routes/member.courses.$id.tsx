@@ -278,6 +278,10 @@ function CoursePlayer() {
     onInactive: pauseMedia,
   });
 
+  // Trigger A: 2-min no scroll/click on course page → auto clock-out work session.
+  useCourseInactivityClockOut();
+
+
   if (loading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
   }
