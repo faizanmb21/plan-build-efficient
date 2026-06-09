@@ -291,3 +291,97 @@ export const changeQaRole = createServerFn({ method: "POST" })
       return { ok: false as const, error: e?.message || "Unexpected server error" };
     }
   });
+
+const ListGrantableSchema = z.object({ accessToken: z.string().min(10) });
+
+export const listGrantableUsers = createServerFn({ method: "POST" })
+  .inputValidator((input) => ListGrantableSchema.parse(input))
+  .handler(async ({ data }) => {
+    const auth = await verifyCeo(data.accessToken);
+    if (!auth.ok) return { ok: false as const, error: auth.error, users: [] };
+
+    // Find all users who DON'T already have qa role
+    const { data: roleRows } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id,role");
+    const qaSet = new Set((roleRows ?? []).filter((r) => r.role === "qa").map((r) => r.user_id));
+    const candidateIds = Array.from(
+      new Set(
+        (roleRows ?? [])
+          .filter((r) => (r.role === "incharge" || r.role === "member") && !qaSet.has(r.user_id))
+          .map((r) => r.user_id),
+      ),
+    );
+    if (candidateIds.length === 0) return { ok: true as const, users: [] };
+
+    const { data: profiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id,full_name,franchise_id")
+      .in("id", candidateIds);
+
+    const emailMap: Record<string, string | null> = {};
+    let page = 1;
+    while (true) {
+      const { data: usersPage, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+      if (error) break;
+      const users = usersPage?.users ?? [];
+      for (const u of users) if (candidateIds.includes(u.id)) emailMap[u.id] = u.email ?? null;
+      if (users.length < 200) break;
+      page += 1;
+      if (page > 20) break;
+    }
+
+    const roleByUser: Record<string, string[]> = {};
+    for (const r of roleRows ?? []) {
+      if (!candidateIds.includes(r.user_id)) continue;
+      (roleByUser[r.user_id] ||= []).push(r.role);
+    }
+
+    const users = candidateIds.map((id) => ({
+      id,
+      full_name: profiles?.find((p) => p.id === id)?.full_name ?? null,
+      email: emailMap[id] ?? null,
+      roles: roleByUser[id] ?? [],
+    }));
+    users.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""));
+    return { ok: true as const, users };
+  });
+
+const GrantQaSchema = z.object({
+  accessToken: z.string().min(10),
+  userId: z.string().uuid(),
+  franchiseIds: z.array(z.string().uuid()).max(50).default([]),
+});
+
+export const grantQaToUser = createServerFn({ method: "POST" })
+  .inputValidator((input) => GrantQaSchema.parse(input))
+  .handler(async ({ data }) => {
+    try {
+      const auth = await verifyCeo(data.accessToken);
+      if (!auth.ok) return { ok: false as const, error: auth.error };
+
+      // Insert qa role (keep their existing role intact)
+      const { error: rErr } = await supabaseAdmin
+        .from("user_roles")
+        .upsert({ user_id: data.userId, role: "qa" }, { onConflict: "user_id,role" });
+      if (rErr) return { ok: false as const, error: rErr.message };
+
+      // Reset franchise scope: clear + insert
+      await supabaseAdmin.from("qa_franchise_assignments").delete().eq("user_id", data.userId);
+      if (data.franchiseIds.length > 0) {
+        const rows = data.franchiseIds.map((fid) => ({
+          user_id: data.userId,
+          franchise_id: fid,
+          assigned_by: auth.userId,
+        }));
+        const { error: aErr } = await supabaseAdmin
+          .from("qa_franchise_assignments")
+          .insert(rows);
+        if (aErr) return { ok: false as const, error: aErr.message };
+      }
+      return { ok: true as const };
+    } catch (e: any) {
+      console.error("[grantQaToUser] unhandled", e);
+      return { ok: false as const, error: e?.message || "Unexpected server error" };
+    }
+  });

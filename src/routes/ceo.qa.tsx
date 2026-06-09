@@ -28,6 +28,7 @@ import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/lib/create-
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EditQaAccessDialog } from "@/components/ceo/EditQaAccessDialog";
 import { ChangeQaRoleDialog } from "@/components/ceo/ChangeQaRoleDialog";
+import { GrantQaAccessDialog } from "@/components/ceo/GrantQaAccessDialog";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
@@ -58,6 +59,7 @@ function CeoQaPage() {
   const [roleQa, setRoleQa] = React.useState<Qa | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [grantOpen, setGrantOpen] = React.useState(false);
   const listQa = useServerFn(listQaReviewers);
   const deleteQa = useServerFn(deleteQaAccount);
   const confirm = useConfirm();
@@ -143,10 +145,16 @@ function CeoQaPage() {
             <span className="font-medium text-foreground">across the whole organization</span>.
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <UserPlus className="h-4 w-4" />
-          Create QA login
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setGrantOpen(true)}>
+            <BadgeCheck className="h-4 w-4" />
+            Grant QA to existing user
+          </Button>
+          <Button onClick={() => setDialogOpen(true)}>
+            <UserPlus className="h-4 w-4" />
+            Create QA login
+          </Button>
+        </div>
       </header>
 
       <CreateQaDialog
@@ -215,6 +223,15 @@ function CeoQaPage() {
         onChanged={load}
       />
 
+      <GrantQaAccessDialog
+        open={grantOpen}
+        onOpenChange={setGrantOpen}
+        franchises={franchises}
+        onGranted={load}
+      />
+
+
+
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -222,7 +239,8 @@ function CeoQaPage() {
       ) : qas.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No QA reviewers yet. Click <span className="text-foreground font-medium">Create QA login</span> above.
+            No QA reviewers yet. Click <span className="text-foreground font-medium">Create QA login</span> for a brand-new account,
+            or <span className="text-foreground font-medium">Grant QA to existing user</span> to give an Incharge / Member QA powers too.
           </CardContent>
         </Card>
       ) : (
