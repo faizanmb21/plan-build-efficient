@@ -163,7 +163,7 @@ function InchargeMembers() {
     setMembers(enriched);
     setFranchise((franchiseRes.data ?? null) as Franchise | null);
     setLoading(false);
-  }, [profile?.franchise_id, user]);
+  }, [effectiveFranchiseId, user]);
 
   React.useEffect(() => {
     load();
