@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
+import { YouTubeEmbed } from "@/components/YouTubeEmbed";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
 import { useCourseInactivityClockOut } from "@/hooks/use-work-session";
 
@@ -612,6 +613,9 @@ function VideoPlayer({ path, url }: { path?: string; url?: string }) {
     if (parsed.provider === "direct") {
       return <NoSeekVideo src={parsed.embedUrl} />;
     }
+    if (parsed.provider === "youtube") {
+      return <YouTubeEmbed embedUrl={parsed.embedUrl} originalUrl={parsed.originalUrl} />;
+    }
     return (
       <iframe
         key={parsed.embedUrl}
@@ -622,6 +626,7 @@ function VideoPlayer({ path, url }: { path?: string; url?: string }) {
         title="Lesson video"
       />
     );
+
   }
 
   if (!path) return <EmptyMedia label="No video added yet" />;
