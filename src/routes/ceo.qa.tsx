@@ -250,6 +250,10 @@ function CeoQaPage() {
                       <Settings2 className="h-3.5 w-3.5" />
                       Edit access
                     </Button>
+                    <Button size="sm" variant="outline" onClick={() => setRoleQa(qa)}>
+                      <UserCog className="h-3.5 w-3.5" />
+                      Change role
+                    </Button>
                     <Button
                       size="sm"
                       variant="destructive"
