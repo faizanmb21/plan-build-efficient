@@ -22,11 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, BadgeCheck, Globe2, UserPlus, Copy, Mail, Trash2, Settings2 } from "lucide-react";
+import { Loader2, BadgeCheck, Globe2, UserPlus, Copy, Mail, Trash2, Settings2, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/lib/create-qa-account.functions";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EditQaAccessDialog } from "@/components/ceo/EditQaAccessDialog";
+import { ChangeQaRoleDialog } from "@/components/ceo/ChangeQaRoleDialog";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
@@ -54,6 +55,7 @@ function CeoQaPage() {
   const [loading, setLoading] = React.useState(true);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [editingQa, setEditingQa] = React.useState<Qa | null>(null);
+  const [roleQa, setRoleQa] = React.useState<Qa | null>(null);
   const [creds, setCreds] = React.useState<{ email: string; password: string; name: string } | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const listQa = useServerFn(listQaReviewers);
@@ -205,6 +207,14 @@ function CeoQaPage() {
         onSaved={load}
       />
 
+      <ChangeQaRoleDialog
+        open={!!roleQa}
+        onOpenChange={(v) => { if (!v) setRoleQa(null); }}
+        qa={roleQa}
+        franchises={franchises}
+        onChanged={load}
+      />
+
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
@@ -247,6 +257,10 @@ function CeoQaPage() {
                     <Button size="sm" variant="outline" onClick={() => setEditingQa(qa)}>
                       <Settings2 className="h-3.5 w-3.5" />
                       Edit access
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setRoleQa(qa)}>
+                      <UserCog className="h-3.5 w-3.5" />
+                      Change role
                     </Button>
                     <Button
                       size="sm"
