@@ -126,6 +126,21 @@ export function ChangeQaRoleDialog({
               </p>
             )}
           </div>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-md border bg-card p-3 hover:bg-muted/40">
+            <Checkbox
+              checked={keepQa}
+              onCheckedChange={(v) => setKeepQa(!!v)}
+              className="mt-0.5"
+            />
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Also keep QA reviewer access</div>
+              <p className="text-xs text-muted-foreground">
+                Leave the user's existing QA role and franchise scope intact, so they
+                act as both {newRole === "incharge" ? "Incharge" : "Member"} <em>and</em> QA reviewer.
+              </p>
+            </div>
+          </label>
         </div>
 
         <DialogFooter>
