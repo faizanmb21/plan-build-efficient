@@ -21,11 +21,22 @@ export interface RosterRow {
   franchiseName: string | null;
   completionPct: number;
   hoursThisWeek: number; // hours, 1 decimal
+  expectedDailyHours: number;
+  targetHoursWeek: number; // expected * weekdays elapsed so far this week
   attendancePct14d: number;
   avgGrade: number | null; // 0-100
   pendingQa: number;
-  paceDelta: number | null; // actual - expected (pct points); null if no deadline
+  paceDelta: number | null;
   status: ProgressStatus;
+}
+
+export interface SessionHistoryRow {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  activeSeconds: number;
+  endReason: string | null;
+  aiSummary: string | null;
 }
 
 export interface MemberDetail {
@@ -33,6 +44,8 @@ export interface MemberDetail {
   fullName: string;
   franchiseId: string | null;
   franchiseName: string | null;
+  expectedDailyHours: number;
+  targetHoursWeek: number;
   kpis: {
     completionPct: number;
     hoursThisWeek: number;
@@ -53,7 +66,9 @@ export interface MemberDetail {
     deadline: string | null;
   }[];
   attendance14d: DayCell[];
+  recentSessions: SessionHistoryRow[];
 }
+
 
 const DAY_MS = 86_400_000;
 
