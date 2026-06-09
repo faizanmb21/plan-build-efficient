@@ -671,21 +671,25 @@ export function CreateAccountDialog({
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="acc-hours">Expected daily hours</Label>
-                <Input
-                  id="acc-hours"
-                  type="number"
-                  min={0}
-                  max={24}
-                  step={0.5}
-                  value={expectedHours}
-                  onChange={(e) => setExpectedHours(e.target.value)}
-                  placeholder="e.g. 6"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional — baseline used in target vs actual reports.
-                </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="acc-start">Work start time</Label>
+                  <Input
+                    id="acc-start"
+                    type="time"
+                    value={workStart}
+                    onChange={(e) => setWorkStart(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="acc-end">Work end time</Label>
+                  <Input
+                    id="acc-end"
+                    type="time"
+                    value={workEnd}
+                    onChange={(e) => setWorkEnd(e.target.value)}
+                  />
+                </div>
               </div>
 
               {role === "member" && (
@@ -722,6 +726,35 @@ export function CreateAccountDialog({
                   </div>
                 </div>
               )}
+
+              {(() => {
+                const toMin = (v: string) => {
+                  const m = /^(\d{1,2}):(\d{2})$/.exec(v);
+                  if (!m) return null;
+                  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+                };
+                const s = toMin(workStart);
+                const e = toMin(workEnd);
+                if (s === null || e === null) return null;
+                let diff = e - s;
+                if (diff < 0) diff += 24 * 60;
+                const daily = Math.round((diff / 60) * 100) / 100;
+                const days = role === "member" ? workingDays.length : 5;
+                const weekly = Math.round(daily * days * 100) / 100;
+                return (
+                  <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    <span className="text-foreground font-medium">Daily hours:</span> {daily}h
+                    {role === "member" && (
+                      <>
+                        {"  •  "}
+                        <span className="text-foreground font-medium">Weekly hours:</span> {weekly}h
+                        <span className="opacity-70"> ({daily}h × {days} day{days === 1 ? "" : "s"})</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
 
               <p className="text-xs text-muted-foreground">
                 A unique email and a secure temporary password will be generated
