@@ -235,9 +235,9 @@ function CeoQaPage() {
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={() => save(qa.id)} disabled={savingId === qa.id}>
-                      {savingId === qa.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      Save
+                    <Button size="sm" variant="outline" onClick={() => setEditingQa(qa)}>
+                      <Settings2 className="h-3.5 w-3.5" />
+                      Edit access
                     </Button>
                     <Button
                       size="sm"
@@ -251,18 +251,21 @@ function CeoQaPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {franchises.map((f) => {
-                      const checked = set.has(f.id);
-                      return (
-                        <label key={f.id} className="flex cursor-pointer items-center gap-3 rounded-md border bg-card p-3 hover:bg-muted/40">
-                          <Checkbox checked={checked} onCheckedChange={() => toggle(qa.id, f.id)} />
-                          <span className="text-sm">{f.name}</span>
-                          {checked && <Badge variant="secondary" className="ml-auto">assigned</Badge>}
-                        </label>
-                      );
-                    })}
-                  </div>
+                  {orgWide ? (
+                    <p className="text-xs text-muted-foreground">
+                      No centres selected — this QA can review submissions across the whole organization.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {[...set].map((fid) => {
+                        const f = franchises.find((x) => x.id === fid);
+                        if (!f) return null;
+                        return (
+                          <Badge key={fid} variant="secondary">{f.name}</Badge>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
