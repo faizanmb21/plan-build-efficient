@@ -12,9 +12,30 @@ interface CreateInput {
   fullName: string;
   role: Role;
   franchiseId?: string | null;
-  expectedDailyHours?: number | null;
+  workStartTime?: string | null;
+  workEndTime?: string | null;
   workingDays?: string[] | null;
   accessToken?: string;
+}
+
+// "HH:MM" -> minutes since midnight, or null
+function parseHm(v?: string | null): number | null {
+  if (!v) return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
+}
+
+function dailyHoursFromRange(start?: string | null, end?: string | null): number | null {
+  const s = parseHm(start);
+  const e = parseHm(end);
+  if (s === null || e === null) return null;
+  let diff = e - s;
+  if (diff < 0) diff += 24 * 60; // wrap past midnight
+  return Math.round((diff / 60) * 100) / 100;
 }
 
 interface ResetInput {
@@ -147,11 +168,9 @@ export const createUserAccount = createServerFn({ method: "POST" })
       Array.isArray(data.workingDays) && data.workingDays.length > 0
         ? Array.from(new Set(data.workingDays.map((d) => String(d).toLowerCase()).filter((d) => validDays.includes(d))))
         : null;
-    const expectedHoursRaw = data.expectedDailyHours;
-    const expectedHours =
-      expectedHoursRaw === null || expectedHoursRaw === undefined || Number.isNaN(Number(expectedHoursRaw))
-        ? null
-        : Math.max(0, Math.min(24, Number(expectedHoursRaw)));
+    const workStart = parseHm(data.workStartTime) !== null ? data.workStartTime!.trim() : null;
+    const workEnd = parseHm(data.workEndTime) !== null ? data.workEndTime!.trim() : null;
+    const expectedHours = dailyHoursFromRange(workStart, workEnd);
 
     const profilePayload: Record<string, unknown> = {
       id: userId,
@@ -160,6 +179,8 @@ export const createUserAccount = createServerFn({ method: "POST" })
     };
     if (expectedHours !== null) profilePayload.expected_daily_hours = expectedHours;
     if (workingDays) profilePayload.working_days = workingDays;
+    if (workStart) profilePayload.work_start_time = workStart;
+    if (workEnd) profilePayload.work_end_time = workEnd;
 
     await supabaseAdmin
       .from("profiles")
@@ -313,7 +334,8 @@ interface BulkCreateInput {
   franchiseId: string;
   count: number;
   namePrefix?: string;
-  expectedDailyHours?: number;
+  workStartTime?: string | null;
+  workEndTime?: string | null;
   workingDays?: string[] | null;
   accessToken?: string;
 }
@@ -402,18 +424,27 @@ export const createUserAccountsBulk = createServerFn({ method: "POST" })
           continue;
         }
         const uid = createdUser.user.id;
-        const expected = Math.max(0, Math.min(24, Number(data.expectedDailyHours ?? 8) || 8));
         const validDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
         const workingDays =
           Array.isArray(data.workingDays) && data.workingDays.length > 0
             ? Array.from(new Set(data.workingDays.map((d) => String(d).toLowerCase()).filter((d) => validDays.includes(d))))
             : ["mon", "tue", "wed", "thu", "fri"];
+        const workStart = parseHm(data.workStartTime) !== null ? data.workStartTime!.trim() : null;
+        const workEnd = parseHm(data.workEndTime) !== null ? data.workEndTime!.trim() : null;
+        const dailyFromRange = dailyHoursFromRange(workStart, workEnd);
+        const expected = dailyFromRange ?? 8;
+        const profilePayload: Record<string, unknown> = {
+          id: uid,
+          full_name: fullName,
+          franchise_id: franchiseId,
+          expected_daily_hours: expected,
+          working_days: workingDays,
+        };
+        if (workStart) profilePayload.work_start_time = workStart;
+        if (workEnd) profilePayload.work_end_time = workEnd;
         await supabaseAdmin
           .from("profiles")
-          .upsert(
-            { id: uid, full_name: fullName, franchise_id: franchiseId, expected_daily_hours: expected, working_days: workingDays } as never,
-            { onConflict: "id" },
-          );
+          .upsert(profilePayload as never, { onConflict: "id" });
 
         const { error: rErr } = await supabaseAdmin
           .from("user_roles")
