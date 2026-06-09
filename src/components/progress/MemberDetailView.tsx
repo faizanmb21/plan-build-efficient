@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useServerFn } from "@tanstack/react-start";
 import {
   Card,
   CardContent,
@@ -6,6 +7,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   fetchMemberDetail,
   type MemberDetail,
@@ -13,6 +17,10 @@ import {
 import { CompletionBar } from "./CompletionBar";
 import { AttendanceStrip } from "./AttendanceStrip";
 import { attendancePercent } from "@/lib/attendance-utils";
+import { updateExpectedDailyHours } from "@/lib/work-session.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Sparkles, Save, Loader2 } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -27,24 +35,56 @@ interface Props {
   userId: string;
 }
 
+function fmtHours(sec: number) {
+  return `${(sec / 3600).toFixed(1)}h`;
+}
+
+function fmtDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-PK", {
+    timeZone: "Asia/Karachi",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function MemberDetailView({ userId }: Props) {
   const [data, setData] = React.useState<MemberDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [editHours, setEditHours] = React.useState<number | null>(null);
+  const [savingHours, setSavingHours] = React.useState(false);
+  const updateHoursFn = useServerFn(updateExpectedDailyHours);
+
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    const d = await fetchMemberDetail(userId);
+    setData(d);
+    setEditHours(d?.expectedDailyHours ?? null);
+    setLoading(false);
+  }, [userId]);
 
   React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      const d = await fetchMemberDetail(userId);
-      if (!cancelled) {
-        setData(d);
-        setLoading(false);
+    reload();
+  }, [reload]);
+
+  async function saveHours() {
+    if (editHours == null || !data) return;
+    setSavingHours(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const res = await updateHoursFn({
+        data: { userId, hours: editHours, accessToken: sess.session?.access_token },
+      });
+      if (!res.ok) toast.error(res.error);
+      else {
+        toast.success("Saved");
+        reload();
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
+    } finally {
+      setSavingHours(false);
+    }
+  }
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading member progress…</p>;
@@ -55,19 +95,55 @@ export function MemberDetailView({ userId }: Props) {
 
   const k = data.kpis;
   const chartData = data.hoursByCourse.slice(0, 12);
+  const hoursColor =
+    k.hoursThisWeek >= data.targetHoursWeek
+      ? "text-emerald-300"
+      : k.hoursThisWeek >= data.targetHoursWeek * 0.7
+        ? "text-amber-300"
+        : "text-rose-300";
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight">{data.fullName}</h1>
-        {data.franchiseName && (
-          <p className="text-sm text-muted-foreground">{data.franchiseName}</p>
-        )}
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{data.fullName}</h1>
+          {data.franchiseName && (
+            <p className="text-sm text-muted-foreground">{data.franchiseName}</p>
+          )}
+        </div>
+        <div className="flex items-end gap-2">
+          <div className="space-y-1">
+            <Label htmlFor="exp-hours" className="text-xs">Expected daily hours</Label>
+            <Input
+              id="exp-hours"
+              type="number"
+              min={0}
+              max={24}
+              step={0.5}
+              value={editHours ?? 8}
+              onChange={(e) => setEditHours(Number(e.target.value) || 0)}
+              className="h-8 w-24"
+            />
+          </div>
+          <Button
+            size="sm"
+            onClick={saveHours}
+            disabled={savingHours || editHours === data.expectedDailyHours}
+          >
+            {savingHours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save
+          </Button>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Kpi label="Completion" value={`${k.completionPct}%`} />
-        <Kpi label="Hours (7d)" value={`${k.hoursThisWeek.toFixed(1)}h`} />
+        <Kpi
+          label="Hours (7d)"
+          value={`${k.hoursThisWeek.toFixed(1)}h`}
+          subtitle={`target ${data.targetHoursWeek.toFixed(1)}h`}
+          valueClass={hoursColor}
+        />
         <Kpi label="Hours (all)" value={`${k.hoursAllTime.toFixed(1)}h`} />
         <Kpi label="Attendance" value={`${k.attendancePct14d}%`} />
         <Kpi label="Avg grade" value={k.avgGrade != null ? `${k.avgGrade}` : "—"} />
@@ -159,16 +235,77 @@ export function MemberDetailView({ userId }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Session history</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {data.recentSessions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No sessions recorded yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {data.recentSessions.map((s) => (
+                <li
+                  key={s.id}
+                  className="rounded-md border border-border/60 bg-card/50 p-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-medium">
+                      {fmtDateTime(s.startedAt)}
+                      {s.endedAt ? ` → ${fmtDateTime(s.endedAt)}` : " · live"}
+                    </span>
+                    <div className="flex gap-1.5">
+                      <Badge variant="outline" className="font-mono">
+                        {fmtHours(s.activeSeconds)}
+                      </Badge>
+                      {s.endReason && (
+                        <Badge
+                          variant="outline"
+                          className={
+                            s.endReason.startsWith("auto_idle")
+                              ? "border-amber-500/40 text-amber-300"
+                              : ""
+                          }
+                        >
+                          {s.endReason.replace(/_/g, " ")}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  {s.aiSummary && (
+                    <p className="mt-2 flex gap-1.5 text-sm leading-relaxed">
+                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span>{s.aiSummary}</span>
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function Kpi({
+  label,
+  value,
+  subtitle,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  subtitle?: string;
+  valueClass?: string;
+}) {
   return (
     <Card>
       <CardContent className="p-3">
         <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+        <div className={`mt-1 text-xl font-semibold tabular-nums ${valueClass ?? ""}`}>{value}</div>
+        {subtitle && <div className="text-[11px] text-muted-foreground">{subtitle}</div>}
       </CardContent>
     </Card>
   );
