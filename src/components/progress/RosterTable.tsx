@@ -214,7 +214,7 @@ export function RosterTable({ scope, detailRoutePrefix }: Props) {
                     <Th label="Franchise" k="franchise" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   )}
                   <Th label="Completion" k="completion" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <Th label="Hours / wk" k="hours" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
+                  <Th label="Hours / wk (actual / target)" k="hours" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
                   <Th label="Attendance" k="attendance" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
                   <Th label="Avg grade" k="grade" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
                   <Th label="Pending QA" k="pending" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
@@ -237,7 +237,13 @@ export function RosterTable({ scope, detailRoutePrefix }: Props) {
                       <td className="py-2 pr-4 text-muted-foreground">{r.franchiseName ?? "—"}</td>
                     )}
                     <td className="py-2 pr-4"><CompletionBar value={r.completionPct} /></td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{r.hoursThisWeek.toFixed(1)}h</td>
+                    <td className="py-2 pr-4 text-right tabular-nums">
+                      <span className={r.hoursThisWeek >= r.targetHoursWeek ? "text-emerald-300" : r.hoursThisWeek >= r.targetHoursWeek * 0.7 ? "text-amber-300" : "text-rose-300"}>
+                        {r.hoursThisWeek.toFixed(1)}h
+                      </span>
+                      <span className="text-muted-foreground"> / {r.targetHoursWeek.toFixed(1)}h</span>
+                    </td>
+
                     <td className="py-2 pr-4 text-right tabular-nums">{r.attendancePct14d}%</td>
                     <td className="py-2 pr-4 text-right tabular-nums">{r.avgGrade ?? "—"}</td>
                     <td className="py-2 pr-4 text-right tabular-nums">{r.pendingQa}</td>

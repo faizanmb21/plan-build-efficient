@@ -24,6 +24,8 @@ import {
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
+import { useCourseInactivityClockOut } from "@/hooks/use-work-session";
+
 
 export const Route = createFileRoute("/member/courses/$id")({
   component: CoursePlayer,
@@ -275,6 +277,10 @@ function CoursePlayer() {
     warnMs: 30_000,
     onInactive: pauseMedia,
   });
+
+  // Trigger A: 2-min no scroll/click on course page → auto clock-out work session.
+  useCourseInactivityClockOut();
+
 
   if (loading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
