@@ -226,6 +226,11 @@ export function FranchisesAndInvitesSection() {
               onOpenChange={setCreateOpen}
               callerScope="ceo"
             />
+            <BulkCreateAccountsDialog
+              franchises={franchises.filter((f) => !f.archived_at)}
+              onCreated={load}
+              callerScope="ceo"
+            />
           </div>
         </div>
 
