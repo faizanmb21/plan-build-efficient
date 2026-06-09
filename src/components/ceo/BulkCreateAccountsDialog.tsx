@@ -44,7 +44,8 @@ export function BulkCreateAccountsDialog({
   const [franchiseId, setFranchiseId] = React.useState(lockFranchiseId ?? "");
   const [count, setCount] = React.useState(10);
   const [prefix, setPrefix] = React.useState("Member");
-  const [expectedHours, setExpectedHours] = React.useState(8);
+  const [workStart, setWorkStart] = React.useState<string>("");
+  const [workEnd, setWorkEnd] = React.useState<string>("");
   const DAY_OPTIONS = [
     { key: "mon", label: "Mon" },
     { key: "tue", label: "Tue" },
@@ -64,11 +65,28 @@ export function BulkCreateAccountsDialog({
     setFranchiseId(lockFranchiseId ?? "");
     setCount(10);
     setPrefix("Member");
-    setExpectedHours(8);
+    setWorkStart("");
+    setWorkEnd("");
     setWorkingDays(["mon", "tue", "wed", "thu", "fri"]);
     setCreated(null);
     setFailed([]);
   }
+
+  function toMin(v: string): number | null {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(v);
+    if (!m) return null;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+  const dailyHours = (() => {
+    const s = toMin(workStart);
+    const e = toMin(workEnd);
+    if (s === null || e === null) return null;
+    let diff = e - s;
+    if (diff < 0) diff += 24 * 60;
+    return Math.round((diff / 60) * 100) / 100;
+  })();
+  const weeklyHours =
+    dailyHours === null ? null : Math.round(dailyHours * workingDays.length * 100) / 100;
 
 
   const effectiveFranchiseId = lockFranchiseId ?? franchiseId;
