@@ -98,6 +98,27 @@ function MemberHome() {
   const [streakDays, setStreakDays] = React.useState(0);
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
 
+  const { lastSummary } = useWorkSession();
+  const fetchTodayReport = useServerFn(getTodaysSessionReport);
+
+  const todayReportQuery = useQuery({
+    queryKey: ["member", "today-report", effectiveUserId],
+    queryFn: async () => {
+      if (!effectiveUserId) return null;
+      const { data: sess } = await supabase.auth.getSession();
+      const res = await fetchTodayReport({ data: { accessToken: sess.session?.access_token } });
+      return res.ok ? res : null;
+    },
+    enabled: !!effectiveUserId && !previewMember,
+  });
+
+  // Refetch today's report after clock-out so it persists across refreshes
+  React.useEffect(() => {
+    if (lastSummary) {
+      todayReportQuery.refetch();
+    }
+  }, [lastSummary, todayReportQuery]);
+
   React.useEffect(() => {
     if (!effectiveUserId) return;
     fetchAggregateForUser(effectiveUserId).then(setGradeAgg);
