@@ -493,6 +493,8 @@ export function CreateAccountDialog({
     setFullName("");
     setRole(callerScope === "incharge" ? "member" : "member");
     setFranchiseId(lockFranchiseId ?? "");
+    setExpectedHours("");
+    setWorkingDays(["mon", "tue", "wed", "thu", "fri"]);
     setResult(null);
   }
 
