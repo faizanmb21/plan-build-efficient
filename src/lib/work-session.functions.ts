@@ -36,23 +36,28 @@ export const clockIn = createServerFn({ method: "POST" })
     // If an open session already exists, return it (idempotent)
     const { data: existing } = await supabaseAdmin
       .from("study_sessions")
-      .select("id, started_at")
+      .select("id, started_at, status, paused_at, paused_seconds")
       .eq("user_id", ctx.userId)
       .is("ended_at", null)
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (existing) {
-      return { ok: true as const, sessionId: existing.id, startedAt: existing.started_at };
+      return {
+        ok: true as const,
+        sessionId: existing.id,
+        startedAt: existing.started_at,
+        status: (existing as any).status ?? "active",
+      };
     }
 
     const { data: row, error } = await supabaseAdmin
       .from("study_sessions")
-      .insert({ user_id: ctx.userId, client_info: { mode: "work" } })
+      .insert({ user_id: ctx.userId, client_info: { mode: "work" }, status: "active" } as any)
       .select("id, started_at")
       .single();
     if (error || !row) return { ok: false as const, error: error?.message ?? "Failed" };
-    return { ok: true as const, sessionId: row.id, startedAt: row.started_at };
+    return { ok: true as const, sessionId: row.id, startedAt: row.started_at, status: "active" };
   });
 
 // ---------- Heartbeat ----------
@@ -63,12 +68,16 @@ export const heartbeatSession = createServerFn({ method: "POST" })
     if (!ctx.ok) return { ok: false as const, error: ctx.error };
     const { data: cur } = await supabaseAdmin
       .from("study_sessions")
-      .select("user_id, active_seconds, ended_at")
+      .select("user_id, active_seconds, ended_at, status")
       .eq("id", data.sessionId)
       .maybeSingle();
     if (!cur || cur.user_id !== ctx.userId) return { ok: false as const, error: "Not found" };
     if (cur.ended_at) return { ok: false as const, error: "Already ended" };
-    const next = (cur.active_seconds ?? 0) + Math.max(0, Math.round(data.deltaActiveSec));
+    // Skip active accumulation while paused (defensive — client also gates this)
+    const paused = (cur as any).status === "paused";
+    const next = paused
+      ? (cur.active_seconds ?? 0)
+      : (cur.active_seconds ?? 0) + Math.max(0, Math.round(data.deltaActiveSec));
     await supabaseAdmin
       .from("study_sessions")
       .update({ active_seconds: next, last_heartbeat_at: new Date().toISOString() })
@@ -76,40 +85,107 @@ export const heartbeatSession = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+// ---------- Pause ----------
+export const pauseSession = createServerFn({ method: "POST" })
+  .inputValidator((d: { sessionId: string; deltaActiveSec?: number; accessToken?: string }) => d)
+  .handler(async ({ data }) => {
+    const ctx = await getCaller(data.accessToken);
+    if (!ctx.ok) return { ok: false as const, error: ctx.error };
+    const { data: cur } = await supabaseAdmin
+      .from("study_sessions")
+      .select("user_id, active_seconds, ended_at, status")
+      .eq("id", data.sessionId)
+      .maybeSingle();
+    if (!cur || cur.user_id !== ctx.userId) return { ok: false as const, error: "Not found" };
+    if (cur.ended_at) return { ok: false as const, error: "Already ended" };
+    if ((cur as any).status === "paused") {
+      return { ok: true as const, pausedAt: new Date().toISOString() };
+    }
+    const nowIso = new Date().toISOString();
+    const next =
+      (cur.active_seconds ?? 0) + Math.max(0, Math.round(data.deltaActiveSec ?? 0));
+    const { error } = await supabaseAdmin
+      .from("study_sessions")
+      .update({
+        active_seconds: next,
+        status: "paused",
+        paused_at: nowIso,
+        last_heartbeat_at: nowIso,
+      } as any)
+      .eq("id", data.sessionId);
+    if (error) return { ok: false as const, error: error.message };
+    return { ok: true as const, pausedAt: nowIso };
+  });
+
+// ---------- Resume ----------
+export const resumeSession = createServerFn({ method: "POST" })
+  .inputValidator((d: { sessionId: string; accessToken?: string }) => d)
+  .handler(async ({ data }) => {
+    const ctx = await getCaller(data.accessToken);
+    if (!ctx.ok) return { ok: false as const, error: ctx.error };
+    const { data: cur } = await supabaseAdmin
+      .from("study_sessions")
+      .select("user_id, ended_at, status, paused_at, paused_seconds")
+      .eq("id", data.sessionId)
+      .maybeSingle();
+    if (!cur || cur.user_id !== ctx.userId) return { ok: false as const, error: "Not found" };
+    if (cur.ended_at) return { ok: false as const, error: "Already ended" };
+    if ((cur as any).status !== "paused") {
+      return { ok: true as const };
+    }
+    const pausedAtIso = (cur as any).paused_at as string | null;
+    const addPausedSec = pausedAtIso
+      ? Math.max(0, Math.round((Date.now() - new Date(pausedAtIso).getTime()) / 1000))
+      : 0;
+    const nextPaused = ((cur as any).paused_seconds ?? 0) + addPausedSec;
+    const nowIso = new Date().toISOString();
+    const { error } = await supabaseAdmin
+      .from("study_sessions")
+      .update({
+        status: "active",
+        paused_at: null,
+        paused_seconds: nextPaused,
+        last_heartbeat_at: nowIso,
+      } as any)
+      .eq("id", data.sessionId);
+    if (error) return { ok: false as const, error: error.message };
+    return { ok: true as const, pausedSeconds: nextPaused };
+  });
+
 // ---------- Clock out + summary ----------
 type EndReason = "manual" | "auto_idle_global" | "auto_idle_course";
 
-async function callLovableAI(prompt: string): Promise<string | null> {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) return null;
+async function callGeminiAI(prompt: string, systemPrompt: string): Promise<string | null> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    console.warn("GEMINI_API_KEY not set — skipping AI summary");
+    return null;
+  }
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const url =
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" +
+      encodeURIComponent(key);
+    const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": key,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You write a warm, encouraging end-of-session summary for a learner at a creative training academy. Max 4 sentences. Be specific about what they accomplished. Avoid emoji. Address them in second person.",
-          },
-          { role: "user", content: prompt },
-        ],
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.6, maxOutputTokens: 400 },
       }),
     });
     if (!res.ok) {
-      console.warn("AI gateway error", res.status, await res.text());
+      console.warn("Gemini API error", res.status, await res.text());
       return null;
     }
-    const json = await res.json();
-    const text = json?.choices?.[0]?.message?.content;
-    return typeof text === "string" ? text.trim() : null;
+    const json: any = await res.json();
+    const text = json?.candidates?.[0]?.content?.parts
+      ?.map((p: any) => p?.text ?? "")
+      .join("")
+      .trim();
+    return text || null;
   } catch (e) {
-    console.warn("AI gateway exception", e);
+    console.warn("Gemini API exception", e);
     return null;
   }
 }
@@ -127,14 +203,24 @@ export const clockOut = createServerFn({ method: "POST" })
 
     const { data: cur } = await supabaseAdmin
       .from("study_sessions")
-      .select("user_id, started_at, ended_at, active_seconds")
+      .select(
+        "user_id, started_at, ended_at, active_seconds, status, paused_at, paused_seconds",
+      )
       .eq("id", data.sessionId)
       .maybeSingle();
     if (!cur || cur.user_id !== ctx.userId) return { ok: false as const, error: "Not found" };
 
     const endedAt = cur.ended_at ?? new Date().toISOString();
-    const activeSec =
-      (cur.active_seconds ?? 0) + Math.max(0, Math.round(data.deltaActiveSec ?? 0));
+    const wasPaused = (cur as any).status === "paused";
+    const pausedAtIso = (cur as any).paused_at as string | null;
+    const extraPaused =
+      wasPaused && pausedAtIso
+        ? Math.max(0, Math.round((Date.now() - new Date(pausedAtIso).getTime()) / 1000))
+        : 0;
+    const totalPaused = ((cur as any).paused_seconds ?? 0) + extraPaused;
+    const activeSec = wasPaused
+      ? (cur.active_seconds ?? 0)
+      : (cur.active_seconds ?? 0) + Math.max(0, Math.round(data.deltaActiveSec ?? 0));
 
     if (!cur.ended_at) {
       await supabaseAdmin
@@ -143,7 +229,10 @@ export const clockOut = createServerFn({ method: "POST" })
           ended_at: endedAt,
           active_seconds: activeSec,
           end_reason: data.endReason ?? "manual",
-        })
+          status: "completed",
+          paused_at: null,
+          paused_seconds: totalPaused,
+        } as any)
         .eq("id", data.sessionId);
     }
 
@@ -198,18 +287,23 @@ export const clockOut = createServerFn({ method: "POST" })
       }
     }
 
-    const hours = activeSec / 3600;
+    const activeHours = activeSec / 3600;
+    const pausedMin = Math.round(totalPaused / 60);
     const prompt = [
       `Clock in: ${new Date(cur.started_at).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}`,
       `Clock out: ${new Date(endedAt).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}`,
-      `Total active time: ${hours.toFixed(2)} hours`,
+      `Total active time: ${activeHours.toFixed(2)} hours`,
+      `Total paused time: ${pausedMin} minutes`,
       `End reason: ${data.endReason ?? "manual"}`,
       lessons.length ? `Lessons completed: ${lessons.join("; ")}` : "Lessons completed: none",
       projects.length ? `Projects submitted: ${projects.join("; ")}` : "Projects submitted: none",
       grades.length ? `Grades received: ${grades.join("; ")}` : "Grades received: none",
     ].join("\n");
 
-    const summary = await callLovableAI(prompt);
+    const systemPrompt =
+      "You write a warm, encouraging end-of-session summary for a learner at a creative training academy. Max 4 sentences. Be specific about what they accomplished. Mention active hours (and pause time briefly if non-zero). Avoid emoji. Address them in second person.";
+
+    const summary = await callGeminiAI(prompt, systemPrompt);
     if (summary) {
       await supabaseAdmin
         .from("study_sessions")
@@ -222,10 +316,49 @@ export const clockOut = createServerFn({ method: "POST" })
       sessionId: data.sessionId,
       endedAt,
       activeSec,
+      pausedSec: totalPaused,
       summary: summary ?? null,
       lessonsCount: lessons.length,
       projectsCount: projects.length,
       gradesCount: grades.length,
+    };
+  });
+
+// ---------- Today's report (for member dashboard) ----------
+export const getTodaysSessionReport = createServerFn({ method: "POST" })
+  .inputValidator((d: { accessToken?: string }) => d ?? {})
+  .handler(async ({ data }) => {
+    const ctx = await getCaller(data?.accessToken);
+    if (!ctx.ok) return { ok: false as const, error: ctx.error };
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const { data: rows } = await supabaseAdmin
+      .from("study_sessions")
+      .select(
+        "id, started_at, ended_at, active_seconds, paused_seconds, ai_summary, end_reason, status",
+      )
+      .eq("user_id", ctx.userId)
+      .gte("started_at", startOfDay.toISOString())
+      .order("started_at", { ascending: false });
+
+    const sessions = rows ?? [];
+    const totalActive = sessions.reduce((acc, s) => acc + (s.active_seconds ?? 0), 0);
+    const totalPaused = sessions.reduce(
+      (acc, s) => acc + ((s as any).paused_seconds ?? 0),
+      0,
+    );
+    const latestEnded = sessions.find((s) => s.ended_at);
+
+    return {
+      ok: true as const,
+      totalActiveSec: totalActive,
+      totalPausedSec: totalPaused,
+      sessionCount: sessions.length,
+      latestSummary: (latestEnded as any)?.ai_summary ?? null,
+      latestEndedAt: latestEnded?.ended_at ?? null,
+      latestEndReason: (latestEnded as any)?.end_reason ?? null,
     };
   });
 
@@ -236,7 +369,6 @@ export const updateExpectedDailyHours = createServerFn({ method: "POST" })
     const ctx = await getCaller(data.accessToken);
     if (!ctx.ok) return { ok: false as const, error: ctx.error };
 
-    // Check authorization: caller must be CEO, or incharge for same franchise, or self
     const { data: callerRoles } = await supabaseAdmin
       .from("user_roles")
       .select("role, franchise_id")
