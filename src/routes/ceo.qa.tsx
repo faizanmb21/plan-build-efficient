@@ -28,6 +28,7 @@ import { createQaAccount, deleteQaAccount, listQaReviewers } from "@/lib/create-
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { EditQaAccessDialog } from "@/components/ceo/EditQaAccessDialog";
 import { ChangeQaRoleDialog } from "@/components/ceo/ChangeQaRoleDialog";
+import { GrantQaAccessDialog } from "@/components/ceo/GrantQaAccessDialog";
 
 export const Route = createFileRoute("/ceo/qa")({
   component: CeoQaPage,
