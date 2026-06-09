@@ -290,3 +290,115 @@ export const deleteUserAccount = createServerFn({ method: "POST" })
 
     return { ok: true as const };
   });
+
+interface BulkCreateInput {
+  franchiseId: string;
+  count: number;
+  namePrefix?: string;
+  accessToken?: string;
+}
+
+function slugify(s: string, max = 16) {
+  return s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, max);
+}
+
+function genPw(len = 12) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const syms = "!@#$";
+  const buf = new Uint32Array(len);
+  globalThis.crypto.getRandomValues(buf);
+  let out = "";
+  for (let i = 0; i < len - 2; i++) out += chars[buf[i] % chars.length];
+  out += syms[buf[len - 2] % syms.length];
+  out += String(buf[len - 1] % 10);
+  return out;
+}
+
+export const createUserAccountsBulk = createServerFn({ method: "POST" })
+  .inputValidator((d: BulkCreateInput) => d)
+  .handler(async ({ data }) => {
+    const ctx = await getCallerContext(data.accessToken);
+    if (!ctx.ok) return { ok: false as const, error: ctx.error, created: [], failed: [] };
+
+    let franchiseId = data.franchiseId;
+    if (ctx.isIncharge && !ctx.isCeo) {
+      if (!ctx.inchargeFranchise) {
+        return { ok: false as const, error: "You are not attached to a franchise", created: [], failed: [] };
+      }
+      franchiseId = ctx.inchargeFranchise;
+    } else if (!ctx.isCeo) {
+      return { ok: false as const, error: "Not authorized", created: [], failed: [] };
+    }
+
+    const count = Math.max(1, Math.min(50, Math.floor(data.count)));
+    if (!franchiseId) {
+      return { ok: false as const, error: "Franchise required", created: [], failed: [] };
+    }
+
+    const { data: fr } = await supabaseAdmin
+      .from("franchises")
+      .select("name")
+      .eq("id", franchiseId)
+      .maybeSingle();
+    const franchiseSlug = slugify(fr?.name ?? "franchise") || "franchise";
+
+    // Find current max member number for this franchise to continue numbering
+    const { data: existing } = await supabaseAdmin
+      .from("profiles")
+      .select("full_name")
+      .eq("franchise_id", franchiseId);
+    const prefix = (data.namePrefix?.trim() || "Member");
+    const re = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(\\d+)$`, "i");
+    let maxN = 0;
+    for (const row of existing ?? []) {
+      const m = (row.full_name ?? "").match(re);
+      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    }
+
+    const created: { name: string; email: string; password: string }[] = [];
+    const failed: { index: number; error: string }[] = [];
+
+    for (let i = 1; i <= count; i++) {
+      const n = maxN + i;
+      const fullName = `${prefix} ${n}`;
+      const rand = Math.random().toString(36).slice(2, 6);
+      const email = `member${n}.${franchiseSlug}.${rand}@irmacademy.app`;
+      const password = genPw();
+
+      try {
+        const { data: createdUser, error: cErr } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { full_name: fullName, must_change_password: true },
+        });
+        if (cErr || !createdUser?.user) {
+          failed.push({ index: i, error: cErr?.message ?? "Failed to create" });
+          continue;
+        }
+        const uid = createdUser.user.id;
+        await supabaseAdmin
+          .from("profiles")
+          .upsert({ id: uid, full_name: fullName, franchise_id: franchiseId }, { onConflict: "id" });
+        const { error: rErr } = await supabaseAdmin
+          .from("user_roles")
+          .upsert(
+            { user_id: uid, role: "member", franchise_id: franchiseId },
+            { onConflict: "user_id,role" },
+          );
+        if (rErr) {
+          failed.push({ index: i, error: rErr.message });
+          continue;
+        }
+        created.push({ name: fullName, email, password });
+      } catch (e: any) {
+        failed.push({ index: i, error: e?.message ?? "Unexpected error" });
+      }
+    }
+
+    return { ok: true as const, created, failed };
+  });
