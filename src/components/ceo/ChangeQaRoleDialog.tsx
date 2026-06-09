@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { changeQaRole } from "@/lib/create-qa-account.functions";
