@@ -33,6 +33,7 @@ import { Route as InchargeMembersRouteImport } from './routes/incharge.members'
 import { Route as InchargeGradesRouteImport } from './routes/incharge.grades'
 import { Route as InchargeAttendanceRouteImport } from './routes/incharge.attendance'
 import { Route as InchargeAssignRouteImport } from './routes/incharge.assign'
+import { Route as CeoViewAsMemberRouteImport } from './routes/ceo.view-as-member'
 import { Route as CeoSubmissionsRouteImport } from './routes/ceo.submissions'
 import { Route as CeoSeedRouteImport } from './routes/ceo.seed'
 import { Route as CeoQaRouteImport } from './routes/ceo.qa'
@@ -171,6 +172,11 @@ const InchargeAssignRoute = InchargeAssignRouteImport.update({
   path: '/assign',
   getParentRoute: () => InchargeRoute,
 } as any)
+const CeoViewAsMemberRoute = CeoViewAsMemberRouteImport.update({
+  id: '/view-as-member',
+  path: '/view-as-member',
+  getParentRoute: () => CeoRoute,
+} as any)
 const CeoSubmissionsRoute = CeoSubmissionsRouteImport.update({
   id: '/submissions',
   path: '/submissions',
@@ -276,6 +282,7 @@ export interface FileRoutesByFullPath {
   '/ceo/qa': typeof CeoQaRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/ceo/submissions': typeof CeoSubmissionsRoute
+  '/ceo/view-as-member': typeof CeoViewAsMemberRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
@@ -314,6 +321,7 @@ export interface FileRoutesByTo {
   '/ceo/qa': typeof CeoQaRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/ceo/submissions': typeof CeoSubmissionsRoute
+  '/ceo/view-as-member': typeof CeoViewAsMemberRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
@@ -358,6 +366,7 @@ export interface FileRoutesById {
   '/ceo/qa': typeof CeoQaRoute
   '/ceo/seed': typeof CeoSeedRoute
   '/ceo/submissions': typeof CeoSubmissionsRoute
+  '/ceo/view-as-member': typeof CeoViewAsMemberRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
   '/incharge/grades': typeof InchargeGradesRoute
@@ -403,6 +412,7 @@ export interface FileRouteTypes {
     | '/ceo/qa'
     | '/ceo/seed'
     | '/ceo/submissions'
+    | '/ceo/view-as-member'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
@@ -441,6 +451,7 @@ export interface FileRouteTypes {
     | '/ceo/qa'
     | '/ceo/seed'
     | '/ceo/submissions'
+    | '/ceo/view-as-member'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
@@ -484,6 +495,7 @@ export interface FileRouteTypes {
     | '/ceo/qa'
     | '/ceo/seed'
     | '/ceo/submissions'
+    | '/ceo/view-as-member'
     | '/incharge/assign'
     | '/incharge/attendance'
     | '/incharge/grades'
@@ -691,6 +703,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InchargeAssignRouteImport
       parentRoute: typeof InchargeRoute
     }
+    '/ceo/view-as-member': {
+      id: '/ceo/view-as-member'
+      path: '/view-as-member'
+      fullPath: '/ceo/view-as-member'
+      preLoaderRoute: typeof CeoViewAsMemberRouteImport
+      parentRoute: typeof CeoRoute
+    }
     '/ceo/submissions': {
       id: '/ceo/submissions'
       path: '/submissions'
@@ -861,6 +880,7 @@ interface CeoRouteChildren {
   CeoQaRoute: typeof CeoQaRoute
   CeoSeedRoute: typeof CeoSeedRoute
   CeoSubmissionsRoute: typeof CeoSubmissionsRoute
+  CeoViewAsMemberRoute: typeof CeoViewAsMemberRoute
   CeoIndexRoute: typeof CeoIndexRoute
   CeoCoursesIndexRoute: typeof CeoCoursesIndexRoute
   CeoCoursesIdEditRoute: typeof CeoCoursesIdEditRoute
@@ -876,6 +896,7 @@ const CeoRouteChildren: CeoRouteChildren = {
   CeoQaRoute: CeoQaRoute,
   CeoSeedRoute: CeoSeedRoute,
   CeoSubmissionsRoute: CeoSubmissionsRoute,
+  CeoViewAsMemberRoute: CeoViewAsMemberRoute,
   CeoIndexRoute: CeoIndexRoute,
   CeoCoursesIndexRoute: CeoCoursesIndexRoute,
   CeoCoursesIdEditRoute: CeoCoursesIdEditRoute,
