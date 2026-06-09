@@ -356,6 +356,9 @@ function MemberHome() {
 
   return (
     <div className="space-y-6">
+      {/* Work session clock-in card */}
+      {!previewMember && <WorkSessionCard />}
+
       {/* Welcome header */}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -377,6 +380,7 @@ function MemberHome() {
           </Badge>
         )}
       </header>
+
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

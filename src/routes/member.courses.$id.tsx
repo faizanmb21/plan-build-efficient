@@ -24,6 +24,8 @@ import {
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
+import { useCourseInactivityClockOut } from "@/hooks/use-work-session";
+
 
 export const Route = createFileRoute("/member/courses/$id")({
   component: CoursePlayer,
