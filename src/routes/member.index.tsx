@@ -1,7 +1,9 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +46,9 @@ import {
 import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
 import { fetchCompletionSummary } from "@/lib/completion-summary";
 import { WorkSessionCard } from "@/components/work/WorkSessionCard";
+import { getTodaysSessionReport } from "@/lib/work-session.functions";
+import { useWorkSession } from "@/hooks/use-work-session";
+
 
 
 export const Route = createFileRoute("/member/")({
@@ -92,6 +97,27 @@ function MemberHome() {
   const [hoursStudied, setHoursStudied] = React.useState(0);
   const [streakDays, setStreakDays] = React.useState(0);
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
+
+  const { lastSummary } = useWorkSession();
+  const fetchTodayReport = useServerFn(getTodaysSessionReport);
+
+  const todayReportQuery = useQuery({
+    queryKey: ["member", "today-report", effectiveUserId],
+    queryFn: async () => {
+      if (!effectiveUserId) return null;
+      const { data: sess } = await supabase.auth.getSession();
+      const res = await fetchTodayReport({ data: { accessToken: sess.session?.access_token } });
+      return res.ok ? res : null;
+    },
+    enabled: !!effectiveUserId && !previewMember,
+  });
+
+  // Refetch today's report after clock-out so it persists across refreshes
+  React.useEffect(() => {
+    if (lastSummary) {
+      todayReportQuery.refetch();
+    }
+  }, [lastSummary, todayReportQuery]);
 
   React.useEffect(() => {
     if (!effectiveUserId) return;
@@ -358,6 +384,36 @@ function MemberHome() {
     <div className="space-y-6">
       {/* Work session clock-in card */}
       {!previewMember && <WorkSessionCard />}
+
+      {/* Today's session report — persists across refreshes */}
+      {!previewMember && todayReportQuery.data?.latestEndedAt && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Today's session
+                </CardTitle>
+                <CardDescription>
+                  {todayReportQuery.data.sessionCount} session
+                  {todayReportQuery.data.sessionCount !== 1 ? "s" : ""} ·{" "}
+                  {(todayReportQuery.data.totalActiveSec / 3600).toFixed(1)}h active
+                  {todayReportQuery.data.totalPausedSec > 0 &&
+                    ` · ${(todayReportQuery.data.totalPausedSec / 60).toFixed(0)}m paused`}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {todayReportQuery.data.latestSummary ? (
+              <p className="text-sm leading-relaxed">{todayReportQuery.data.latestSummary}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">No AI summary available.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Welcome header */}
       <header className="flex flex-wrap items-end justify-between gap-3">
