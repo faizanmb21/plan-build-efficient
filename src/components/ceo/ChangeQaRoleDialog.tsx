@@ -40,6 +40,7 @@ export function ChangeQaRoleDialog({
 }) {
   const [newRole, setNewRole] = React.useState<"incharge" | "member">("member");
   const [franchiseId, setFranchiseId] = React.useState<string>("");
+  const [keepQa, setKeepQa] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const change = useServerFn(changeQaRole);
 
@@ -47,6 +48,7 @@ export function ChangeQaRoleDialog({
     if (open) {
       setNewRole("member");
       setFranchiseId("");
+      setKeepQa(false);
     }
   }, [open]);
 
