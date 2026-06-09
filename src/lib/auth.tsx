@@ -17,6 +17,10 @@ interface AuthState {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  /** Always the real logged-in user's profile, never overridden by view-as. */
+  realProfile: Profile | null;
+  /** Always the real logged-in user, never overridden by view-as. */
+  realUser: User | null;
   roles: AppRole[];
   primaryRole: AppRole | null;
   refresh: () => Promise<void>;
