@@ -176,6 +176,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     user: effectiveUser,
     profile: effectiveProfile,
+    realProfile: profile,
+    realUser: baseUser,
     roles,
     primaryRole: pickPrimary(roles),
     refresh,
