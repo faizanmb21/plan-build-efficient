@@ -292,6 +292,8 @@ export type Database = {
           id: string
           phone: string | null
           updated_at: string
+          work_end_time: string | null
+          work_start_time: string | null
           working_days: string[]
         }
         Insert: {
@@ -303,6 +305,8 @@ export type Database = {
           id: string
           phone?: string | null
           updated_at?: string
+          work_end_time?: string | null
+          work_start_time?: string | null
           working_days?: string[]
         }
         Update: {
@@ -314,6 +318,8 @@ export type Database = {
           id?: string
           phone?: string | null
           updated_at?: string
+          work_end_time?: string | null
+          work_start_time?: string | null
           working_days?: string[]
         }
         Relationships: [
