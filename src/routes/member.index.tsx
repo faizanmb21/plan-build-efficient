@@ -385,6 +385,36 @@ function MemberHome() {
       {/* Work session clock-in card */}
       {!previewMember && <WorkSessionCard />}
 
+      {/* Today's session report — persists across refreshes */}
+      {!previewMember && todayReportQuery.data?.latestEndedAt && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Today's session
+                </CardTitle>
+                <CardDescription>
+                  {todayReportQuery.data.sessionCount} session
+                  {todayReportQuery.data.sessionCount !== 1 ? "s" : ""} ·{" "}
+                  {(todayReportQuery.data.totalActiveSec / 3600).toFixed(1)}h active
+                  {todayReportQuery.data.totalPausedSec > 0 &&
+                    ` · ${(todayReportQuery.data.totalPausedSec / 60).toFixed(0)}m paused`}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {todayReportQuery.data.latestSummary ? (
+              <p className="text-sm leading-relaxed">{todayReportQuery.data.latestSummary}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">No AI summary available.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Welcome header */}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
