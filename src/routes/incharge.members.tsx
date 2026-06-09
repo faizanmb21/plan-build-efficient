@@ -201,7 +201,7 @@ function InchargeMembers() {
             franchises={franchise ? [franchise] : []}
             onCreated={load}
             callerScope="incharge"
-            lockFranchiseId={profile?.franchise_id ?? null}
+            lockFranchiseId={effectiveFranchiseId}
             triggerLabel="Create member"
           />
           <BulkCreateAccountsDialog
