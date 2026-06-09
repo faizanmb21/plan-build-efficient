@@ -145,10 +145,16 @@ function CeoQaPage() {
             <span className="font-medium text-foreground">across the whole organization</span>.
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <UserPlus className="h-4 w-4" />
-          Create QA login
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setGrantOpen(true)}>
+            <BadgeCheck className="h-4 w-4" />
+            Grant QA to existing user
+          </Button>
+          <Button onClick={() => setDialogOpen(true)}>
+            <UserPlus className="h-4 w-4" />
+            Create QA login
+          </Button>
+        </div>
       </header>
 
       <CreateQaDialog
