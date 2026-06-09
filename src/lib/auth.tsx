@@ -23,10 +23,13 @@ interface AuthState {
   signOut: () => Promise<void>;
   viewAsFranchiseId: string | null;
   setViewAsFranchiseId: (id: string | null) => void;
+  viewAsMemberId: string | null;
+  setViewAsMemberId: (id: string | null) => void;
 }
 
 const AuthContext = React.createContext<AuthState | null>(null);
 const VIEW_AS_KEY = "lovable.viewAsFranchiseId";
+const VIEW_AS_MEMBER_KEY = "lovable.viewAsMemberId";
 
 
 const ROLE_PRIORITY: AppRole[] = ["ceo", "incharge", "qa", "member"];
@@ -73,15 +76,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       const ownId = ownUserIdRef.current;
       const nextId = sess?.user.id ?? null;
-      // If this tab already has a session and the event references a
-      // DIFFERENT user (came from another tab), ignore it — unless it's a
-      // local sign-out (no session at all).
       if (ownId && nextId && ownId !== nextId && event !== "SIGNED_OUT") {
         return;
       }
       ownUserIdRef.current = nextId;
       setSession(sess);
-      // Defer to avoid deadlock in onAuthStateChange
       setTimeout(() => {
         if (!cancelled) loadUserData(sess?.user.id);
       }, 0);
@@ -111,24 +110,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else window.sessionStorage.removeItem(VIEW_AS_KEY);
   }, []);
 
+  const [viewAsMemberId, setViewAsMemberIdState] = React.useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.sessionStorage.getItem(VIEW_AS_MEMBER_KEY);
+  });
+  const setViewAsMemberId = React.useCallback((id: string | null) => {
+    setViewAsMemberIdState(id);
+    if (typeof window === "undefined") return;
+    if (id) window.sessionStorage.setItem(VIEW_AS_MEMBER_KEY, id);
+    else window.sessionStorage.removeItem(VIEW_AS_MEMBER_KEY);
+  }, []);
+
+  const isCeo = roles.includes("ceo");
+
+  // When CEO is viewing as a member, load that member's profile so the
+  // member-shell pages see their data (franchise, name) rather than the CEO's.
+  const [overrideMemberProfile, setOverrideMemberProfile] = React.useState<Profile | null>(null);
+  React.useEffect(() => {
+    if (!isCeo || !viewAsMemberId) {
+      setOverrideMemberProfile(null);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", viewAsMemberId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setOverrideMemberProfile((data as Profile | null) ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCeo, viewAsMemberId]);
+
   const signOut = React.useCallback(async () => {
     await supabase.auth.signOut();
     setSession(null);
     setProfile(null);
     setRoles([]);
     setViewAsFranchiseId(null);
-  }, [setViewAsFranchiseId]);
+    setViewAsMemberId(null);
+  }, [setViewAsFranchiseId, setViewAsMemberId]);
 
-  const isCeo = roles.includes("ceo");
-  const effectiveProfile: Profile | null =
-    profile && isCeo && viewAsFranchiseId
-      ? { ...profile, franchise_id: viewAsFranchiseId }
-      : profile;
+  const baseUser = session?.user ?? null;
+  const effectiveUser: User | null =
+    baseUser && isCeo && viewAsMemberId
+      ? ({ ...baseUser, id: viewAsMemberId } as User)
+      : baseUser;
+
+  let effectiveProfile: Profile | null = profile;
+  if (isCeo && viewAsMemberId) {
+    effectiveProfile = overrideMemberProfile;
+  } else if (profile && isCeo && viewAsFranchiseId) {
+    effectiveProfile = { ...profile, franchise_id: viewAsFranchiseId };
+  }
 
   const value: AuthState = {
     loading,
     session,
-    user: session?.user ?? null,
+    user: effectiveUser,
     profile: effectiveProfile,
     roles,
     primaryRole: pickPrimary(roles),
@@ -136,6 +178,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     viewAsFranchiseId: isCeo ? viewAsFranchiseId : null,
     setViewAsFranchiseId,
+    viewAsMemberId: isCeo ? viewAsMemberId : null,
+    setViewAsMemberId,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
