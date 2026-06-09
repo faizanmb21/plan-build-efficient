@@ -12,6 +12,8 @@ interface CreateInput {
   fullName: string;
   role: Role;
   franchiseId?: string | null;
+  expectedDailyHours?: number | null;
+  workingDays?: string[] | null;
   accessToken?: string;
 }
 
