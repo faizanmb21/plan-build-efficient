@@ -533,7 +533,10 @@ export type Database = {
           idle_seconds: number
           last_heartbeat_at: string
           lesson_id: string | null
+          paused_at: string | null
+          paused_seconds: number
           started_at: string
+          status: string
           user_id: string
         }
         Insert: {
@@ -549,7 +552,10 @@ export type Database = {
           idle_seconds?: number
           last_heartbeat_at?: string
           lesson_id?: string | null
+          paused_at?: string | null
+          paused_seconds?: number
           started_at?: string
+          status?: string
           user_id: string
         }
         Update: {
@@ -565,7 +571,10 @@ export type Database = {
           idle_seconds?: number
           last_heartbeat_at?: string
           lesson_id?: string | null
+          paused_at?: string | null
+          paused_seconds?: number
           started_at?: string
+          status?: string
           user_id?: string
         }
         Relationships: [
