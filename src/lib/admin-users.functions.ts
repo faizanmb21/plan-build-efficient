@@ -168,11 +168,9 @@ export const createUserAccount = createServerFn({ method: "POST" })
       Array.isArray(data.workingDays) && data.workingDays.length > 0
         ? Array.from(new Set(data.workingDays.map((d) => String(d).toLowerCase()).filter((d) => validDays.includes(d))))
         : null;
-    const expectedHoursRaw = data.expectedDailyHours;
-    const expectedHours =
-      expectedHoursRaw === null || expectedHoursRaw === undefined || Number.isNaN(Number(expectedHoursRaw))
-        ? null
-        : Math.max(0, Math.min(24, Number(expectedHoursRaw)));
+    const workStart = parseHm(data.workStartTime) !== null ? data.workStartTime!.trim() : null;
+    const workEnd = parseHm(data.workEndTime) !== null ? data.workEndTime!.trim() : null;
+    const expectedHours = dailyHoursFromRange(workStart, workEnd);
 
     const profilePayload: Record<string, unknown> = {
       id: userId,
@@ -181,6 +179,8 @@ export const createUserAccount = createServerFn({ method: "POST" })
     };
     if (expectedHours !== null) profilePayload.expected_daily_hours = expectedHours;
     if (workingDays) profilePayload.working_days = workingDays;
+    if (workStart) profilePayload.work_start_time = workStart;
+    if (workEnd) profilePayload.work_end_time = workEnd;
 
     await supabaseAdmin
       .from("profiles")
