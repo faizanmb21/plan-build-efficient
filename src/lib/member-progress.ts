@@ -252,10 +252,11 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
 export async function fetchMemberDetail(userId: string): Promise<MemberDetail | null> {
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, franchise_id")
+    .select("id, full_name, franchise_id, expected_daily_hours")
     .eq("id", userId)
     .maybeSingle();
   if (!profile) return null;
+
 
   const franchiseId = profile.franchise_id;
   let franchiseName: string | null = null;
@@ -405,11 +406,37 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
     }))
     .sort((a, b) => b.hours - a.hours);
 
+  // Recent sessions w/ AI summary
+  const { data: sessRecent } = await supabase
+    .from("study_sessions")
+    .select("id, started_at, ended_at, active_seconds, end_reason, ai_summary")
+    .eq("user_id", userId)
+    .order("started_at", { ascending: false })
+    .limit(20);
+  const recentSessions: SessionHistoryRow[] = (sessRecent ?? []).map((s: any) => ({
+    id: s.id,
+    startedAt: s.started_at,
+    endedAt: s.ended_at,
+    activeSeconds: s.active_seconds ?? 0,
+    endReason: s.end_reason,
+    aiSummary: s.ai_summary,
+  }));
+
+  const expectedDailyHours = Number((profile as any).expected_daily_hours ?? 8);
+  let weekdays = 0;
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(Date.now() - i * DAY_MS).getDay();
+    if (day !== 0 && day !== 6) weekdays++;
+  }
+  const targetHoursWeek = Math.round(expectedDailyHours * Math.min(5, weekdays) * 10) / 10;
+
   return {
     userId,
     fullName: profile.full_name ?? "Unnamed",
     franchiseId,
     franchiseName,
+    expectedDailyHours,
+    targetHoursWeek,
     kpis: {
       completionPct: uSum?.overallPct ?? 0,
       hoursThisWeek: Math.round((hoursWeekSec / 3600) * 10) / 10,
@@ -421,8 +448,10 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
     hoursByCourse,
     courses,
     attendance14d: cells,
+    recentSessions,
   };
 }
+
 
 export function completionColor(pct: number): "green" | "amber" | "red" {
   if (pct >= 70) return "green";
