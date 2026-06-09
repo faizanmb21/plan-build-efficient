@@ -44,6 +44,9 @@ import {
 import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
 import { fetchCompletionSummary } from "@/lib/completion-summary";
 import { WorkSessionCard } from "@/components/work/WorkSessionCard";
+import { getTodaysSessionReport } from "@/lib/work-session.functions";
+import { useWorkSession } from "@/hooks/use-work-session";
+
 
 
 export const Route = createFileRoute("/member/")({
