@@ -314,6 +314,7 @@ interface BulkCreateInput {
   count: number;
   namePrefix?: string;
   expectedDailyHours?: number;
+  workingDays?: string[] | null;
   accessToken?: string;
 }
 
