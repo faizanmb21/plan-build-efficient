@@ -303,20 +303,25 @@ export function BulkCreateAccountsDialog({
                   "{(prefix.trim() || "Member")} 2"… Numbering continues from existing accounts.
                 </p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="bulk-hours">Expected daily hours</Label>
-                <Input
-                  id="bulk-hours"
-                  type="number"
-                  min={0}
-                  max={24}
-                  step={0.5}
-                  value={expectedHours}
-                  onChange={(e) => setExpectedHours(Number(e.target.value) || 0)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Baseline used in target vs actual reports. Default 8h.
-                </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="bulk-start">Work start time</Label>
+                  <Input
+                    id="bulk-start"
+                    type="time"
+                    value={workStart}
+                    onChange={(e) => setWorkStart(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="bulk-end">Work end time</Label>
+                  <Input
+                    id="bulk-end"
+                    type="time"
+                    value={workEnd}
+                    onChange={(e) => setWorkEnd(e.target.value)}
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Working days</Label>
@@ -353,6 +358,15 @@ export function BulkCreateAccountsDialog({
                   Days these members are expected to work. Default Mon–Fri.
                 </p>
               </div>
+
+              {dailyHours !== null && (
+                <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  <span className="text-foreground font-medium">Daily hours:</span> {dailyHours}h
+                  {"  •  "}
+                  <span className="text-foreground font-medium">Weekly hours:</span> {weeklyHours}h
+                  <span className="opacity-70"> ({dailyHours}h × {workingDays.length} day{workingDays.length === 1 ? "" : "s"})</span>
+                </div>
+              )}
 
               <DialogFooter>
                 <Button type="submit" disabled={!canSubmit}>
