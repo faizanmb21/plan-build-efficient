@@ -196,6 +196,15 @@ function CeoQaPage() {
         </DialogContent>
       </Dialog>
 
+      <EditQaAccessDialog
+        open={!!editingQa}
+        onOpenChange={(v) => { if (!v) setEditingQa(null); }}
+        qa={editingQa}
+        franchises={franchises}
+        initialSelected={editingQa ? (assignments[editingQa.id] ?? new Set()) : new Set()}
+        onSaved={load}
+      />
+
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
