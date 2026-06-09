@@ -12,9 +12,30 @@ interface CreateInput {
   fullName: string;
   role: Role;
   franchiseId?: string | null;
-  expectedDailyHours?: number | null;
+  workStartTime?: string | null;
+  workEndTime?: string | null;
   workingDays?: string[] | null;
   accessToken?: string;
+}
+
+// "HH:MM" -> minutes since midnight, or null
+function parseHm(v?: string | null): number | null {
+  if (!v) return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
+}
+
+function dailyHoursFromRange(start?: string | null, end?: string | null): number | null {
+  const s = parseHm(start);
+  const e = parseHm(end);
+  if (s === null || e === null) return null;
+  let diff = e - s;
+  if (diff < 0) diff += 24 * 60; // wrap past midnight
+  return Math.round((diff / 60) * 100) / 100;
 }
 
 interface ResetInput {
