@@ -351,6 +351,12 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
 
     const timer = window.setInterval(() => {
       if (!sessionRef.current || pausedRef.current) return;
+      // Pause the course-idle countdown while the tab is hidden — no
+      // mousemove/keydown can fire there, so it isn't real inactivity.
+      if (document.visibilityState !== "visible") {
+        lastCourseActivityRef.current = Date.now();
+        return;
+      }
       const since = Date.now() - lastCourseActivityRef.current;
       if (since >= COURSE_IDLE_MS) {
         stop("auto_idle_course");
