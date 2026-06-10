@@ -21,7 +21,9 @@ interface Options {
  * and redirects to /login?reason=inactive.
  *
  * Activity = mousemove, keydown, click, touchstart, scroll, OR the tab
- * becoming visible again. Hidden tab / window blur DOES count as inactivity.
+ * becoming visible again. While the tab is hidden the idle countdown is
+ * PAUSED — we can't observe real inactivity in a background tab, so it
+ * would unfairly sign people out for working in another app.
  */
 export function useInactivityLogout({
   enabled,
