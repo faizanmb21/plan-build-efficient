@@ -14,28 +14,56 @@ export const Route = createFileRoute("/change-password")({
 
 function ChangePasswordPage() {
   const navigate = useNavigate();
-  const { user, primaryRole, refresh } = useAuth();
+  const { realUser, primaryRole, refresh, viewAsMemberId, setViewAsMemberId } = useAuth();
   const [pw, setPw] = React.useState("");
   const [pw2, setPw2] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!user) navigate({ to: "/login" });
-  }, [user, navigate]);
+    if (!realUser) navigate({ to: "/login" });
+  }, [realUser, navigate]);
+
+  // Safety: CEO impersonating a member must not change their own password here.
+  React.useEffect(() => {
+    if (viewAsMemberId) setViewAsMemberId(null);
+  }, [viewAsMemberId, setViewAsMemberId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (pw.length < 8) return toast.error("Password must be at least 8 characters");
-    if (pw !== pw2) return toast.error("Passwords don't match");
+    setErr(null);
+    if (pw.length < 8) {
+      setErr("Password must be at least 8 characters");
+      return;
+    }
+    if (pw !== pw2) {
+      setErr("Passwords don't match");
+      return;
+    }
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({
+    const { data, error } = await supabase.auth.updateUser({
       password: pw,
       data: { must_change_password: false },
     });
-    setBusy(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      setBusy(false);
+      setErr(error.message);
+      toast.error(error.message);
+      return;
+    }
+    const stillMustChange = Boolean(
+      (data.user?.user_metadata as { must_change_password?: boolean } | null)?.must_change_password,
+    );
+    if (stillMustChange) {
+      setBusy(false);
+      const msg = "Password updated but the must-change flag did not clear. Please try again.";
+      setErr(msg);
+      toast.error(msg);
+      return;
+    }
     toast.success("Password updated");
     await refresh();
+    setBusy(false);
     navigate({ to: primaryRole ? homeForRole(primaryRole) : "/" });
   }
 
@@ -74,6 +102,9 @@ function ChangePasswordPage() {
                 autoComplete="new-password"
               />
             </div>
+            {err ? (
+              <p className="text-sm text-destructive" role="alert">{err}</p>
+            ) : null}
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Saving…" : "Set password & continue"}
             </Button>

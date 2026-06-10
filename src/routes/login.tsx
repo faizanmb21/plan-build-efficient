@@ -19,6 +19,7 @@ function LoginPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (authLoading || !session) return;
@@ -34,6 +35,7 @@ function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setErr(null);
     setBusy(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -44,7 +46,11 @@ function LoginPage() {
       );
       if (mustChange) navigate({ to: "/change-password" });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Authentication failed";
+      const raw = err instanceof Error ? err.message : "Authentication failed";
+      const msg = /invalid login credentials/i.test(raw)
+        ? "Invalid email or password. Please check and try again."
+        : raw;
+      setErr(msg);
       toast.error(msg);
     } finally {
       setBusy(false);
@@ -107,6 +113,14 @@ function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
+            {err ? (
+              <div
+                role="alert"
+                className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {err}
+              </div>
+            ) : null}
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Please wait…" : "Sign in"}
             </Button>
