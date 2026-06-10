@@ -143,6 +143,26 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     };
   }, [isClockedIn]);
 
+  // Page Visibility — when the tab is hidden no user-input events fire,
+  // so we'd wrongly trip the idle timers. When the tab becomes visible
+  // again, reset the activity refs so the user gets a fresh idle window
+  // and the timer display recomputes immediately.
+  React.useEffect(() => {
+    if (!isClockedIn) return;
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        const now = Date.now();
+        lastActivityRef.current = now;
+        lastCourseActivityRef.current = now;
+        // Force a re-render so the displayed elapsed time catches up.
+        setActiveSeconds((s) => s);
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [isClockedIn]);
+
+
   const stop = React.useCallback(
     async (reason: ClockOutReason = "manual") => {
       const sid = sessionRef.current;
