@@ -84,6 +84,10 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   const sessionRef = React.useRef<string | null>(null);
   const pausedRef = React.useRef<boolean>(false);
   const courseActiveRef = React.useRef<number>(0);
+  // Wallclock tick anchor so elapsed time keeps advancing even when the
+  // background tab throttles our interval (browser fires it less often, but
+  // each tick adds the real wallclock delta, not a fixed 30s).
+  const lastTickRef = React.useRef<number>(Date.now());
 
   const isClockedIn = !!sessionId;
 
