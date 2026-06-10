@@ -117,6 +117,21 @@ export function useInactivityLogout({
     window.addEventListener("click", onPointerOrKey);
     window.addEventListener("touchstart", onPointerOrKey, { passive: true });
 
+    // Pause the idle countdown while the tab is hidden — restart it fresh
+    // when the user comes back, so background tab time isn't counted as idle.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        reset(true);
+      } else {
+        clearTimers();
+        if (warningOpen.current) {
+          warningOpen.current = false;
+          toast.dismiss("inactivity-warn");
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     reset(true);
 
     return () => {
@@ -125,6 +140,7 @@ export function useInactivityLogout({
       window.removeEventListener("keydown", onPointerOrKey);
       window.removeEventListener("click", onPointerOrKey);
       window.removeEventListener("touchstart", onPointerOrKey);
+      document.removeEventListener("visibilitychange", onVisibility);
       clearTimers();
       toast.dismiss("inactivity-warn");
       warningOpen.current = false;
