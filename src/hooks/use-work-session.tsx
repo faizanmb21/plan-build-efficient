@@ -212,18 +212,25 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   // Heartbeat + idle detection (global)
   React.useEffect(() => {
     if (!isClockedIn) return;
+    lastTickRef.current = Date.now();
     const t = window.setInterval(async () => {
+      const now = Date.now();
+      // Real wallclock delta — keeps advancing correctly even when the
+      // browser throttles this interval for a hidden tab.
+      const deltaSec = Math.max(0, (now - lastTickRef.current) / 1000);
+      lastTickRef.current = now;
+
       // While paused: no active accumulation, no idle triggers, no warning.
       if (pausedRef.current) return;
 
-      const sinceActivity = Date.now() - lastActivityRef.current;
-      const delta = HEARTBEAT_MS / 1000;
-      if (sinceActivity < HEARTBEAT_MS * 2) {
-        setActiveSeconds((s) => s + delta);
-        unsentActiveRef.current += delta;
+      // Timer always counts up while clocked in — hidden tab still counts.
+      if (deltaSec > 0) {
+        setActiveSeconds((s) => s + deltaSec);
+        unsentActiveRef.current += deltaSec;
       }
+
       const sid = sessionRef.current;
-      if (sid && unsentActiveRef.current > 0) {
+      if (sid && unsentActiveRef.current >= HEARTBEAT_MS / 1000) {
         const toSend = unsentActiveRef.current;
         unsentActiveRef.current = 0;
         try {
@@ -234,11 +241,19 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
         }
       }
 
-      // Global idle warning + auto clock-out
+      // Idle checks only count time the user could actually have interacted.
+      // If the tab is hidden, mousemove/keydown don't fire, so we pause the
+      // idle countdown by treating "now" as the last activity moment.
+      if (document.visibilityState !== "visible") {
+        lastActivityRef.current = now;
+        lastCourseActivityRef.current = now;
+        return;
+      }
+
+      const sinceActivity = now - lastActivityRef.current;
       if (sinceActivity >= GLOBAL_IDLE_MS) {
         stop("auto_idle_global");
       } else if (sinceActivity >= GLOBAL_IDLE_MS - WARNING_GRACE_MS) {
-        // Don't override a course warning that already showed
         setIdleWarning((w) => w ?? "global");
       }
     }, HEARTBEAT_MS / 6); // ~5s — finer granularity for warning timing
