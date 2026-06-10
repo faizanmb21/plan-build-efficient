@@ -102,6 +102,9 @@ function ChangePasswordPage() {
                 autoComplete="new-password"
               />
             </div>
+            {err ? (
+              <p className="text-sm text-destructive" role="alert">{err}</p>
+            ) : null}
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Saving…" : "Set password & continue"}
             </Button>
