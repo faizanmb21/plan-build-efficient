@@ -244,9 +244,13 @@ export const adminResetPassword = createServerFn({ method: "POST" })
       }
     }
 
+    // Preserve existing user_metadata (updateUserById replaces the whole object).
+    const { data: existing } = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    const prevMeta = (existing?.user?.user_metadata ?? {}) as Record<string, unknown>;
     const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
       password: data.newPassword,
-      user_metadata: { must_change_password: true },
+      email_confirm: true,
+      user_metadata: { ...prevMeta, must_change_password: true },
     });
     if (error) return { ok: false as const, error: error.message };
 
