@@ -103,6 +103,7 @@ interface Lesson {
   position: number;
   duration_seconds: number | null;
   content: any;
+  requires_submission: boolean;
 }
 
 const LESSON_ICONS: Record<LessonType, React.ComponentType<{ className?: string }>> = {
@@ -207,7 +208,7 @@ function CourseEditor() {
           .order("position"),
         supabase
           .from("lessons")
-          .select("id,section_id,title,type,position,duration_seconds,content")
+          .select("id,section_id,title,type,position,duration_seconds,content,requires_submission")
           .order("position"),
       ]);
     if (cErr || sErr || lErr) {
@@ -449,7 +450,7 @@ function CourseEditor() {
         duration_seconds: duration_seconds ?? null,
         content: (content ?? defaultContent[type]) as Json,
       })
-      .select("id,section_id,title,type,position,duration_seconds,content")
+      .select("id,section_id,title,type,position,duration_seconds,content,requires_submission")
       .single();
     endMutation();
     if (error) {
@@ -471,6 +472,7 @@ function CourseEditor() {
         title: lesson.title,
         content: lesson.content,
         duration_seconds: lesson.duration_seconds,
+        requires_submission: lesson.requires_submission,
       })
       .eq("id", lesson.id);
     endMutation();
@@ -819,6 +821,20 @@ function CourseEditor() {
         </CardContent>
       </Card>
 
+      <MandatorySubmissionsPanel
+        sections={sections}
+        onSaved={(updates) => {
+          setSections((prev) =>
+            prev.map((sec) => ({
+              ...sec,
+              lessons: sec.lessons.map((l) =>
+                updates.has(l.id) ? { ...l, requires_submission: updates.get(l.id)! } : l,
+              ),
+            })),
+          );
+        }}
+      />
+
       <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -860,6 +876,151 @@ function CourseEditor() {
     </div>
   );
 }
+
+function MandatorySubmissionsPanel({
+  sections,
+  onSaved,
+}: {
+  sections: Section[];
+  onSaved: (updates: Map<string, boolean>) => void;
+}) {
+  const allLessons = React.useMemo(
+    () => sections.flatMap((s) => s.lessons.map((l) => ({ ...l, sectionTitle: s.title }))),
+    [sections],
+  );
+  // Local checked state, seeded from server values.
+  const [checked, setChecked] = React.useState<Record<string, boolean>>({});
+  const [baseline, setBaseline] = React.useState<Record<string, boolean>>({});
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    const next: Record<string, boolean> = {};
+    for (const l of allLessons) next[l.id] = !!l.requires_submission;
+    setChecked(next);
+    setBaseline(next);
+  }, [allLessons]);
+
+  const totalCount = allLessons.length;
+  const checkedCount = allLessons.reduce((n, l) => n + (checked[l.id] ? 1 : 0), 0);
+  const allChecked = totalCount > 0 && checkedCount === totalCount;
+  const someChecked = checkedCount > 0 && checkedCount < totalCount;
+  const dirty = allLessons.some((l) => !!checked[l.id] !== !!baseline[l.id]);
+
+  function toggleAll(v: boolean) {
+    const next: Record<string, boolean> = {};
+    for (const l of allLessons) next[l.id] = v;
+    setChecked(next);
+  }
+
+  async function save() {
+    const changed = allLessons.filter((l) => !!checked[l.id] !== !!baseline[l.id]);
+    if (changed.length === 0) return;
+    setSaving(true);
+    const trueIds = changed.filter((l) => checked[l.id]).map((l) => l.id);
+    const falseIds = changed.filter((l) => !checked[l.id]).map((l) => l.id);
+    const results = await Promise.all([
+      trueIds.length
+        ? supabase.from("lessons").update({ requires_submission: true }).in("id", trueIds)
+        : Promise.resolve({ error: null } as any),
+      falseIds.length
+        ? supabase.from("lessons").update({ requires_submission: false }).in("id", falseIds)
+        : Promise.resolve({ error: null } as any),
+    ]);
+    setSaving(false);
+    const err = results.find((r: any) => r.error)?.error;
+    if (err) {
+      toast.error(err.message);
+      return;
+    }
+    const updates = new Map<string, boolean>();
+    for (const l of changed) updates.set(l.id, !!checked[l.id]);
+    setBaseline({ ...checked });
+    onSaved(updates);
+    toast.success(`Updated ${changed.length} lesson${changed.length === 1 ? "" : "s"}`);
+  }
+
+  if (totalCount === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Mandatory submission before next lesson</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Check the lessons that require a submission before a member can progress to the next lesson.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <Checkbox
+              checked={allChecked ? true : someChecked ? "indeterminate" : false}
+              onCheckedChange={(v) => toggleAll(v === true)}
+              aria-label="Select all lessons"
+            />
+            Select all
+          </label>
+          <span className="text-xs text-muted-foreground">
+            {checkedCount} of {totalCount} marked
+          </span>
+        </div>
+
+        <div className="divide-y rounded-md border">
+          {sections.map((sec) => (
+            <div key={sec.id} className="p-2">
+              <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {sec.title}
+              </p>
+              {sec.lessons.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-muted-foreground">No lessons</p>
+              ) : (
+                <ul className="space-y-1">
+                  {sec.lessons.map((l) => {
+                    const Icon = LESSON_ICONS[l.type];
+                    return (
+                      <li key={l.id}>
+                        <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/40">
+                          <Checkbox
+                            checked={!!checked[l.id]}
+                            onCheckedChange={(v) =>
+                              setChecked((c) => ({ ...c, [l.id]: v === true }))
+                            }
+                            aria-label={`Mandatory submission for ${l.title}`}
+                          />
+                          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="flex-1 truncate">{l.title}</span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {LESSON_TYPE_LABEL[l.type]}
+                          </Badge>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          {dirty && <span className="text-xs text-muted-foreground">Unsaved changes</span>}
+          <Button onClick={save} disabled={saving || !dirty} size="sm">
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" /> Save
+              </>
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+
 
 function SectionCard({
   section,
@@ -1759,6 +1920,22 @@ function LessonEditorDialog({
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
             />
           </div>
+
+          <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+            <div>
+              <p className="text-sm font-medium">Mandatory submission</p>
+              <p className="text-xs text-muted-foreground">
+                Member must submit before unlocking the next lesson.
+              </p>
+            </div>
+            <Switch
+              checked={!!draft.requires_submission}
+              onCheckedChange={(v) => setDraft((d) => ({ ...d, requires_submission: v }))}
+              aria-label="Mandatory submission"
+            />
+          </div>
+
+
 
           {draft.type === "video" && (
             <div className="space-y-3">

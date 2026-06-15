@@ -248,6 +248,7 @@ export type Database = {
           duration_seconds: number | null
           id: string
           position: number
+          requires_submission: boolean
           section_id: string
           title: string
           type: Database["public"]["Enums"]["lesson_type"]
@@ -258,6 +259,7 @@ export type Database = {
           duration_seconds?: number | null
           id?: string
           position?: number
+          requires_submission?: boolean
           section_id: string
           title: string
           type: Database["public"]["Enums"]["lesson_type"]
@@ -268,6 +270,7 @@ export type Database = {
           duration_seconds?: number | null
           id?: string
           position?: number
+          requires_submission?: boolean
           section_id?: string
           title?: string
           type?: Database["public"]["Enums"]["lesson_type"]
