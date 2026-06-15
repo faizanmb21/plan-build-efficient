@@ -1940,6 +1940,17 @@ function LessonRow({
         >
           {LESSON_TYPE_LABEL[lesson.type]}
         </span>
+        <label
+          className="flex items-center gap-1.5 rounded border border-transparent px-1.5 py-1 text-[11px] text-muted-foreground hover:border-white/10 hover:bg-muted/30 cursor-pointer"
+          title="Require a submission before the member can move to the next lesson"
+        >
+          <Checkbox
+            checked={!!lesson.requires_submission}
+            onCheckedChange={(v) => onToggleRequiresSubmission(v === true)}
+            aria-label="Require submission before next lesson"
+          />
+          <span className="hidden sm:inline">Mandatory</span>
+        </label>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
