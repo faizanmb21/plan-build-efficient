@@ -492,6 +492,72 @@ function CourseEditor() {
     }
   }
 
+  async function setLessonRequiresSubmission(lesson: Lesson, value: boolean) {
+    // Optimistic UI update — single-field, no toast spam.
+    setSections((s) =>
+      s.map((sec) =>
+        sec.id === lesson.section_id
+          ? {
+              ...sec,
+              lessons: sec.lessons.map((l) =>
+                l.id === lesson.id ? { ...l, requires_submission: value } : l,
+              ),
+            }
+          : sec,
+      ),
+    );
+    beginMutation();
+    const { error } = await supabase
+      .from("lessons")
+      .update({ requires_submission: value })
+      .eq("id", lesson.id);
+    endMutation();
+    if (error) {
+      toast.error(error.message);
+      // Revert
+      setSections((s) =>
+        s.map((sec) =>
+          sec.id === lesson.section_id
+            ? {
+                ...sec,
+                lessons: sec.lessons.map((l) =>
+                  l.id === lesson.id ? { ...l, requires_submission: !value } : l,
+                ),
+              }
+            : sec,
+        ),
+      );
+    }
+  }
+
+  async function setAllLessonsRequiresSubmission(value: boolean) {
+    const ids = sections.flatMap((s) => s.lessons.map((l) => l.id));
+    if (ids.length === 0) return;
+    const prev = sections;
+    setSections((s) =>
+      s.map((sec) => ({
+        ...sec,
+        lessons: sec.lessons.map((l) => ({ ...l, requires_submission: value })),
+      })),
+    );
+    beginMutation();
+    const { error } = await supabase
+      .from("lessons")
+      .update({ requires_submission: value })
+      .in("id", ids);
+    endMutation();
+    if (error) {
+      toast.error(error.message);
+      setSections(prev);
+      return;
+    }
+    toast.success(
+      value
+        ? `Marked ${ids.length} lesson${ids.length === 1 ? "" : "s"} as mandatory`
+        : `Cleared mandatory flag on ${ids.length} lesson${ids.length === 1 ? "" : "s"}`,
+    );
+  }
+
   async function deleteLesson(lesson: Lesson) {
     const ok = await confirm({
       title: "Delete lesson?",
