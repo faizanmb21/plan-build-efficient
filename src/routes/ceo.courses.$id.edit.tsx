@@ -103,6 +103,7 @@ interface Lesson {
   position: number;
   duration_seconds: number | null;
   content: any;
+  requires_submission: boolean;
 }
 
 const LESSON_ICONS: Record<LessonType, React.ComponentType<{ className?: string }>> = {
@@ -207,7 +208,7 @@ function CourseEditor() {
           .order("position"),
         supabase
           .from("lessons")
-          .select("id,section_id,title,type,position,duration_seconds,content")
+          .select("id,section_id,title,type,position,duration_seconds,content,requires_submission")
           .order("position"),
       ]);
     if (cErr || sErr || lErr) {
@@ -471,6 +472,7 @@ function CourseEditor() {
         title: lesson.title,
         content: lesson.content,
         duration_seconds: lesson.duration_seconds,
+        requires_submission: lesson.requires_submission,
       })
       .eq("id", lesson.id);
     endMutation();
