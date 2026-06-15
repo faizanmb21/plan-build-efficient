@@ -217,16 +217,8 @@ function CeoProjectsPage() {
     return m;
   }, [subs]);
 
-  type Row = {
-    a: AssignRow;
-    project: ProjectRow | undefined;
-    member: Member | undefined;
-    franchiseName: string;
-    assigner: Assigner | undefined;
-    sub: SubmissionRow | undefined;
-    statusKey: "not_submitted" | "pending" | "graded" | "revision";
-    statusLabel: string;
-  };
+  // Row type is declared at module scope (below) so AssignmentsTable can use it.
+
   const rows: Row[] = React.useMemo(() => {
     return assigns.map((a) => {
       const project = projectMap.get(a.project_id);
