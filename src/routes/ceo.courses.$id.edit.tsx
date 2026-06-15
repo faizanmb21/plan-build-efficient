@@ -1883,11 +1883,13 @@ function LessonRow({
   lesson,
   onUpdate,
   onDelete,
+  onToggleRequiresSubmission,
   courseId,
 }: {
   lesson: Lesson;
   onUpdate: (l: Lesson) => void;
   onDelete: () => void;
+  onToggleRequiresSubmission: (v: boolean) => void;
   courseId: string;
 }) {
   const [open, setOpen] = React.useState(false);
