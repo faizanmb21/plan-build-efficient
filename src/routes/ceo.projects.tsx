@@ -324,6 +324,51 @@ function CeoProjectsPage() {
         </div>
       )}
 
+      {/* Unified assignments table — every project × member across the academy */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">All assignments</CardTitle>
+              <CardDescription>
+                Every project assignment across the academy — regardless of who created it.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                placeholder="Filter by project, member, franchise, assigner…"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                className="h-9 w-72"
+              />
+              <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
+                <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="not_submitted">Not submitted</SelectItem>
+                  <SelectItem value="pending">Pending review</SelectItem>
+                  <SelectItem value="graded">Graded</SelectItem>
+                  <SelectItem value="revision">Needs revision</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          <AssignmentsTable
+            rows={filteredRows}
+            loading={loading}
+            onOpenProject={(pid) => {
+              const p = projectMap.get(pid);
+              if (p) setOpenProject(p);
+            }}
+            onReview={(sub) => setReviewing(sub)}
+          />
+        </CardContent>
+      </Card>
+
+
+
       <CeoCreateProjectDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
