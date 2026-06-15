@@ -929,19 +929,6 @@ function CourseEditor() {
         </CardContent>
       </Card>
 
-      <MandatorySubmissionsPanel
-        sections={sections}
-        onSaved={(updates) => {
-          setSections((prev) =>
-            prev.map((sec) => ({
-              ...sec,
-              lessons: sec.lessons.map((l) =>
-                updates.has(l.id) ? { ...l, requires_submission: updates.get(l.id)! } : l,
-              ),
-            })),
-          );
-        }}
-      />
 
       <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
         <DialogContent className="sm:max-w-md">
