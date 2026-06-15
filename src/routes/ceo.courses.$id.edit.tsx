@@ -1279,6 +1279,7 @@ function SectionCard({
                   lesson={l}
                   onUpdate={onUpdateLesson}
                   onDelete={() => onDeleteLesson(l)}
+                  onToggleRequiresSubmission={(v) => onToggleRequiresSubmission(l, v)}
                   courseId={courseId}
                 />
               ))}
