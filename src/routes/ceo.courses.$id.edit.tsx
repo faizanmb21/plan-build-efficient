@@ -162,13 +162,17 @@ function CourseEditor() {
   const [metaSavedFlash, setMetaSavedFlash] = React.useState(false);
   const [statusSavedFlash, setStatusSavedFlash] = React.useState(false);
 
-  // Track in-flight curriculum mutations for the "Saving…" / "All changes saved" indicator.
+  // Track in-flight curriculum mutations for the "Saving…" / "Saved" indicator.
   const [mutationCount, setMutationCount] = React.useState(0);
   const [curriculumSavedFlash, setCurriculumSavedFlash] = React.useState(false);
+  const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null);
   const beginMutation = React.useCallback(() => setMutationCount((n) => n + 1), []);
-  const endMutation = React.useCallback(() => {
+  const endMutation = React.useCallback((ok = true) => {
     setMutationCount((n) => Math.max(0, n - 1));
-    setCurriculumSavedFlash(true);
+    if (ok) {
+      setCurriculumSavedFlash(true);
+      setLastSavedAt(new Date());
+    }
   }, []);
   React.useEffect(() => {
     if (!curriculumSavedFlash) return;
