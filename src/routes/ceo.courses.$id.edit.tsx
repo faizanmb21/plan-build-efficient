@@ -162,13 +162,17 @@ function CourseEditor() {
   const [metaSavedFlash, setMetaSavedFlash] = React.useState(false);
   const [statusSavedFlash, setStatusSavedFlash] = React.useState(false);
 
-  // Track in-flight curriculum mutations for the "Saving…" / "All changes saved" indicator.
+  // Track in-flight curriculum mutations for the "Saving…" / "Saved" indicator.
   const [mutationCount, setMutationCount] = React.useState(0);
   const [curriculumSavedFlash, setCurriculumSavedFlash] = React.useState(false);
+  const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null);
   const beginMutation = React.useCallback(() => setMutationCount((n) => n + 1), []);
-  const endMutation = React.useCallback(() => {
+  const endMutation = React.useCallback((ok = true) => {
     setMutationCount((n) => Math.max(0, n - 1));
-    setCurriculumSavedFlash(true);
+    if (ok) {
+      setCurriculumSavedFlash(true);
+      setLastSavedAt(new Date());
+    }
   }, []);
   React.useEffect(() => {
     if (!curriculumSavedFlash) return;
@@ -511,7 +515,7 @@ function CourseEditor() {
       .from("lessons")
       .update({ requires_submission: value })
       .eq("id", lesson.id);
-    endMutation();
+    endMutation(!error);
     if (error) {
       toast.error(error.message);
       // Revert
@@ -527,6 +531,8 @@ function CourseEditor() {
             : sec,
         ),
       );
+    } else {
+      toast.success(value ? "Marked mandatory" : "Cleared mandatory", { duration: 1500 });
     }
   }
 
@@ -545,7 +551,7 @@ function CourseEditor() {
       .from("lessons")
       .update({ requires_submission: value })
       .in("id", ids);
-    endMutation();
+    endMutation(!error);
     if (error) {
       toast.error(error.message);
       setSections(prev);
@@ -798,7 +804,17 @@ function CourseEditor() {
                 </>
               ) : curriculumSavedFlash ? (
                 <>
-                  <Check className="h-3.5 w-3.5 text-accent" /> All changes saved
+                  <Check className="h-3.5 w-3.5 text-accent" /> Saved ✓
+                  {lastSavedAt && (
+                    <span className="opacity-70">
+                      {" "}at {lastSavedAt.toLocaleTimeString()}
+                    </span>
+                  )}
+                </>
+              ) : lastSavedAt ? (
+                <>
+                  <Check className="h-3.5 w-3.5 opacity-60" /> Saved at{" "}
+                  {lastSavedAt.toLocaleTimeString()}
                 </>
               ) : sections.length > 0 ? (
                 <>
