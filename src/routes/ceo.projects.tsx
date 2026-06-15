@@ -58,6 +58,14 @@ import {
 import { cn } from "@/lib/utils";
 import { letterColorClass } from "@/lib/grade-utils";
 import { ProjectGradeDialog } from "@/components/grading/ProjectGradeDialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/ceo/projects")({
   component: CeoProjectsPage,
