@@ -1921,6 +1921,22 @@ function LessonEditorDialog({
             />
           </div>
 
+          <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+            <div>
+              <p className="text-sm font-medium">Mandatory submission</p>
+              <p className="text-xs text-muted-foreground">
+                Member must submit before unlocking the next lesson.
+              </p>
+            </div>
+            <Switch
+              checked={!!draft.requires_submission}
+              onCheckedChange={(v) => setDraft((d) => ({ ...d, requires_submission: v }))}
+              aria-label="Mandatory submission"
+            />
+          </div>
+
+
+
           {draft.type === "video" && (
             <div className="space-y-3">
               <Tabs
