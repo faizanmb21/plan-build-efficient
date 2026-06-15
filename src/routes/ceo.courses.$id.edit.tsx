@@ -804,7 +804,17 @@ function CourseEditor() {
                 </>
               ) : curriculumSavedFlash ? (
                 <>
-                  <Check className="h-3.5 w-3.5 text-accent" /> All changes saved
+                  <Check className="h-3.5 w-3.5 text-accent" /> Saved ✓
+                  {lastSavedAt && (
+                    <span className="opacity-70">
+                      {" "}at {lastSavedAt.toLocaleTimeString()}
+                    </span>
+                  )}
+                </>
+              ) : lastSavedAt ? (
+                <>
+                  <Check className="h-3.5 w-3.5 opacity-60" /> Saved at{" "}
+                  {lastSavedAt.toLocaleTimeString()}
                 </>
               ) : sections.length > 0 ? (
                 <>
