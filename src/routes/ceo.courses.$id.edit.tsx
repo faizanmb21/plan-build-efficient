@@ -492,6 +492,72 @@ function CourseEditor() {
     }
   }
 
+  async function setLessonRequiresSubmission(lesson: Lesson, value: boolean) {
+    // Optimistic UI update — single-field, no toast spam.
+    setSections((s) =>
+      s.map((sec) =>
+        sec.id === lesson.section_id
+          ? {
+              ...sec,
+              lessons: sec.lessons.map((l) =>
+                l.id === lesson.id ? { ...l, requires_submission: value } : l,
+              ),
+            }
+          : sec,
+      ),
+    );
+    beginMutation();
+    const { error } = await supabase
+      .from("lessons")
+      .update({ requires_submission: value })
+      .eq("id", lesson.id);
+    endMutation();
+    if (error) {
+      toast.error(error.message);
+      // Revert
+      setSections((s) =>
+        s.map((sec) =>
+          sec.id === lesson.section_id
+            ? {
+                ...sec,
+                lessons: sec.lessons.map((l) =>
+                  l.id === lesson.id ? { ...l, requires_submission: !value } : l,
+                ),
+              }
+            : sec,
+        ),
+      );
+    }
+  }
+
+  async function setAllLessonsRequiresSubmission(value: boolean) {
+    const ids = sections.flatMap((s) => s.lessons.map((l) => l.id));
+    if (ids.length === 0) return;
+    const prev = sections;
+    setSections((s) =>
+      s.map((sec) => ({
+        ...sec,
+        lessons: sec.lessons.map((l) => ({ ...l, requires_submission: value })),
+      })),
+    );
+    beginMutation();
+    const { error } = await supabase
+      .from("lessons")
+      .update({ requires_submission: value })
+      .in("id", ids);
+    endMutation();
+    if (error) {
+      toast.error(error.message);
+      setSections(prev);
+      return;
+    }
+    toast.success(
+      value
+        ? `Marked ${ids.length} lesson${ids.length === 1 ? "" : "s"} as mandatory`
+        : `Cleared mandatory flag on ${ids.length} lesson${ids.length === 1 ? "" : "s"}`,
+    );
+  }
+
   async function deleteLesson(lesson: Lesson) {
     const ok = await confirm({
       title: "Delete lesson?",
@@ -760,6 +826,47 @@ function CourseEditor() {
               </Button>
             </div>
           )}
+          {(() => {
+            const allLessons = sections.flatMap((s) => s.lessons);
+            const total = allLessons.length;
+            const mandatoryCount = allLessons.filter((l) => l.requires_submission).length;
+            const allOn = total > 0 && mandatoryCount === total;
+            const someOn = mandatoryCount > 0 && mandatoryCount < total;
+            if (total === 0) return null;
+            return (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/5 bg-muted/20 px-3 py-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={allOn ? true : someOn ? "indeterminate" : false}
+                    onCheckedChange={(v) => setAllLessonsRequiresSubmission(v === true)}
+                    aria-label="Mark all lessons as requiring submission"
+                  />
+                  <span className="font-medium">Mandatory submission</span>
+                  <span className="text-xs text-muted-foreground">
+                    {mandatoryCount} of {total} lesson{total === 1 ? "" : "s"} require a submission before the next lesson
+                  </span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAllLessonsRequiresSubmission(true)}
+                    disabled={allOn}
+                  >
+                    Mark all
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setAllLessonsRequiresSubmission(false)}
+                    disabled={mandatoryCount === 0}
+                  >
+                    Clear all
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -782,6 +889,7 @@ function CourseEditor() {
                     }
                     onUpdateLesson={updateLesson}
                     onDeleteLesson={deleteLesson}
+                    onToggleRequiresSubmission={setLessonRequiresSubmission}
                     courseId={courseId}
                     onAutoThumbnail={maybeAutoSetThumbnail}
                   />
@@ -1029,6 +1137,7 @@ function SectionCard({
   onAddLesson,
   onUpdateLesson,
   onDeleteLesson,
+  onToggleRequiresSubmission,
   courseId,
   onAutoThumbnail,
 }: {
@@ -1043,6 +1152,7 @@ function SectionCard({
   ) => Promise<void> | void;
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
+  onToggleRequiresSubmission: (l: Lesson, v: boolean) => void;
   courseId: string;
   onAutoThumbnail?: (
     url: string | null | undefined,
@@ -1169,6 +1279,7 @@ function SectionCard({
                   lesson={l}
                   onUpdate={onUpdateLesson}
                   onDelete={() => onDeleteLesson(l)}
+                  onToggleRequiresSubmission={(v) => onToggleRequiresSubmission(l, v)}
                   courseId={courseId}
                 />
               ))}
@@ -1772,11 +1883,13 @@ function LessonRow({
   lesson,
   onUpdate,
   onDelete,
+  onToggleRequiresSubmission,
   courseId,
 }: {
   lesson: Lesson;
   onUpdate: (l: Lesson) => void;
   onDelete: () => void;
+  onToggleRequiresSubmission: (v: boolean) => void;
   courseId: string;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -1827,6 +1940,17 @@ function LessonRow({
         >
           {LESSON_TYPE_LABEL[lesson.type]}
         </span>
+        <label
+          className="flex items-center gap-1.5 rounded border border-transparent px-1.5 py-1 text-[11px] text-muted-foreground hover:border-white/10 hover:bg-muted/30 cursor-pointer"
+          title="Require a submission before the member can move to the next lesson"
+        >
+          <Checkbox
+            checked={!!lesson.requires_submission}
+            onCheckedChange={(v) => onToggleRequiresSubmission(v === true)}
+            aria-label="Require submission before next lesson"
+          />
+          <span className="hidden sm:inline">Mandatory</span>
+        </label>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
