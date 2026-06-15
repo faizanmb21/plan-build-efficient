@@ -721,3 +721,119 @@ function CeoCreateProjectDialog({
     </Dialog>
   );
 }
+
+// ---------------- Unified assignments table ----------------
+
+function assignerRoleBadgeClass(role: AssignerRole | null | undefined): string {
+  switch (role) {
+    case "ceo":
+      return "bg-indigo-500/15 text-indigo-300 border-indigo-500/30";
+    case "incharge":
+      return "bg-sky-500/15 text-sky-300 border-sky-500/30";
+    case "qa":
+      return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+    default:
+      return "bg-white/5 text-muted-foreground border-white/10";
+  }
+}
+
+function statusBadgeClass(s: AssignRowStatus): string {
+  switch (s) {
+    case "not_submitted":
+      return "bg-white/5 text-muted-foreground border-white/10";
+    case "pending":
+      return "bg-amber-500/15 text-amber-300 border-amber-500/30";
+    case "graded":
+      return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+    case "revision":
+      return "bg-rose-500/15 text-rose-300 border-rose-500/30";
+  }
+}
+
+function AssignmentsTable({
+  rows,
+  loading,
+  onOpenProject,
+  onReview,
+}: {
+  rows: Row[];
+  loading: boolean;
+  onOpenProject: (projectId: string) => void;
+  onReview: (sub: SubmissionRow) => void;
+}) {
+  if (loading) {
+    return <p className="text-muted-foreground p-4 text-sm">Loading…</p>;
+  }
+  if (rows.length === 0) {
+    return <p className="text-muted-foreground p-4 text-sm">No assignments match.</p>;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Project</TableHead>
+          <TableHead>Member</TableHead>
+          <TableHead>Franchise</TableHead>
+          <TableHead>Assigned by</TableHead>
+          <TableHead>Deadline</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-right">Action</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((r) => (
+          <TableRow key={r.a.id}>
+            <TableCell className="max-w-[260px]">
+              <button
+                type="button"
+                onClick={() => onOpenProject(r.a.project_id)}
+                className="hover:text-primary truncate text-left font-medium"
+                title={r.project?.title}
+              >
+                {r.project?.title ?? "(deleted project)"}
+              </button>
+            </TableCell>
+            <TableCell className="truncate">{r.member?.full_name ?? "(unknown)"}</TableCell>
+            <TableCell className="text-muted-foreground">{r.franchiseName}</TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <span className="truncate">{r.assigner?.full_name ?? "—"}</span>
+                {r.assigner?.role && (
+                  <Badge variant="outline" className={cn("text-[10px] uppercase", assignerRoleBadgeClass(r.assigner.role))}>
+                    {r.assigner.role}
+                  </Badge>
+                )}
+              </div>
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {r.project?.deadline ? new Date(r.project.deadline).toLocaleDateString() : "—"}
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className={statusBadgeClass(r.statusKey)}>
+                  {r.statusLabel}
+                </Badge>
+                {r.sub?.letter_grade && (
+                  <Badge variant="outline" className={letterColorClass(r.sub.letter_grade)}>
+                    {r.sub.letter_grade}
+                  </Badge>
+                )}
+              </div>
+            </TableCell>
+            <TableCell className="text-right">
+              {r.sub ? (
+                <Button size="sm" variant="outline" onClick={() => onReview(r.sub!)}>
+                  {r.sub.status === "pending" ? "Review" : "View"}
+                </Button>
+              ) : (
+                <Button size="sm" variant="ghost" onClick={() => onOpenProject(r.a.project_id)}>
+                  Open
+                </Button>
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
