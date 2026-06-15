@@ -551,7 +551,7 @@ function CourseEditor() {
       .from("lessons")
       .update({ requires_submission: value })
       .in("id", ids);
-    endMutation();
+    endMutation(!error);
     if (error) {
       toast.error(error.message);
       setSections(prev);
