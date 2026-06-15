@@ -1136,6 +1136,7 @@ function SectionCard({
   onAddLesson,
   onUpdateLesson,
   onDeleteLesson,
+  onToggleRequiresSubmission,
   courseId,
   onAutoThumbnail,
 }: {
@@ -1150,6 +1151,7 @@ function SectionCard({
   ) => Promise<void> | void;
   onUpdateLesson: (l: Lesson) => void;
   onDeleteLesson: (l: Lesson) => void;
+  onToggleRequiresSubmission: (l: Lesson, v: boolean) => void;
   courseId: string;
   onAutoThumbnail?: (
     url: string | null | undefined,
