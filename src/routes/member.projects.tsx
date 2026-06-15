@@ -65,11 +65,27 @@ function MemberProjectsPage() {
   const load = React.useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    // Members can only SELECT projects via RLS where they have an assignment
-    const projRes = await supabase
-      .from("projects")
-      .select("id,title,description,attachment_path,deadline,created_at")
-      .order("created_at", { ascending: false });
+
+    // Explicitly scope by this user's assignments. RLS already restricts real
+    // members to their own assigned projects, but when a CEO is previewing as
+    // a member their session can read ALL projects — this filter keeps the
+    // preview faithful to what the real member actually sees.
+    const paRes = await supabase
+      .from("project_assignments")
+      .select("project_id")
+      .eq("user_id", user.id);
+    const assignedProjectIds = Array.from(
+      new Set(((paRes.data ?? []) as { project_id: string }[]).map((r) => r.project_id)),
+    );
+
+    const projRes = assignedProjectIds.length
+      ? await supabase
+          .from("projects")
+          .select("id,title,description,attachment_path,deadline,created_at")
+          .in("id", assignedProjectIds)
+          .order("created_at", { ascending: false })
+      : { data: [] as ProjectRow[], error: null };
+
     const subRes = await supabase
       .from("project_submissions")
       .select("id,project_id,file_url,status,letter_grade,feedback,reviewed_at,created_at")
@@ -84,6 +100,31 @@ function MemberProjectsPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  // Auto-refresh: realtime on new/removed assignments for this member, plus
+  // refetch when the tab regains focus so stale tabs catch up.
+  React.useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`member-project-assignments-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_assignments", filter: `user_id=eq.${user.id}` },
+        () => load(),
+      )
+      .subscribe();
+    const onFocus = () => load();
+    const onVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [user, load]);
 
   // latest submission per project
   const latestByProject = React.useMemo(() => {

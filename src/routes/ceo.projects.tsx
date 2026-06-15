@@ -58,6 +58,14 @@ import {
 import { cn } from "@/lib/utils";
 import { letterColorClass } from "@/lib/grade-utils";
 import { ProjectGradeDialog } from "@/components/grading/ProjectGradeDialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/ceo/projects")({
   component: CeoProjectsPage,
@@ -75,7 +83,9 @@ type ProjectRow = {
   created_at: string;
   created_by: string;
 };
-type AssignRow = { id: string; project_id: string; user_id: string; priority: string };
+type AssignRow = { id: string; project_id: string; user_id: string; priority: string; assigned_by: string | null; created_at: string };
+type AssignerRole = "ceo" | "incharge" | "qa" | "member";
+type Assigner = { id: string; full_name: string | null; role: AssignerRole | null };
 type SubmissionRow = {
   id: string;
   project_id: string;
@@ -88,6 +98,17 @@ type SubmissionRow = {
   reviewed_at: string | null;
   created_at: string;
 };
+type AssignRowStatus = "not_submitted" | "pending" | "graded" | "revision";
+type Row = {
+  a: AssignRow;
+  project: ProjectRow | undefined;
+  member: Member | undefined;
+  franchiseName: string;
+  assigner: Assigner | undefined;
+  sub: SubmissionRow | undefined;
+  statusKey: AssignRowStatus;
+  statusLabel: string;
+};
 type Scope = "members" | "franchise" | "everyone";
 
 function CeoProjectsPage() {
@@ -97,10 +118,13 @@ function CeoProjectsPage() {
   const [projects, setProjects] = React.useState<ProjectRow[]>([]);
   const [assigns, setAssigns] = React.useState<AssignRow[]>([]);
   const [subs, setSubs] = React.useState<SubmissionRow[]>([]);
+  const [assigners, setAssigners] = React.useState<Assigner[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [openProject, setOpenProject] = React.useState<ProjectRow | null>(null);
   const [reviewing, setReviewing] = React.useState<SubmissionRow | null>(null);
+  const [filterText, setFilterText] = React.useState("");
+  const [filterStatus, setFilterStatus] = React.useState<"all" | "not_submitted" | "pending" | "graded" | "revision">("all");
 
   const memberMap = React.useMemo(() => {
     const m = new Map<string, Member>();
@@ -112,6 +136,16 @@ function CeoProjectsPage() {
     franchises.forEach((x) => m.set(x.id, x));
     return m;
   }, [franchises]);
+  const projectMap = React.useMemo(() => {
+    const m = new Map<string, ProjectRow>();
+    projects.forEach((p) => m.set(p.id, p));
+    return m;
+  }, [projects]);
+  const assignerMap = React.useMemo(() => {
+    const m = new Map<string, Assigner>();
+    assigners.forEach((a) => m.set(a.id, a));
+    return m;
+  }, [assigners]);
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
@@ -127,7 +161,7 @@ function CeoProjectsPage() {
     const projectIds = (projRes.data ?? []).map((p) => p.id);
     const [aRes, sRes] = await Promise.all([
       projectIds.length
-        ? supabase.from("project_assignments").select("id,project_id,user_id,priority").in("project_id", projectIds)
+        ? supabase.from("project_assignments").select("id,project_id,user_id,priority,assigned_by,created_at").in("project_id", projectIds)
         : Promise.resolve({ data: [], error: null }),
       projectIds.length
         ? supabase
@@ -138,17 +172,97 @@ function CeoProjectsPage() {
         : Promise.resolve({ data: [], error: null }),
     ]);
 
+    const assignRows = (aRes.data ?? []) as AssignRow[];
+
+    // Resolve assigner identities + roles in one batch
+    const assignerIds = Array.from(
+      new Set(
+        assignRows
+          .map((a) => a.assigned_by)
+          .concat((projRes.data ?? []).map((p) => p.created_by))
+          .filter((v): v is string => !!v),
+      ),
+    );
+    let assignerRows: Assigner[] = [];
+    if (assignerIds.length) {
+      const [apRes, arRes] = await Promise.all([
+        supabase.from("profiles").select("id, full_name").in("id", assignerIds),
+        supabase.from("user_roles").select("user_id, role").in("user_id", assignerIds),
+      ]);
+      const roleByUser = new Map<string, AssignerRole>();
+      const rolePriority: AssignerRole[] = ["ceo", "incharge", "qa", "member"];
+      for (const r of (arRes.data ?? []) as { user_id: string; role: AssignerRole }[]) {
+        const prev = roleByUser.get(r.user_id);
+        if (!prev || rolePriority.indexOf(r.role) < rolePriority.indexOf(prev)) {
+          roleByUser.set(r.user_id, r.role);
+        }
+      }
+      assignerRows = ((apRes.data ?? []) as { id: string; full_name: string | null }[]).map((p) => ({
+        id: p.id,
+        full_name: p.full_name,
+        role: roleByUser.get(p.id) ?? null,
+      }));
+    }
+
     setMembers((profsRes.data ?? []) as Member[]);
     setFranchises((fRes.data ?? []) as Franchise[]);
     setProjects((projRes.data ?? []) as ProjectRow[]);
-    setAssigns((aRes.data ?? []) as AssignRow[]);
+    setAssigns(assignRows);
     setSubs((sRes.data ?? []) as SubmissionRow[]);
+    setAssigners(assignerRows);
     setLoading(false);
   }, []);
 
   React.useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // Latest submission per (project, user)
+  const latestSubMap = React.useMemo(() => {
+    const m = new Map<string, SubmissionRow>();
+    for (const s of subs) {
+      const k = `${s.project_id}:${s.user_id}`;
+      const prev = m.get(k);
+      if (!prev || new Date(s.created_at) > new Date(prev.created_at)) m.set(k, s);
+    }
+    return m;
+  }, [subs]);
+
+  // Row type is declared at module scope (below) so AssignmentsTable can use it.
+
+  const rows: Row[] = React.useMemo(() => {
+    return assigns.map((a) => {
+      const project = projectMap.get(a.project_id);
+      const member = memberMap.get(a.user_id);
+      const fId = member?.franchise_id ?? project?.franchise_id ?? null;
+      const franchiseName = fId ? franchiseMap.get(fId)?.name ?? "—" : "All franchises";
+      const assignerId = a.assigned_by ?? project?.created_by ?? null;
+      const assigner = assignerId ? assignerMap.get(assignerId) : undefined;
+      const sub = latestSubMap.get(`${a.project_id}:${a.user_id}`);
+      let statusKey: Row["statusKey"];
+      let statusLabel: string;
+      if (!sub) { statusKey = "not_submitted"; statusLabel = "Not submitted"; }
+      else if (sub.status === "pending") { statusKey = "pending"; statusLabel = "Pending review"; }
+      else if (sub.status === "revision") { statusKey = "revision"; statusLabel = "Needs revision"; }
+      else { statusKey = "graded"; statusLabel = "Graded"; }
+      return { a, project, member, franchiseName, assigner, sub, statusKey, statusLabel };
+    });
+  }, [assigns, projectMap, memberMap, franchiseMap, assignerMap, latestSubMap]);
+
+  const filteredRows = React.useMemo(() => {
+    const t = filterText.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (filterStatus !== "all" && r.statusKey !== filterStatus) return false;
+      if (!t) return true;
+      return (
+        (r.project?.title ?? "").toLowerCase().includes(t) ||
+        (r.member?.full_name ?? "").toLowerCase().includes(t) ||
+        r.franchiseName.toLowerCase().includes(t) ||
+        (r.assigner?.full_name ?? "").toLowerCase().includes(t)
+      );
+    });
+  }, [rows, filterText, filterStatus]);
+
 
   return (
     <div className="space-y-6">
@@ -220,6 +334,51 @@ function CeoProjectsPage() {
           })}
         </div>
       )}
+
+      {/* Unified assignments table — every project × member across the academy */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">All assignments</CardTitle>
+              <CardDescription>
+                Every project assignment across the academy — regardless of who created it.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                placeholder="Filter by project, member, franchise, assigner…"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                className="h-9 w-72"
+              />
+              <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
+                <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="not_submitted">Not submitted</SelectItem>
+                  <SelectItem value="pending">Pending review</SelectItem>
+                  <SelectItem value="graded">Graded</SelectItem>
+                  <SelectItem value="revision">Needs revision</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          <AssignmentsTable
+            rows={filteredRows}
+            loading={loading}
+            onOpenProject={(pid) => {
+              const p = projectMap.get(pid);
+              if (p) setOpenProject(p);
+            }}
+            onReview={(sub) => setReviewing(sub)}
+          />
+        </CardContent>
+      </Card>
+
+
 
       <CeoCreateProjectDialog
         open={createOpen}
@@ -560,5 +719,121 @@ function CeoCreateProjectDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------- Unified assignments table ----------------
+
+function assignerRoleBadgeClass(role: AssignerRole | null | undefined): string {
+  switch (role) {
+    case "ceo":
+      return "bg-indigo-500/15 text-indigo-300 border-indigo-500/30";
+    case "incharge":
+      return "bg-sky-500/15 text-sky-300 border-sky-500/30";
+    case "qa":
+      return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+    default:
+      return "bg-white/5 text-muted-foreground border-white/10";
+  }
+}
+
+function statusBadgeClass(s: AssignRowStatus): string {
+  switch (s) {
+    case "not_submitted":
+      return "bg-white/5 text-muted-foreground border-white/10";
+    case "pending":
+      return "bg-amber-500/15 text-amber-300 border-amber-500/30";
+    case "graded":
+      return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+    case "revision":
+      return "bg-rose-500/15 text-rose-300 border-rose-500/30";
+  }
+}
+
+function AssignmentsTable({
+  rows,
+  loading,
+  onOpenProject,
+  onReview,
+}: {
+  rows: Row[];
+  loading: boolean;
+  onOpenProject: (projectId: string) => void;
+  onReview: (sub: SubmissionRow) => void;
+}) {
+  if (loading) {
+    return <p className="text-muted-foreground p-4 text-sm">Loading…</p>;
+  }
+  if (rows.length === 0) {
+    return <p className="text-muted-foreground p-4 text-sm">No assignments match.</p>;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Project</TableHead>
+          <TableHead>Member</TableHead>
+          <TableHead>Franchise</TableHead>
+          <TableHead>Assigned by</TableHead>
+          <TableHead>Deadline</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-right">Action</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((r) => (
+          <TableRow key={r.a.id}>
+            <TableCell className="max-w-[260px]">
+              <button
+                type="button"
+                onClick={() => onOpenProject(r.a.project_id)}
+                className="hover:text-primary truncate text-left font-medium"
+                title={r.project?.title}
+              >
+                {r.project?.title ?? "(deleted project)"}
+              </button>
+            </TableCell>
+            <TableCell className="truncate">{r.member?.full_name ?? "(unknown)"}</TableCell>
+            <TableCell className="text-muted-foreground">{r.franchiseName}</TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <span className="truncate">{r.assigner?.full_name ?? "—"}</span>
+                {r.assigner?.role && (
+                  <Badge variant="outline" className={cn("text-[10px] uppercase", assignerRoleBadgeClass(r.assigner.role))}>
+                    {r.assigner.role}
+                  </Badge>
+                )}
+              </div>
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {r.project?.deadline ? new Date(r.project.deadline).toLocaleDateString() : "—"}
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className={statusBadgeClass(r.statusKey)}>
+                  {r.statusLabel}
+                </Badge>
+                {r.sub?.letter_grade && (
+                  <Badge variant="outline" className={letterColorClass(r.sub.letter_grade)}>
+                    {r.sub.letter_grade}
+                  </Badge>
+                )}
+              </div>
+            </TableCell>
+            <TableCell className="text-right">
+              {r.sub ? (
+                <Button size="sm" variant="outline" onClick={() => onReview(r.sub!)}>
+                  {r.sub.status === "pending" ? "Review" : "View"}
+                </Button>
+              ) : (
+                <Button size="sm" variant="ghost" onClick={() => onOpenProject(r.a.project_id)}>
+                  Open
+                </Button>
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
