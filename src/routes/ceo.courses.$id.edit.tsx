@@ -889,6 +889,7 @@ function CourseEditor() {
                     }
                     onUpdateLesson={updateLesson}
                     onDeleteLesson={deleteLesson}
+                    onToggleRequiresSubmission={setLessonRequiresSubmission}
                     courseId={courseId}
                     onAutoThumbnail={maybeAutoSetThumbnail}
                   />
