@@ -515,7 +515,7 @@ function CourseEditor() {
       .from("lessons")
       .update({ requires_submission: value })
       .eq("id", lesson.id);
-    endMutation();
+    endMutation(!error);
     if (error) {
       toast.error(error.message);
       // Revert
@@ -531,6 +531,8 @@ function CourseEditor() {
             : sec,
         ),
       );
+    } else {
+      toast.success(value ? "Marked mandatory" : "Cleared mandatory", { duration: 1500 });
     }
   }
 
