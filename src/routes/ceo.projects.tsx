@@ -75,7 +75,9 @@ type ProjectRow = {
   created_at: string;
   created_by: string;
 };
-type AssignRow = { id: string; project_id: string; user_id: string; priority: string };
+type AssignRow = { id: string; project_id: string; user_id: string; priority: string; assigned_by: string | null; created_at: string };
+type AssignerRole = "ceo" | "incharge" | "qa" | "member";
+type Assigner = { id: string; full_name: string | null; role: AssignerRole | null };
 type SubmissionRow = {
   id: string;
   project_id: string;
