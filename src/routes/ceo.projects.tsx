@@ -98,6 +98,17 @@ type SubmissionRow = {
   reviewed_at: string | null;
   created_at: string;
 };
+type AssignRowStatus = "not_submitted" | "pending" | "graded" | "revision";
+type Row = {
+  a: AssignRow;
+  project: ProjectRow | undefined;
+  member: Member | undefined;
+  franchiseName: string;
+  assigner: Assigner | undefined;
+  sub: SubmissionRow | undefined;
+  statusKey: AssignRowStatus;
+  statusLabel: string;
+};
 type Scope = "members" | "franchise" | "everyone";
 
 function CeoProjectsPage() {
