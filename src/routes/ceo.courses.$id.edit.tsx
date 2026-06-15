@@ -450,7 +450,7 @@ function CourseEditor() {
         duration_seconds: duration_seconds ?? null,
         content: (content ?? defaultContent[type]) as Json,
       })
-      .select("id,section_id,title,type,position,duration_seconds,content")
+      .select("id,section_id,title,type,position,duration_seconds,content,requires_submission")
       .single();
     endMutation();
     if (error) {
