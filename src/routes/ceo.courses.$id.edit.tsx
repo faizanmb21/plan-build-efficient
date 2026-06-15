@@ -826,6 +826,47 @@ function CourseEditor() {
               </Button>
             </div>
           )}
+          {(() => {
+            const allLessons = sections.flatMap((s) => s.lessons);
+            const total = allLessons.length;
+            const mandatoryCount = allLessons.filter((l) => l.requires_submission).length;
+            const allOn = total > 0 && mandatoryCount === total;
+            const someOn = mandatoryCount > 0 && mandatoryCount < total;
+            if (total === 0) return null;
+            return (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/5 bg-muted/20 px-3 py-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={allOn ? true : someOn ? "indeterminate" : false}
+                    onCheckedChange={(v) => setAllLessonsRequiresSubmission(v === true)}
+                    aria-label="Mark all lessons as requiring submission"
+                  />
+                  <span className="font-medium">Mandatory submission</span>
+                  <span className="text-xs text-muted-foreground">
+                    {mandatoryCount} of {total} lesson{total === 1 ? "" : "s"} require a submission before the next lesson
+                  </span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAllLessonsRequiresSubmission(true)}
+                    disabled={allOn}
+                  >
+                    Mark all
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setAllLessonsRequiresSubmission(false)}
+                    disabled={mandatoryCount === 0}
+                  >
+                    Clear all
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
