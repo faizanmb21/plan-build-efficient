@@ -13,6 +13,7 @@ import {
   type GradedRow,
   type GradeAggregate,
 } from "@/lib/grade-utils";
+import { fetchAllGradedRowsForUser } from "@/lib/all-grades";
 import { CourseGradePie, LETTER_COLORS, courseColor } from "@/components/grading/CourseGradePie";
 
 interface Props {
@@ -36,25 +37,32 @@ export function MemberGradeReport({ userId, fullName, franchiseName }: Props) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data: subs } = await supabase
-        .from("submissions")
-        .select(
-          "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-        )
-        .eq("user_id", userId)
-        .order("reviewed_at", { ascending: false, nullsFirst: false });
+      const subs = await fetchAllGradedRowsForUser(userId);
+      subs.sort((a, b) => {
+        const ta = a.reviewed_at ? new Date(a.reviewed_at).getTime() : 0;
+        const tb = b.reviewed_at ? new Date(b.reviewed_at).getTime() : 0;
+        return tb - ta;
+      });
 
-      const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
+      const lessonIds = Array.from(
+        new Set(subs.map((s) => s.lesson_id).filter((id): id is string => !!id)),
+      );
+      const projectIds = Array.from(
+        new Set(subs.map((s) => s.project_id).filter((id): id is string => !!id)),
+      );
       const reviewerIds = Array.from(
-        new Set((subs ?? []).map((s) => s.reviewed_by).filter(Boolean) as string[]),
+        new Set(subs.map((s) => s.reviewed_by).filter(Boolean) as string[]),
       );
 
-      const [{ data: lessons }, { data: reviewers }] = await Promise.all([
+      const [{ data: lessons }, { data: projects }, { data: reviewers }] = await Promise.all([
         lessonIds.length
           ? supabase
               .from("lessons")
               .select("id,title,sections(course_id,courses(id,title))")
               .in("id", lessonIds)
+          : Promise.resolve({ data: [] as unknown[] }),
+        projectIds.length
+          ? supabase.from("projects").select("id,title").in("id", projectIds)
           : Promise.resolve({ data: [] as unknown[] }),
         reviewerIds.length
           ? supabase.from("profiles").select("id,full_name").in("id", reviewerIds)
@@ -68,13 +76,27 @@ export function MemberGradeReport({ userId, fullName, franchiseName }: Props) {
       };
       const lessonMap = new Map<string, LessonShape>();
       (lessons as LessonShape[] | null | undefined)?.forEach((l) => lessonMap.set(l.id, l));
+      const projectMap = new Map<string, string>();
+      (projects as { id: string; title: string }[] | null | undefined)?.forEach((p) =>
+        projectMap.set(p.id, p.title),
+      );
       const reviewerMap = new Map<string, string | null>();
       (reviewers as { id: string; full_name: string | null }[] | null | undefined)?.forEach((p) =>
         reviewerMap.set(p.id, p.full_name),
       );
 
-      const enriched: EnrichedRow[] = (subs ?? []).map((s) => {
-        const l = lessonMap.get(s.lesson_id);
+      const enriched: EnrichedRow[] = subs.map((s) => {
+        if (s.source === "project") {
+          const title = (s.project_id && projectMap.get(s.project_id)) ?? "Project";
+          return {
+            ...s,
+            lesson_title: title,
+            course_title: "Projects",
+            course_id: "__projects__",
+            reviewer_name: s.reviewed_by ? (reviewerMap.get(s.reviewed_by) ?? null) : null,
+          };
+        }
+        const l = s.lesson_id ? lessonMap.get(s.lesson_id) : undefined;
         return {
           ...s,
           lesson_title: l?.title ?? "Lesson",
