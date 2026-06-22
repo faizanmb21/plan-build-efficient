@@ -167,7 +167,7 @@ function FranchiseDetailPage() {
           : Promise.resolve({ data: [] as never[] }),
         supabase
           .from("study_sessions")
-          .select("user_id, started_at, ended_at, active_seconds, last_heartbeat_at")
+          .select("user_id, started_at, ended_at, active_seconds, last_heartbeat_at, status")
           .in("user_id", memberIds)
           .gte("started_at", weekStart.toISOString()),
         supabase
@@ -192,6 +192,7 @@ function FranchiseDetailPage() {
       });
 
       const dayStartMs = dayStart.getTime();
+      const LIVE_STALE_MS = 10 * 60 * 1000;
       (sessionsRes.data ?? []).forEach((s) => {
         const startedMs = new Date(s.started_at).getTime();
         const sec = s.active_seconds ?? 0;
@@ -199,8 +200,9 @@ function FranchiseDetailPage() {
         if (startedMs >= dayStartMs) {
           activeTodayByUser.set(s.user_id, (activeTodayByUser.get(s.user_id) ?? 0) + sec);
         }
-        if (!s.ended_at) liveNowByUser.add(s.user_id);
         const seen = s.last_heartbeat_at ?? s.started_at;
+        const fresh = seen ? Date.now() - new Date(seen).getTime() < LIVE_STALE_MS : false;
+        if (!s.ended_at && (s as any).status !== "completed" && fresh) liveNowByUser.add(s.user_id);
         const prev = lastSeenByUser.get(s.user_id);
         if (!prev || new Date(seen) > new Date(prev)) lastSeenByUser.set(s.user_id, seen);
       });
