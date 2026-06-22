@@ -377,7 +377,7 @@ export const updateExpectedDailyHours = createServerFn({ method: "POST" })
     const isCeo = roles.includes("ceo");
     const inchargeFranchise = (callerRoles ?? []).find((r) => r.role === "incharge")?.franchise_id;
 
-    if (!isCeo && ctx.userId !== data.userId) {
+    if (!isCeo) {
       const { data: target } = await supabaseAdmin
         .from("profiles")
         .select("franchise_id")

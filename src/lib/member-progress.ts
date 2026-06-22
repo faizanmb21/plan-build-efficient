@@ -45,6 +45,7 @@ export interface MemberDetail {
   franchiseId: string | null;
   franchiseName: string | null;
   expectedDailyHours: number;
+  workingDays: string[];
   targetHoursWeek: number;
   kpis: {
     completionPct: number;
@@ -258,7 +259,7 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
 export async function fetchMemberDetail(userId: string): Promise<MemberDetail | null> {
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, franchise_id, expected_daily_hours")
+    .select("id, full_name, franchise_id, expected_daily_hours, working_days")
     .eq("id", userId)
     .maybeSingle();
   if (!profile) return null;
@@ -435,6 +436,7 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
   }));
 
   const expectedDailyHours = Number((profile as any).expected_daily_hours ?? 8);
+  const workingDays: string[] = (profile as any).working_days ?? ["mon","tue","wed","thu","fri"];
   let weekdays = 0;
   for (let i = 0; i < 7; i++) {
     const day = new Date(Date.now() - i * DAY_MS).getDay();
@@ -448,6 +450,7 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
     franchiseId,
     franchiseName,
     expectedDailyHours,
+    workingDays,
     targetHoursWeek,
     kpis: {
       completionPct: uSum?.overallPct ?? 0,

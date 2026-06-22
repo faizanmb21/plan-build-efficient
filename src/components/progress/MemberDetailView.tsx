@@ -33,6 +33,7 @@ import {
 
 interface Props {
   userId: string;
+  canEditSchedule?: boolean;
 }
 
 import { formatDuration } from "@/lib/format-duration";
@@ -51,7 +52,17 @@ function fmtDateTime(iso: string) {
   });
 }
 
-export function MemberDetailView({ userId }: Props) {
+const DAY_ORDER = ["mon","tue","wed","thu","fri","sat","sun"] as const;
+const DAY_LABEL: Record<string, string> = { mon:"Mon", tue:"Tue", wed:"Wed", thu:"Thu", fri:"Fri", sat:"Sat", sun:"Sun" };
+
+function formatWorkingDays(days: string[]): string {
+  const sorted = [...days].sort((a, b) => DAY_ORDER.indexOf(a as any) - DAY_ORDER.indexOf(b as any));
+  if (sorted.length === 5 && ["mon","tue","wed","thu","fri"].every(d => sorted.includes(d))) return "Mon–Fri";
+  if (sorted.length === 6 && ["mon","tue","wed","thu","fri","sat"].every(d => sorted.includes(d))) return "Mon–Sat";
+  return sorted.map(d => DAY_LABEL[d] ?? d).join(", ");
+}
+
+export function MemberDetailView({ userId, canEditSchedule = false }: Props) {
   const [data, setData] = React.useState<MemberDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [editHours, setEditHours] = React.useState<number | null>(null);
@@ -113,29 +124,37 @@ export function MemberDetailView({ userId }: Props) {
             <p className="text-sm text-muted-foreground">{data.franchiseName}</p>
           )}
         </div>
-        <div className="flex items-end gap-2">
-          <div className="space-y-1">
-            <Label htmlFor="exp-hours" className="text-xs">Expected daily hours</Label>
-            <Input
-              id="exp-hours"
-              type="number"
-              min={0}
-              max={24}
-              step={0.5}
-              value={editHours ?? 8}
-              onChange={(e) => setEditHours(Number(e.target.value) || 0)}
-              className="h-8 w-24"
-            />
+        {canEditSchedule ? (
+          <div className="flex items-end gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="exp-hours" className="text-xs">Expected daily hours</Label>
+              <Input
+                id="exp-hours"
+                type="number"
+                min={0}
+                max={24}
+                step={0.5}
+                value={editHours ?? 8}
+                onChange={(e) => setEditHours(Number(e.target.value) || 0)}
+                className="h-8 w-24"
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={saveHours}
+              disabled={savingHours || editHours === data.expectedDailyHours}
+            >
+              {savingHours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Save
+            </Button>
           </div>
-          <Button
-            size="sm"
-            onClick={saveHours}
-            disabled={savingHours || editHours === data.expectedDailyHours}
-          >
-            {savingHours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Save
-          </Button>
-        </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Expected: <span className="font-medium text-foreground">{data.expectedDailyHours}h/day</span>
+            {" · "}
+            <span className="font-medium text-foreground">{formatWorkingDays(data.workingDays)}</span>
+          </p>
+        )}
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
