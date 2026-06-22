@@ -28,11 +28,10 @@ interface MemberRow {
   open_session: boolean;
 }
 
-function fmt(sec: number) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  return `${h}h ${m}m`;
-}
+import { formatDuration } from "@/lib/format-duration";
+
+const LIVE_STALE_MS = 10 * 60 * 1000; // heartbeat older than this => not live
+const fmt = formatDuration;
 
 function AttendancePage() {
   const [loading, setLoading] = React.useState(true);
@@ -53,7 +52,7 @@ function AttendancePage() {
 
     const { data: sessions } = await supabase
       .from("study_sessions")
-      .select("user_id, active_seconds, idle_seconds, started_at, last_heartbeat_at, ended_at")
+      .select("user_id, active_seconds, idle_seconds, started_at, last_heartbeat_at, ended_at, status")
       .gte("started_at", weekStart.toISOString());
 
     const { data: snaps } = await supabase
@@ -81,7 +80,8 @@ function AttendancePage() {
       r.active_week += s.active_seconds ?? 0;
       const lh = s.last_heartbeat_at ?? s.started_at;
       if (!r.last_seen || lh > r.last_seen) r.last_seen = lh;
-      if (!s.ended_at) r.open_session = true;
+      const fresh = lh ? Date.now() - new Date(lh).getTime() < LIVE_STALE_MS : false;
+      if (!s.ended_at && (s as any).status !== "completed" && fresh) r.open_session = true;
       acc.set(s.user_id, r);
     }
     for (const s of snaps ?? []) {
