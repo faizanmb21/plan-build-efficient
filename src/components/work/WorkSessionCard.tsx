@@ -4,13 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWorkSession } from "@/hooks/use-work-session";
 import { Play, Square, Clock, Sparkles, Loader2, Pause, PlayCircle } from "lucide-react";
+import { formatClock, formatDuration } from "@/lib/format-duration";
 
-function fmt(sec: number) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
+const fmt = formatClock;
 
 export function WorkSessionCard() {
   const {
@@ -126,8 +122,7 @@ export function WorkSessionCard() {
 
         {!isClockedIn && (
           <p className="text-xs text-muted-foreground">
-            Auto clock-out: 2 min idle on a course page, or 3 min idle anywhere in the app. You'll
-            get a 30-second warning before being clocked out.
+            Auto clock-out: 3 min idle anywhere in the app. You'll get a 60-second warning before being clocked out. Switching browser tabs does NOT count as idle.
           </p>
         )}
 
@@ -140,7 +135,7 @@ export function WorkSessionCard() {
               {lastSummary.summary ?? "Session recorded — summary unavailable."}
             </p>
             <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-              <span>{fmt(lastSummary.activeSec)} active</span>
+              <span>{formatDuration(lastSummary.activeSec)} active</span>
               <span>{lastSummary.lessonsCount} lessons</span>
               <span>{lastSummary.projectsCount} projects</span>
               <span>{lastSummary.gradesCount} grades</span>
