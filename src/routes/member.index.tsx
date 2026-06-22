@@ -48,6 +48,7 @@ import { fetchCompletionSummary } from "@/lib/completion-summary";
 import { WorkSessionCard } from "@/components/work/WorkSessionCard";
 import { getTodaysSessionReport } from "@/lib/work-session.functions";
 import { useWorkSession } from "@/hooks/use-work-session";
+import { formatDuration } from "@/lib/format-duration";
 
 
 
