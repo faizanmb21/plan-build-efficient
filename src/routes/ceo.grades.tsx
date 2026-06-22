@@ -32,6 +32,7 @@ import {
   type GradedRow,
   type GradeAggregate,
 } from "@/lib/grade-utils";
+import { fetchAllGradedRowsVisible } from "@/lib/all-grades";
 import { MemberGradeReport } from "@/components/MemberGradeReport";
 import { CourseGradePie, courseColor } from "@/components/grading/CourseGradePie";
 import { buildGradesWorkbook, downloadGradesWorkbook } from "@/lib/grade-export";
@@ -72,19 +73,17 @@ function GradesHub() {
   React.useEffect(() => {
     (async () => {
       setLoading(true);
-      const [{ data: subs }, { data: profs }, { data: frs }, { data: roles }] = await Promise.all([
-        supabase
-          .from("submissions")
-          .select(
-            "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-          )
-          .order("reviewed_at", { ascending: false, nullsFirst: false }),
+      const [combined, { data: profs }, { data: frs }, { data: roles }] = await Promise.all([
+        fetchAllGradedRowsVisible(),
         supabase.from("profiles").select("id,full_name,franchise_id"),
         supabase.from("franchises").select("id,name").is("archived_at", null),
         supabase.from("user_roles").select("user_id,role").in("role", ["member", "incharge"]),
       ]);
+      const subs = combined;
 
-      const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
+      const lessonIds = Array.from(
+        new Set(combined.map((s) => s.lesson_id).filter((id): id is string => !!id)),
+      );
       const { data: lessons } = lessonIds.length
         ? await supabase
             .from("lessons")
@@ -104,7 +103,7 @@ function GradesHub() {
       const profMap = new Map<string, string | null>();
       (profs ?? []).forEach((p) => profMap.set(p.id, p.full_name));
 
-      setSubmissions((subs ?? []) as GradedRow[]);
+      setSubmissions(subs);
       setProfiles((profs ?? []) as Profile[]);
       setFranchises((frs ?? []) as Franchise[]);
       setLessonMap(lm);
