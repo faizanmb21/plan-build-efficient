@@ -398,9 +398,9 @@ function MemberHome() {
                 <CardDescription>
                   {todayReportQuery.data.sessionCount} session
                   {todayReportQuery.data.sessionCount !== 1 ? "s" : ""} ·{" "}
-                  {(todayReportQuery.data.totalActiveSec / 3600).toFixed(1)}h active
+                  {formatDuration(todayReportQuery.data.totalActiveSec)} active
                   {todayReportQuery.data.totalPausedSec > 0 &&
-                    ` · ${(todayReportQuery.data.totalPausedSec / 60).toFixed(0)}m paused`}
+                    ` · ${formatDuration(todayReportQuery.data.totalPausedSec)} paused`}
                 </CardDescription>
               </div>
             </div>
