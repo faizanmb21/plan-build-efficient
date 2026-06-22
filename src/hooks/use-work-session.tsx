@@ -11,9 +11,9 @@ import {
 } from "@/lib/work-session.functions";
 import { toast } from "sonner";
 
-const GLOBAL_IDLE_MS = 3 * 60 * 1000; // 3 minutes
-const COURSE_IDLE_MS = 2 * 60 * 1000; // 2 minutes
-const WARNING_GRACE_MS = 30 * 1000; // 30-second warning
+const GLOBAL_IDLE_MS = 3 * 60 * 1000; // 3 minutes of in-tab inactivity before warning
+const COURSE_IDLE_MS = 3 * 60 * 1000; // same as global — one rule everywhere
+const WARNING_GRACE_MS = 60 * 1000;   // 60-second warning before auto clock-out
 const HEARTBEAT_MS = 30 * 1000;
 
 export type ClockOutReason = "manual" | "auto_idle_global" | "auto_idle_course";
@@ -163,6 +163,17 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   }, [isClockedIn]);
 
 
+  const clearLocalSession = React.useCallback(() => {
+    sessionRef.current = null;
+    setSessionId(null);
+    setStartedAt(null);
+    setActiveSeconds(0);
+    setIsPaused(false);
+    pausedRef.current = false;
+    unsentActiveRef.current = 0;
+    setIdleWarning(null);
+  }, []);
+
   const stop = React.useCallback(
     async (reason: ClockOutReason = "manual") => {
       const sid = sessionRef.current;
@@ -191,23 +202,58 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
             gradesCount: res.gradesCount,
             endReason: reason,
           });
+        } else if (res.error && /already ended/i.test(res.error)) {
+          // Session was ended elsewhere (another tab, focus page, server cleanup).
+          // Treat as success — just clear local state.
+        } else if (res.error) {
+          toast.error(res.error);
         }
-        sessionRef.current = null;
-        setSessionId(null);
-        setStartedAt(null);
-        setActiveSeconds(0);
-        setIsPaused(false);
-        pausedRef.current = false;
+        clearLocalSession();
         if (reason !== "manual") setPausedReason(reason);
       } catch (e) {
         console.error("clockOut failed", e);
-        toast.error("Failed to clock out");
+        // Even on error, clear local state — the row may already be ended.
+        clearLocalSession();
       } finally {
         setIsClockingOut(false);
       }
     },
-    [clockOutRpc],
+    [clockOutRpc, clearLocalSession],
   );
+
+  // Realtime: if the session is ended from another tab / Focus page / server,
+  // mirror that state here instantly so both timers stay in lockstep.
+  React.useEffect(() => {
+    if (!user || !sessionId) return;
+    const channel = supabase
+      .channel(`work-session-${sessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "study_sessions",
+          filter: `id=eq.${sessionId}`,
+        },
+        (payload) => {
+          const row: any = payload.new;
+          if (!row) return;
+          if (row.ended_at) {
+            clearLocalSession();
+          } else if (row.status === "paused" && !pausedRef.current) {
+            setIsPaused(true);
+            pausedRef.current = true;
+          } else if (row.status === "active" && pausedRef.current) {
+            setIsPaused(false);
+            pausedRef.current = false;
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, sessionId, clearLocalSession]);
 
   // Heartbeat + idle detection (global)
   React.useEffect(() => {

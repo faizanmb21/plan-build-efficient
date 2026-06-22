@@ -1,33 +1,168 @@
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
-import { useFocusTracker } from "@/hooks/use-focus-tracker";
+import { useWorkSession } from "@/hooks/use-work-session";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Play, Square, Activity, Clock, Coffee, Camera, Upload } from "lucide-react";
+import {
+  Monitor,
+  Play,
+  Square,
+  Activity,
+  Clock,
+  Coffee,
+  Camera,
+  Upload,
+  Pause,
+  PlayCircle,
+  Loader2,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { formatClock, formatDuration } from "@/lib/format-duration";
 
 export const Route = createFileRoute("/member/focus")({
   component: FocusPage,
 });
 
-function fmt(sec: number) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
+const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 
 function FocusPage() {
   const { user } = useAuth();
-  const { state, start, stop } = useFocusTracker({ userId: user?.id });
+  const {
+    sessionId,
+    isClockedIn,
+    isPaused,
+    activeSeconds,
+    startedAt,
+    start,
+    stop,
+    pause,
+    resume,
+    isClockingIn,
+    isClockingOut,
+    isPausing,
+  } = useWorkSession();
+
+  const screenStreamRef = React.useRef<MediaStream | null>(null);
+  const snapTimerRef = React.useRef<number | null>(null);
+  const [screenReady, setScreenReady] = React.useState(false);
+  const [lastSnapshotAt, setLastSnapshotAt] = React.useState<number | null>(null);
+
   const [todayActive, setTodayActive] = React.useState(0);
-  const [todayIdle, setTodayIdle] = React.useState(0);
   const [snapCount, setSnapCount] = React.useState(0);
   const [uploadingCheckin, setUploadingCheckin] = React.useState(false);
   const checkinRef = React.useRef<HTMLInputElement>(null);
+
+  // Live tick for elapsed
+  const [, force] = React.useReducer((n: number) => n + 1, 0);
+  React.useEffect(() => {
+    if (!isClockedIn || isPaused) return;
+    const t = window.setInterval(force, 1000);
+    return () => window.clearInterval(t);
+  }, [isClockedIn, isPaused]);
+
+  const elapsedSec =
+    isClockedIn && startedAt && !isPaused ? Math.floor((Date.now() - startedAt) / 1000) : 0;
+
+  const captureSnapshot = React.useCallback(async () => {
+    const stream = screenStreamRef.current;
+    const sid = sessionId;
+    if (!stream || !sid || !user) return;
+    try {
+      const track = stream.getVideoTracks()[0];
+      if (!track || track.readyState !== "live") return;
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.muted = true;
+      await video.play();
+      await new Promise((r) => setTimeout(r, 200));
+      const w = video.videoWidth || 640;
+      const h = video.videoHeight || 480;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.min(w, 960);
+      canvas.height = Math.round((canvas.width * h) / w);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob: Blob | null = await new Promise((res) =>
+        canvas.toBlob((b) => res(b), "image/jpeg", 0.7),
+      );
+      video.pause();
+      video.srcObject = null;
+      if (!blob) return;
+      const path = `${user.id}/${sid}/screen-${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("attendance")
+        .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+      if (upErr) return;
+      await supabase.from("attendance_snapshots").insert({
+        session_id: sid,
+        user_id: user.id,
+        kind: "screen" as any,
+        storage_path: path,
+      });
+      setLastSnapshotAt(Date.now());
+    } catch (e) {
+      console.warn("snapshot error", e);
+    }
+  }, [sessionId, user]);
+
+  const stopScreenShare = React.useCallback(() => {
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+    screenStreamRef.current = null;
+    setScreenReady(false);
+    if (snapTimerRef.current) {
+      window.clearInterval(snapTimerRef.current);
+      snapTimerRef.current = null;
+    }
+  }, []);
+
+  // When session ends externally (other tab, dashboard), tear down screen share.
+  React.useEffect(() => {
+    if (!isClockedIn) stopScreenShare();
+  }, [isClockedIn, stopScreenShare]);
+
+  React.useEffect(() => {
+    return () => stopScreenShare();
+  }, [stopScreenShare]);
+
+  async function handleClockIn() {
+    if (!user) {
+      toast.error("Sign in first");
+      return;
+    }
+    // Request screen share BEFORE creating the session (must be in user gesture)
+    let scr: MediaStream;
+    try {
+      scr = await (
+        navigator.mediaDevices as MediaDevices & {
+          getDisplayMedia: (c: MediaStreamConstraints) => Promise<MediaStream>;
+        }
+      ).getDisplayMedia({ video: true, audio: false });
+    } catch {
+      toast.error("Screen share required. Pick a screen/window when prompted, then try again.");
+      return;
+    }
+    screenStreamRef.current = scr;
+    setScreenReady(true);
+    scr.getVideoTracks()[0]?.addEventListener("ended", () => {
+      toast("Screen share ended — clocking out.");
+      stop("manual");
+    });
+
+    await start();
+
+    // First snapshot after 30s, then every 5 min
+    window.setTimeout(() => captureSnapshot(), 30_000);
+    snapTimerRef.current = window.setInterval(captureSnapshot, SNAPSHOT_INTERVAL_MS);
+  }
+
+  async function handleClockOut() {
+    stopScreenShare();
+    await stop("manual");
+  }
 
   async function onCheckinPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -49,7 +184,7 @@ function FocusPage() {
         user_id: user.id,
         kind: "manual",
         storage_path: path,
-        session_id: state.sessionId,
+        session_id: sessionId,
       });
       if (insErr) throw insErr;
       toast.success("Check-in photo uploaded");
@@ -69,13 +204,11 @@ function FocusPage() {
     dayStart.setHours(0, 0, 0, 0);
     const { data } = await supabase
       .from("study_sessions")
-      .select("active_seconds, idle_seconds")
+      .select("active_seconds")
       .eq("user_id", user.id)
       .gte("started_at", dayStart.toISOString());
     const a = (data ?? []).reduce((sum, r) => sum + (r.active_seconds ?? 0), 0);
-    const i = (data ?? []).reduce((sum, r) => sum + (r.idle_seconds ?? 0), 0);
     setTodayActive(a);
-    setTodayIdle(i);
 
     const { count } = await supabase
       .from("attendance_snapshots")
@@ -89,78 +222,89 @@ function FocusPage() {
     reload();
     const i = window.setInterval(reload, 30_000);
     return () => window.clearInterval(i);
-  }, [reload, state.activeSeconds]);
+  }, [reload]);
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-3xl font-display font-semibold tracking-tight">Focus session</h1>
         <p className="text-muted-foreground mt-1">
-          Clock in to start tracking your training time. Screen snapshots are captured every 5 minutes.
+          Same session as the dashboard work timer — clocking in or out here affects both. Screen
+          snapshots are captured every 5 minutes while clocked in.
         </p>
       </div>
 
-      <Card className="border-primary/30">
+      <Card className={isPaused ? "border-amber-500/40" : "border-primary/30"}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-primary" />
-            {state.running ? "Session live" : "Not clocked in"}
+            {isClockedIn ? (isPaused ? "Session paused" : "Session live") : "Not clocked in"}
           </CardTitle>
           <CardDescription>
-            {state.running
-              ? "Focused time is being recorded. Stay on this tab — switching away counts as idle. Stopping screen share will clock you out."
+            {isClockedIn
+              ? isPaused
+                ? "Timer is frozen. Resume when you're back."
+                : "Focused time is being recorded. Switching browser tabs does NOT count as idle."
               : "You'll be asked to pick a screen or window to share. Sharing is required."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-3 gap-4">
-            <Stat label="Session active" value={fmt(state.activeSeconds)} icon={Clock} />
-            <Stat label="Session idle" value={fmt(state.idleSeconds)} icon={Coffee} />
-            <Stat label="Tab blurs" value={state.blurCount.toString()} icon={Activity} />
+            <Stat label="Elapsed (this session)" value={formatClock(elapsedSec)} icon={Clock} />
+            <Stat label="Active (this session)" value={formatClock(activeSeconds)} icon={Clock} />
+            <Stat label="Active today" value={formatDuration(todayActive)} icon={Coffee} />
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Badge variant={state.screenReady ? "default" : "outline"}>
+            <Badge variant={screenReady ? "default" : "outline"}>
               <Monitor className="h-3 w-3 mr-1" />
-              Screen {state.screenReady ? "sharing" : "off"}
+              Screen {screenReady ? "sharing" : "off"}
             </Badge>
-            {state.lastSnapshotAt && (
+            {lastSnapshotAt && (
               <Badge variant="outline">
-                Last snapshot {Math.round((Date.now() - state.lastSnapshotAt) / 1000)}s ago
+                Last snapshot {formatDuration(Math.round((Date.now() - lastSnapshotAt) / 1000))} ago
               </Badge>
             )}
+            <Badge variant="outline">Snapshots today: {snapCount}</Badge>
           </div>
 
-          <div className="flex gap-2">
-            {!state.running ? (
-              <Button onClick={() => start()} className="gap-2">
-                <Play className="h-4 w-4" /> Clock in (webcam + screen share)
+          <div className="flex flex-wrap gap-2">
+            {!isClockedIn ? (
+              <Button onClick={handleClockIn} disabled={isClockingIn} className="gap-2">
+                {isClockingIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Clock in (screen share)
               </Button>
             ) : (
-              <Button onClick={stop} variant="destructive" className="gap-2">
-                <Square className="h-4 w-4" /> Clock out
-              </Button>
+              <>
+                {isPaused ? (
+                  <Button onClick={resume} disabled={isPausing} className="gap-2">
+                    {isPausing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+                    Resume
+                  </Button>
+                ) : (
+                  <Button onClick={pause} disabled={isPausing} variant="secondary" className="gap-2">
+                    {isPausing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
+                    Pause
+                  </Button>
+                )}
+                <Button
+                  onClick={handleClockOut}
+                  disabled={isClockingOut}
+                  variant="destructive"
+                  className="gap-2"
+                >
+                  {isClockingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                  Clock out
+                </Button>
+              </>
             )}
           </div>
-          {!state.running && (
+          {!isClockedIn && (
             <p className="text-xs text-muted-foreground">
-              You'll be asked for camera access, then to pick a screen/window to share. Both are required — sessions stop if either is denied or the screen share ends.
+              You'll be asked to pick a screen/window. Stopping the share will clock you out. Idle
+              warning fires after 3 minutes of in-tab inactivity; auto clock-out 60 seconds later.
             </p>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Today</CardTitle>
-          <CardDescription>Your focused minutes across all sessions today.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-4">
-            <Stat label="Active today" value={fmt(todayActive)} icon={Clock} />
-            <Stat label="Idle today" value={fmt(todayIdle)} icon={Coffee} />
-            <Stat label="Snapshots" value={snapCount.toString()} icon={Monitor} />
-          </div>
         </CardContent>
       </Card>
 

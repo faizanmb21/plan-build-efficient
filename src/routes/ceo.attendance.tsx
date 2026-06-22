@@ -19,11 +19,10 @@ interface FranchiseRollup {
   live_now: number;
 }
 
-function fmt(sec: number) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  return `${h}h ${m}m`;
-}
+import { formatDuration } from "@/lib/format-duration";
+
+const LIVE_STALE_MS = 10 * 60 * 1000;
+const fmt = formatDuration;
 
 function CeoAttendancePage() {
   const [loading, setLoading] = React.useState(true);
@@ -41,7 +40,7 @@ function CeoAttendancePage() {
       supabase.from("profiles").select("id, franchise_id"),
       supabase
         .from("study_sessions")
-        .select("user_id, active_seconds, started_at, ended_at")
+        .select("user_id, active_seconds, started_at, ended_at, status, last_heartbeat_at")
         .gte("started_at", weekStart.toISOString()),
     ]);
 
@@ -71,7 +70,9 @@ function CeoAttendancePage() {
       const startedToday = new Date(s.started_at) >= dayStart;
       if (startedToday) row.active_today += s.active_seconds ?? 0;
       row.active_week += s.active_seconds ?? 0;
-      if (!s.ended_at) row.live_now += 1;
+      const lh = (s as any).last_heartbeat_at ?? s.started_at;
+      const fresh = lh ? Date.now() - new Date(lh).getTime() < LIVE_STALE_MS : false;
+      if (!s.ended_at && (s as any).status !== "completed" && fresh) row.live_now += 1;
     }
     setRows(Array.from(acc.values()).sort((a, b) => b.active_today - a.active_today));
     setLoading(false);

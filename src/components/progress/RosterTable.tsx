@@ -18,6 +18,7 @@ import {
 import { Download, RefreshCw, Search } from "lucide-react";
 import { CompletionBar } from "./CompletionBar";
 import { StatusBadge } from "./StatusBadge";
+import { formatDuration } from "@/lib/format-duration";
 import {
   fetchRoster,
   type RosterRow,
@@ -239,9 +240,9 @@ export function RosterTable({ scope, detailRoutePrefix }: Props) {
                     <td className="py-2 pr-4"><CompletionBar value={r.completionPct} /></td>
                     <td className="py-2 pr-4 text-right tabular-nums">
                       <span className={r.hoursThisWeek >= r.targetHoursWeek ? "text-emerald-300" : r.hoursThisWeek >= r.targetHoursWeek * 0.7 ? "text-amber-300" : "text-rose-300"}>
-                        {r.hoursThisWeek.toFixed(1)}h
+                        {formatDuration(r.hoursThisWeek * 3600)}
                       </span>
-                      <span className="text-muted-foreground"> / {r.targetHoursWeek.toFixed(1)}h</span>
+                      <span className="text-muted-foreground"> / {formatDuration(r.targetHoursWeek * 3600)}</span>
                     </td>
 
                     <td className="py-2 pr-4 text-right tabular-nums">{r.attendancePct14d}%</td>

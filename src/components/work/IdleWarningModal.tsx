@@ -11,7 +11,7 @@ import {
 import { useWorkSession } from "@/hooks/use-work-session";
 import { Coffee } from "lucide-react";
 
-const GRACE_SEC = 30;
+const GRACE_SEC = 60;
 
 export function IdleWarningModal() {
   const { idleWarning, dismissIdleWarning } = useWorkSession();
