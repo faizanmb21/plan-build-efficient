@@ -142,11 +142,11 @@ export function MemberDetailView({ userId }: Props) {
         <Kpi label="Completion" value={`${k.completionPct}%`} />
         <Kpi
           label="Hours (7d)"
-          value={`${k.hoursThisWeek.toFixed(1)}h`}
-          subtitle={`target ${data.targetHoursWeek.toFixed(1)}h`}
+          value={formatDuration(k.hoursThisWeek * 3600)}
+          subtitle={`target ${formatDuration(data.targetHoursWeek * 3600)}`}
           valueClass={hoursColor}
         />
-        <Kpi label="Hours (all)" value={`${k.hoursAllTime.toFixed(1)}h`} />
+        <Kpi label="Hours (all)" value={formatDuration(k.hoursAllTime * 3600)} />
         <Kpi label="Attendance" value={`${k.attendancePct14d}%`} />
         <Kpi label="Avg grade" value={k.avgGrade != null ? `${k.avgGrade}` : "—"} />
         <Kpi label="Pending QA" value={`${k.pendingQa}`} />
