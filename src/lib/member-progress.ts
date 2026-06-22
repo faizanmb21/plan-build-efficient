@@ -139,7 +139,7 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
       .in("user_id", userIds),
     supabase
       .from("project_submissions")
-      .select("user_id, status")
+      .select("user_id, status, grade")
       .in("user_id", userIds),
     supabase
       .from("assignments")
@@ -161,7 +161,8 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
     sessionsByUser.set(s.user_id, arr);
   }
 
-  // Avg grade & pending
+  // Avg grade & pending — combine lesson + project submissions so project
+  // grades show up in the roster's Avg Grade column.
   const gradeSum = new Map<string, { sum: number; n: number }>();
   const pendingLessonByUser = new Map<string, number>();
   for (const s of submissionsRes.data ?? []) {
@@ -178,6 +179,11 @@ export async function fetchRoster(_scope: RosterScope): Promise<RosterRow[]> {
   for (const s of projectSubsRes.data ?? []) {
     if (s.status === "pending") {
       pendingProjectByUser.set(s.user_id, (pendingProjectByUser.get(s.user_id) ?? 0) + 1);
+    } else if (s.grade != null) {
+      const cur = gradeSum.get(s.user_id) ?? { sum: 0, n: 0 };
+      cur.sum += s.grade;
+      cur.n += 1;
+      gradeSum.set(s.user_id, cur);
     }
   }
 
@@ -302,7 +308,7 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
       .eq("user_id", userId),
     supabase
       .from("project_submissions")
-      .select("status")
+      .select("status, grade")
       .eq("user_id", userId),
     supabase
       .from("assignments")
@@ -338,7 +344,13 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
     }
   }
   let pendingProj = 0;
-  for (const s of projectSubsRes.data ?? []) if (s.status === "pending") pendingProj++;
+  for (const s of projectSubsRes.data ?? []) {
+    if (s.status === "pending") pendingProj++;
+    else if (s.grade != null) {
+      gSum += s.grade;
+      gN += 1;
+    }
+  }
   const pending = pendingLesson + pendingProj;
   const avgGrade = gN > 0 ? Math.round(gSum / gN) : null;
 

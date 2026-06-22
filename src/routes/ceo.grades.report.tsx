@@ -2,6 +2,7 @@ import * as React from "react";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { aggregateGrades, formatRelative, type GradedRow } from "@/lib/grade-utils";
+import { fetchAllGradedRowsForUser } from "@/lib/all-grades";
 import { RoleGuard } from "@/components/RoleGuard";
 import { Loader2 } from "lucide-react";
 
@@ -32,42 +33,65 @@ function ReportPage() {
     if (!member) return;
     (async () => {
       setLoading(true);
-      const [{ data: profile }, { data: subs }] = await Promise.all([
+      const [{ data: profile }, subs] = await Promise.all([
         supabase
           .from("profiles")
           .select("id,full_name,franchise_id,franchises(name)")
           .eq("id", member)
           .maybeSingle(),
-        supabase
-          .from("submissions")
-          .select(
-            "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-          )
-          .eq("user_id", member)
-          .order("reviewed_at", { ascending: false, nullsFirst: false }),
+        fetchAllGradedRowsForUser(member),
       ]);
+      subs.sort((a, b) => {
+        const ta = a.reviewed_at ? new Date(a.reviewed_at).getTime() : 0;
+        const tb = b.reviewed_at ? new Date(b.reviewed_at).getTime() : 0;
+        return tb - ta;
+      });
 
-      const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
-      const { data: lessons } = lessonIds.length
-        ? await supabase
-            .from("lessons")
-            .select("id,title,sections(courses(title))")
-            .in("id", lessonIds)
-        : { data: [] as unknown[] };
+      const lessonIds = Array.from(
+        new Set(subs.map((s) => s.lesson_id).filter((id): id is string => !!id)),
+      );
+      const projectIds = Array.from(
+        new Set(subs.map((s) => s.project_id).filter((id): id is string => !!id)),
+      );
+      const [{ data: lessons }, { data: projects }] = await Promise.all([
+        lessonIds.length
+          ? supabase
+              .from("lessons")
+              .select("id,title,sections(courses(title))")
+              .in("id", lessonIds)
+          : Promise.resolve({ data: [] as unknown[] }),
+        projectIds.length
+          ? supabase.from("projects").select("id,title").in("id", projectIds)
+          : Promise.resolve({ data: [] as unknown[] }),
+      ]);
 
       type LS = { id: string; title: string; sections: { courses: { title: string } | null } | null };
       const lm = new Map<string, LS>();
       (lessons as LS[] | null | undefined)?.forEach((l) => lm.set(l.id, l));
+      const pm = new Map<string, string>();
+      (projects as { id: string; title: string }[] | null | undefined)?.forEach((p) =>
+        pm.set(p.id, p.title),
+      );
 
       setName((profile as { full_name?: string | null } | null)?.full_name ?? "Member");
       const fr = (profile as { franchises?: { name?: string } | null } | null)?.franchises;
       setFranchise(fr?.name ?? "");
       setRows(
-        (subs ?? []).map((s) => ({
-          ...s,
-          lesson_title: lm.get(s.lesson_id)?.title ?? "Lesson",
-          course_title: lm.get(s.lesson_id)?.sections?.courses?.title ?? "—",
-        })),
+        subs.map((s) => {
+          if (s.source === "project") {
+            return {
+              ...s,
+              lesson_title: (s.project_id && pm.get(s.project_id)) ?? "Project",
+              course_title: "Projects",
+            };
+          }
+          return {
+            ...s,
+            lesson_title: (s.lesson_id && lm.get(s.lesson_id)?.title) ?? "Lesson",
+            course_title:
+              (s.lesson_id && lm.get(s.lesson_id)?.sections?.courses?.title) ?? "—",
+          };
+        }),
       );
       setLoading(false);
 

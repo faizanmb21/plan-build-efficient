@@ -12,7 +12,12 @@ export const LETTER_TO_PERCENT: Record<LetterGrade, number> = {
 export interface GradedRow {
   id: string;
   user_id: string;
-  lesson_id: string;
+  /** Lesson submissions have this; project submissions have null. */
+  lesson_id: string | null;
+  /** Project submissions have this; lesson submissions have null. */
+  project_id?: string | null;
+  /** Discriminator so callers can split lesson vs project rows. */
+  source?: "lesson" | "project";
   status: "pending" | "approved" | "revision";
   letter_grade: string | null;
   grade: number | null;

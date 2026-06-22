@@ -45,6 +45,7 @@ import {
 import { combineAggregates } from "@/lib/grade-summary";
 import { computeInchargeKpis, computeMemberRisk } from "@/lib/progress-signals";
 import { fetchCompletionSummary, fetchOverdueCounts } from "@/lib/completion-summary";
+import { fetchAllGradedRowsVisible } from "@/lib/all-grades";
 
 export const Route = createFileRoute("/ceo/")({
   component: CeoDashboard,
@@ -116,7 +117,7 @@ interface OrgPerformance {
 }
 
 export async function fetchOrgPerformance(): Promise<OrgPerformance> {
-  const [{ data: franchises }, { data: profiles }, { data: roles }, { data: subs }] =
+  const [{ data: franchises }, { data: profiles }, { data: roles }, allGradedRows] =
     await Promise.all([
       supabase
         .from("franchises")
@@ -125,11 +126,7 @@ export async function fetchOrgPerformance(): Promise<OrgPerformance> {
         .order("name"),
       supabase.from("profiles").select("id,full_name,franchise_id"),
       supabase.from("user_roles").select("user_id,role,franchise_id"),
-      supabase
-        .from("submissions")
-        .select(
-          "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-        ),
+      fetchAllGradedRowsVisible(),
     ]);
 
   const memberSet = new Set<string>();
@@ -141,7 +138,7 @@ export async function fetchOrgPerformance(): Promise<OrgPerformance> {
   }
 
   const memberIds = Array.from(memberSet);
-  const allRows = (subs ?? []) as GradedRow[];
+  const allRows = allGradedRows;
 
   // Per-member submission rollups
   const subsByUser = new Map<string, GradedRow[]>();
@@ -225,7 +222,11 @@ export async function fetchOrgPerformance(): Promise<OrgPerformance> {
   // Course rollups: enrolled, completed, avg completion + grade aggregate
   // Need lesson→course map for grade aggregation by course
   const lessonIds = Array.from(
-    new Set(allRows.filter((r) => r.letter_grade).map((r) => r.lesson_id)),
+    new Set(
+      allRows
+        .filter((r) => r.letter_grade && r.lesson_id)
+        .map((r) => r.lesson_id as string),
+    ),
   );
   const { data: lessons } = lessonIds.length
     ? await supabase
@@ -243,6 +244,7 @@ export async function fetchOrgPerformance(): Promise<OrgPerformance> {
   const rowsByCourse = new Map<string, GradedRow[]>();
   for (const r of allRows) {
     if (!memberSet.has(r.user_id)) continue;
+    if (!r.lesson_id) continue; // project rows have no course mapping
     const cid = lessonToCourse.get(r.lesson_id);
     if (!cid) continue;
     const arr = rowsByCourse.get(cid) ?? [];

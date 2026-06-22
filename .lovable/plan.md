@@ -1,37 +1,51 @@
-# Project assignment fixes
+## Root cause
 
-## BUG 1 — Members can't reliably see assigned projects
+Verified Rumesa's grade lives in `project_submissions` (status=`approved`, grade=`85`, letter_grade=`A`). The CEO dashboard's grade aggregation reads **only the `submissions` table** (lesson submissions). Project grades — stored in the structurally identical `project_submissions` table — are completely excluded from every CEO grade view.
 
-Root cause is NOT a missing assignment or broken RLS (verified: data + policies are correct). It's two surface bugs:
+Evidence (all use `aggregateGrades(...)` over rows fetched from `submissions` only):
+- `src/routes/ceo.index.tsx` — `fetchOrgPerformance` (KPI "Avg Grade Score", franchise donut, per-member rows in the strip, attention table, incharge scorecard, course rollups).
+- `src/lib/grade-summary.ts` — `fetchUserAggregates` / `fetchMemberAggregate`.
+- `src/routes/ceo.grades.tsx` and `src/routes/ceo.grades.report.tsx`.
+- `src/components/MemberGradeReport.tsx`.
+- `src/lib/member-progress.ts` — `RosterTable` "Avg Grade" column reads `submissions.grade` only.
 
-### Fix 1a — Scope project list to the viewed member during CEO preview
-In `src/routes/member.projects.tsx`:
-- Pull `viewAsMemberId` from `useAuth()`. When set (CEO previewing), filter the projects query with an explicit `EXISTS`-equivalent via `.in("id", assignedProjectIds)` — i.e. first query `project_assignments` filtered by `user_id = user.id` (which is the overridden id), then load only those projects. This makes the preview match what the real member sees instead of dumping every project the CEO can read.
-- Real members are unaffected (RLS already scopes them); we apply the explicit filter unconditionally for safety, since it produces the same result either way.
+Schemas confirmed identical (`status`, `letter_grade`, `grade`, `feedback`, `reviewed_*`, `created_at`), so the fix is to fetch both tables and merge before aggregating. Projects have no `course_id`, so per-course rollups stay lesson-only; everything else (org / franchise / member / letter-distribution / averages) merges both.
 
-### Fix 1b — Auto-refresh when a project is assigned
-In `src/routes/member.projects.tsx`:
-- Add a Supabase realtime subscription on `project_assignments` filtered to `user_id=eq.<me>`; on INSERT/DELETE call `load()`.
-- Also re-run `load()` on `window` `focus` and on `document.visibilitychange → visible`, so tabs opened before assignment catch up.
+## Plan
 
-## BUG 2 — Unified CEO project assignments view
+### 1. Broaden the shared `GradedRow` type
+`src/lib/grade-utils.ts`:
+- Make `lesson_id: string | null` and add optional `project_id: string | null`.
+- No change to `aggregateGrades` logic — it already only reads `status` / `letter_grade` / `reviewed_at`.
 
-In `src/routes/ceo.projects.tsx`:
-- Keep the existing cards grid, but add an "All assignments" table above/below it with one row per `project_assignments` entry:
-  - Project title
-  - Member name
-  - Franchise (resolved from member's `profiles.franchise_id`)
-  - Assigned by (resolve `project_assignments.assigned_by` → profile name + role badge: CEO / Incharge / QA)
-  - Deadline
-  - Submission status for that member×project (Not submitted / Pending / Graded / Revision) + letter grade if any
-- Extend the `AssignRow` type and `.select(...)` to include `assigned_by, created_at`.
-- Fetch the assigner profiles in one batch (`profiles` `.in("id", uniqueAssignerIds)`) and their roles (`user_roles` `.in("user_id", ...)`) so we can show the role badge.
-- Add a simple text filter (project/member/franchise) and a status filter dropdown.
+### 2. Add one shared fetch helper
+New `src/lib/all-grades.ts` exporting `fetchAllGradedRows(userIds: string[]): Promise<GradedRow[]>` which:
+- Fetches `submissions` and `project_submissions` in parallel with the same column projection.
+- Normalizes each into `GradedRow` (lesson rows get `project_id: null`, project rows get `lesson_id: null`).
+- Returns the concatenated array.
 
-QA-assigned projects: QA currently has no INSERT path for `project_assignments` and no UI to create projects, so there's nothing to surface yet. The new table will automatically include QA-assigned rows if/when that capability is added — no extra wiring needed. I will NOT add QA project-assignment capability in this change (out of scope; user only asked to surface them if they exist).
+Also export `fetchAllGradedRowsForMember(userId)` for the single-member views.
 
-## Files touched
-- `src/routes/member.projects.tsx` — preview scoping, realtime + focus refetch.
-- `src/routes/ceo.projects.tsx` — unified assignments table, assigner resolution.
+### 3. Wire it into every aggregation site
 
-No DB migrations, no policy changes.
+| File | Change |
+|---|---|
+| `src/routes/ceo.index.tsx` (`fetchOrgPerformance`) | Replace the single `submissions` fetch with `fetchAllGradedRows(memberIds-or-all)`. Build `subsByUser` / `aggByUser` from combined rows. `pendingTotal` and `oldestPendingDays` count both. Per-course `rowsByCourse` still uses only rows with `lesson_id` (projects have no course). Incharge `reviewedByThem` / `pendingHere` use combined rows. |
+| `src/lib/grade-summary.ts` | `fetchUserAggregates` and `fetchMemberAggregate` use the new helper instead of `.from("submissions")`. |
+| `src/routes/ceo.grades.tsx` | Replace `submissions` query with the helper; keep existing per-franchise / per-member grouping. The "Members graded" stat counts distinct users from combined rows. |
+| `src/routes/ceo.grades.report.tsx` | Same swap; report table now lists project rows too (label "Project" vs "Lesson" via the source flag — minor UI tweak to the title cell only if a lookup is cheap; otherwise leave unlabeled to keep this change minimal). |
+| `src/components/MemberGradeReport.tsx` | Same swap; per-course grouping continues to use `lesson_id` only, and we add a separate "Projects" group built from the project rows so they're visible in the breakdown. |
+| `src/lib/member-progress.ts` | `fetchRoster` and `fetchMemberDetail` already fetch `project_submissions` for `pendingQa`. Extend the existing loops to also accumulate `grade` from project rows into `gradeSum` / `courseGrade`-equivalent — so the roster "Avg Grade" column and member detail KPI include project grades. |
+
+### 4. Out of scope (intentionally not touched)
+- Per-course rollups (`courses` table on the dashboard) stay lesson-only because projects have no `course_id`.
+- Incharge / QA / member-side grade views — only the user-reported CEO surfaces are in scope. (If you want incharge/member views updated too, say so and I'll extend.)
+
+### 5. Verification
+After the change, re-query the dashboard data layer mentally against Rumesa's row: combined fetch returns her project row (`letter_grade='A'`, grade=85), so:
+- KPI "Avg Grade Score" includes 85.
+- Her franchise's donut + her member row both show an A bucket count of ≥1.
+- A+/A/B/Redo distribution shows the A.
+- `ceo.grades` table lists her project grade and `MemberGradeReport` for Rumesa shows the project row.
+
+No schema or RLS changes needed — `project_submissions` already has CEO-readable RLS (it's used in `ceo.submissions.tsx` today).

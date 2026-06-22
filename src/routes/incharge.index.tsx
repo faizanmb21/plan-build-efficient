@@ -185,7 +185,7 @@ async function fetchInchargeData(
 
   // Pending lessons → titles + course titles, for the queue
   const pendingRows = allRows.filter((r) => r.status === "pending");
-  const lessonIdsForQueue = Array.from(new Set(pendingRows.map((r) => r.lesson_id)));
+  const lessonIdsForQueue = Array.from(new Set(pendingRows.map((r) => r.lesson_id).filter((id): id is string => !!id)));
   const { data: lessonsForQueue } = lessonIdsForQueue.length
     ? await supabase
         .from("lessons")
@@ -214,7 +214,7 @@ async function fetchInchargeData(
 
   const queue: QueueRow[] = pendingRows
     .map((r) => {
-      const info = lessonInfoMap.get(r.lesson_id);
+      const info = r.lesson_id ? lessonInfoMap.get(r.lesson_id) : undefined;
       const days = Math.floor((Date.now() - new Date(r.created_at).getTime()) / DAY_MS);
       const member = memberList.find((m) => m.id === r.user_id);
       return {
