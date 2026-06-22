@@ -35,8 +35,10 @@ interface Props {
   userId: string;
 }
 
+import { formatDuration } from "@/lib/format-duration";
+
 function fmtHours(sec: number) {
-  return `${(sec / 3600).toFixed(1)}h`;
+  return formatDuration(sec);
 }
 
 function fmtDateTime(iso: string) {
@@ -253,7 +255,11 @@ export function MemberDetailView({ userId }: Props) {
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="font-medium">
                       {fmtDateTime(s.startedAt)}
-                      {s.endedAt ? ` → ${fmtDateTime(s.endedAt)}` : " · live"}
+                      {s.endedAt
+                        ? ` → ${fmtDateTime(s.endedAt)}`
+                        : Date.now() - new Date(s.startedAt).getTime() < 10 * 60 * 1000
+                          ? " · live"
+                          : " · ended (no clock-out)"}
                     </span>
                     <div className="flex gap-1.5">
                       <Badge variant="outline" className="font-mono">
