@@ -54,6 +54,7 @@ import {
   ClipboardList,
   Calendar,
   Users,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { letterColorClass } from "@/lib/grade-utils";
@@ -122,6 +123,7 @@ function CeoProjectsPage() {
   const [loading, setLoading] = React.useState(true);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [openProject, setOpenProject] = React.useState<ProjectRow | null>(null);
+  const [editProject, setEditProject] = React.useState<ProjectRow | null>(null);
   const [reviewing, setReviewing] = React.useState<SubmissionRow | null>(null);
   const [filterText, setFilterText] = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState<"all" | "not_submitted" | "pending" | "graded" | "revision">("all");
@@ -304,9 +306,20 @@ function CeoProjectsPage() {
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base">{p.title}</CardTitle>
-                    <Badge variant="outline" className="shrink-0">
-                      {p.franchise_id ? franchiseMap.get(p.franchise_id)?.name ?? "—" : "CEO-wide"}
-                    </Badge>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Badge variant="outline">
+                        {p.franchise_id ? franchiseMap.get(p.franchise_id)?.name ?? "—" : "CEO-wide"}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => { e.stopPropagation(); setEditProject(p); }}
+                        title="Edit project"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                   {p.description && (
                     <CardDescription className="line-clamp-2">{p.description}</CardDescription>
@@ -390,6 +403,16 @@ function CeoProjectsPage() {
           setCreateOpen(false);
           loadAll();
         }}
+      />
+
+      <CeoEditProjectDialog
+        project={editProject}
+        currentAssigns={assigns.filter((a) => a.project_id === editProject?.id)}
+        members={members}
+        franchises={franchises}
+        userId={user?.id ?? ""}
+        onClose={() => setEditProject(null)}
+        onSaved={() => { setEditProject(null); loadAll(); }}
       />
 
       <Dialog open={!!openProject} onOpenChange={(v) => !v && setOpenProject(null)}>
@@ -715,6 +738,265 @@ function CeoCreateProjectDialog({
           <Button onClick={handleCreate} disabled={submitting} className="gap-2">
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             Create & assign
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------- CEO Edit dialog ----------------
+
+function CeoEditProjectDialog({
+  project,
+  currentAssigns,
+  members,
+  franchises,
+  userId,
+  onClose,
+  onSaved,
+}: {
+  project: ProjectRow | null;
+  currentAssigns: AssignRow[];
+  members: Member[];
+  franchises: Franchise[];
+  userId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [deadline, setDeadline] = React.useState("");
+  const [priority, setPriority] = React.useState<"mandatory" | "recommended">("mandatory");
+  const [scope, setScope] = React.useState<Scope>("members");
+  const [memberIds, setMemberIds] = React.useState<string[]>([]);
+  const [franchiseId, setFranchiseId] = React.useState<string>("");
+  const [memberPopoverOpen, setMemberPopoverOpen] = React.useState(false);
+  const [attachment, setAttachment] = React.useState<File | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const memberMap = React.useMemo(() => {
+    const m = new Map<string, Member>();
+    members.forEach((x) => m.set(x.id, x));
+    return m;
+  }, [members]);
+
+  React.useEffect(() => {
+    if (!project) return;
+    setTitle(project.title);
+    setDescription(project.description ?? "");
+    setDeadline(project.deadline ? project.deadline.slice(0, 10) : "");
+    setPriority((currentAssigns[0]?.priority as "mandatory" | "recommended") ?? "mandatory");
+    const ids = currentAssigns.map((a) => a.user_id);
+    setMemberIds(ids);
+    setScope("members");
+    setFranchiseId("");
+    setAttachment(null);
+  }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggleMember(id: string) {
+    setMemberIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  }
+
+  async function handleSave() {
+    if (!project) return;
+    if (!title.trim()) return toast.error("Title required");
+
+    let targets: string[] = [];
+    if (scope === "members") {
+      if (memberIds.length === 0) return toast.error("Pick at least one member");
+      targets = memberIds;
+    } else if (scope === "franchise") {
+      if (!franchiseId) return toast.error("Pick a franchise");
+      targets = members.filter((m) => m.franchise_id === franchiseId).map((m) => m.id);
+      if (targets.length === 0) return toast.error("That franchise has no members");
+    } else {
+      targets = members.filter((m) => !!m.franchise_id).map((m) => m.id);
+      if (targets.length === 0) return toast.error("No members exist");
+    }
+
+    setSubmitting(true);
+    try {
+      let attachment_path = project.attachment_path;
+      if (attachment) {
+        const ext = attachment.name.split(".").pop() || "bin";
+        const path = `project-briefs/${userId}/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("submissions")
+          .upload(path, attachment, { upsert: false, contentType: attachment.type });
+        if (upErr) throw upErr;
+        attachment_path = path;
+      }
+
+      const { error: updErr } = await supabase
+        .from("projects")
+        .update({
+          title: title.trim(),
+          description: description.trim() || null,
+          attachment_path,
+          deadline: deadline ? new Date(deadline).toISOString() : null,
+        })
+        .eq("id", project.id);
+      if (updErr) throw updErr;
+
+      const existingIds = new Set(currentAssigns.map((a) => a.user_id));
+      const newIds = new Set(targets);
+      const toAdd = targets.filter((id) => !existingIds.has(id));
+      const toRemove = currentAssigns.filter((a) => !newIds.has(a.user_id)).map((a) => a.id);
+
+      if (toRemove.length > 0) {
+        const { error } = await supabase.from("project_assignments").delete().in("id", toRemove);
+        if (error) throw error;
+      }
+      if (toAdd.length > 0) {
+        const { error } = await supabase.from("project_assignments").insert(
+          toAdd.map((uid) => ({ project_id: project.id, user_id: uid, priority, assigned_by: userId })),
+        );
+        if (error) throw error;
+      }
+      const toKeep = currentAssigns.filter((a) => newIds.has(a.user_id)).map((a) => a.id);
+      if (toKeep.length > 0) {
+        await supabase.from("project_assignments").update({ priority }).in("id", toKeep);
+      }
+
+      toast.success("Project updated");
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to save project");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={!!project} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit project</DialogTitle>
+          <DialogDescription>Changes apply immediately to all assigned members.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Title</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Brief</Label>
+            <Textarea rows={5} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={priority} onValueChange={(v) => setPriority(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mandatory">Mandatory</SelectItem>
+                  <SelectItem value="recommended">Recommended</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Deadline (optional)</Label>
+              <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Replace reference attachment (optional)</Label>
+            {project?.attachment_path && !attachment && (
+              <p className="text-xs text-muted-foreground">Current attachment kept unless you pick a new file.</p>
+            )}
+            <Input type="file" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Assign to</Label>
+            <RadioGroup value={scope} onValueChange={(v) => setScope(v as Scope)} className="grid gap-2 md:grid-cols-3">
+              <label className={cn("hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3", scope === "members" && "border-primary")}>
+                <RadioGroupItem value="members" /><span>Selected members</span>
+              </label>
+              <label className={cn("hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3", scope === "franchise" && "border-primary")}>
+                <RadioGroupItem value="franchise" /><span>Whole franchise</span>
+              </label>
+              <label className={cn("hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md border p-3", scope === "everyone" && "border-primary")}>
+                <RadioGroupItem value="everyone" /><span>Everyone</span>
+              </label>
+            </RadioGroup>
+          </div>
+
+          {scope === "franchise" && (
+            <div className="space-y-2">
+              <Label>Franchise</Label>
+              <Select value={franchiseId} onValueChange={setFranchiseId}>
+                <SelectTrigger><SelectValue placeholder="Pick a franchise" /></SelectTrigger>
+                <SelectContent>
+                  {franchises.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {scope === "members" && (
+            <div className="space-y-2">
+              <Label>Member(s)</Label>
+              <Popover open={memberPopoverOpen} onOpenChange={setMemberPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                    <span className="truncate">
+                      {memberIds.length === 0 ? "Pick member(s)" : `${memberIds.length} selected`}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search members…" />
+                    <CommandList>
+                      <CommandEmpty>No members found.</CommandEmpty>
+                      <CommandGroup>
+                        {members.filter((m) => !!m.franchise_id).map((m) => {
+                          const checked = memberIds.includes(m.id);
+                          const name = m.full_name || "(unnamed)";
+                          return (
+                            <CommandItem key={m.id} value={name} onSelect={() => toggleMember(m.id)} className="flex items-center gap-2">
+                              <Checkbox checked={checked} className="pointer-events-none" />
+                              <span className="flex-1 truncate">{name}</span>
+                              {checked && <Check className="h-4 w-4 opacity-70" />}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {memberIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {memberIds.map((id) => {
+                    const m = memberMap.get(id);
+                    if (!m) return null;
+                    return (
+                      <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                        <span className="max-w-[140px] truncate">{m.full_name || "(unnamed)"}</span>
+                        <button type="button" onClick={() => toggleMember(id)} className="hover:bg-background/40 rounded-full p-0.5">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={submitting} className="gap-2">
+            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            Save changes
           </Button>
         </DialogFooter>
       </DialogContent>

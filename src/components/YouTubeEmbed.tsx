@@ -5,6 +5,7 @@ import { ExternalLink, AlertCircle, Youtube } from "lucide-react";
 interface Props {
   embedUrl: string;
   originalUrl: string;
+  onPlay?: () => void;
 }
 
 // Loads the YouTube IFrame Player API exactly once.
@@ -41,10 +42,12 @@ function extractVideoId(embedUrl: string): string | null {
   return m ? m[1] : null;
 }
 
-export function YouTubeEmbed({ embedUrl, originalUrl }: Props) {
+export function YouTubeEmbed({ embedUrl, originalUrl, onPlay }: Props) {
   const videoId = React.useMemo(() => extractVideoId(embedUrl), [embedUrl]);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [blocked, setBlocked] = React.useState(false);
+  const onPlayRef = React.useRef(onPlay);
+  onPlayRef.current = onPlay;
 
   React.useEffect(() => {
     if (!videoId) return;
@@ -59,6 +62,10 @@ export function YouTubeEmbed({ embedUrl, originalUrl }: Props) {
         videoId,
         playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
         events: {
+          onStateChange: (e: { data: number }) => {
+            // YT.PlayerState.PLAYING = 1
+            if (e.data === 1) onPlayRef.current?.();
+          },
           onError: (e: { data: number }) => {
             // 101 / 150 = embedding disabled by owner
             // 100 = video not found / private

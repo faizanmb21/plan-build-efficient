@@ -55,6 +55,7 @@ import {
   Calendar,
   Users,
   ExternalLink,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { letterColorClass } from "@/lib/grade-utils";
@@ -100,6 +101,7 @@ function InchargeProjectsPage() {
   const [loading, setLoading] = React.useState(true);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [openProject, setOpenProject] = React.useState<ProjectRow | null>(null);
+  const [editProject, setEditProject] = React.useState<ProjectRow | null>(null);
 
   const memberMap = React.useMemo(() => {
     const m = new Map<string, Member>();
@@ -196,18 +198,24 @@ function InchargeProjectsPage() {
             ).length;
             const pending = pSubs.filter((s) => s.status === "pending").length;
             return (
-              <Card
-                key={p.id}
-                interactive
-                onClick={() => setOpenProject(p)}
-                className="cursor-pointer"
-              >
+              <Card key={p.id} className="cursor-pointer" interactive onClick={() => setOpenProject(p)}>
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base">{p.title}</CardTitle>
-                    {p.franchise_id === null && (
-                      <Badge variant="outline" className="shrink-0">CEO-wide</Badge>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {p.franchise_id === null && (
+                        <Badge variant="outline">CEO-wide</Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => { e.stopPropagation(); setEditProject(p); }}
+                        title="Edit project"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                   {p.description && (
                     <CardDescription className="line-clamp-2">
@@ -258,6 +266,15 @@ function InchargeProjectsPage() {
         reviewerId={user?.id ?? ""}
         onClose={() => setOpenProject(null)}
         onChanged={loadAll}
+      />
+
+      <EditProjectDialog
+        project={editProject}
+        currentAssigns={assigns.filter((a) => a.project_id === editProject?.id)}
+        members={members}
+        userId={user!.id}
+        onClose={() => setEditProject(null)}
+        onSaved={() => { setEditProject(null); loadAll(); }}
       />
     </div>
   );
@@ -502,6 +519,232 @@ function CreateProjectDialog({
           <Button onClick={handleCreate} disabled={submitting} className="gap-2">
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             Create & assign
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------- Edit dialog ----------------
+
+function EditProjectDialog({
+  project,
+  currentAssigns,
+  members,
+  userId,
+  onClose,
+  onSaved,
+}: {
+  project: ProjectRow | null;
+  currentAssigns: AssignRow[];
+  members: Member[];
+  userId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [deadline, setDeadline] = React.useState("");
+  const [priority, setPriority] = React.useState<"mandatory" | "recommended">("mandatory");
+  const [memberIds, setMemberIds] = React.useState<string[]>([]);
+  const [memberPopoverOpen, setMemberPopoverOpen] = React.useState(false);
+  const [attachment, setAttachment] = React.useState<File | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const memberMap = React.useMemo(() => {
+    const m = new Map<string, Member>();
+    members.forEach((x) => m.set(x.id, x));
+    return m;
+  }, [members]);
+
+  // Seed form when project changes
+  React.useEffect(() => {
+    if (!project) return;
+    setTitle(project.title);
+    setDescription(project.description ?? "");
+    setDeadline(project.deadline ? project.deadline.slice(0, 10) : "");
+    setPriority((currentAssigns[0]?.priority as "mandatory" | "recommended") ?? "mandatory");
+    setMemberIds(currentAssigns.map((a) => a.user_id));
+    setAttachment(null);
+  }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggleMember(id: string) {
+    setMemberIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  async function handleSave() {
+    if (!project) return;
+    if (!title.trim()) return toast.error("Title required");
+    if (memberIds.length === 0) return toast.error("Assign to at least one member");
+
+    setSubmitting(true);
+    try {
+      let attachment_path = project.attachment_path;
+      if (attachment) {
+        const ext = attachment.name.split(".").pop() || "bin";
+        const path = `project-briefs/${userId}/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("submissions")
+          .upload(path, attachment, { upsert: false, contentType: attachment.type });
+        if (upErr) throw upErr;
+        attachment_path = path;
+      }
+
+      const { error: updErr } = await supabase
+        .from("projects")
+        .update({
+          title: title.trim(),
+          description: description.trim() || null,
+          attachment_path,
+          deadline: deadline ? new Date(deadline).toISOString() : null,
+        })
+        .eq("id", project.id);
+      if (updErr) throw updErr;
+
+      // Diff assignments
+      const existingIds = new Set(currentAssigns.map((a) => a.user_id));
+      const newIds = new Set(memberIds);
+      const toAdd = memberIds.filter((id) => !existingIds.has(id));
+      const toRemove = currentAssigns.filter((a) => !newIds.has(a.user_id)).map((a) => a.id);
+
+      if (toRemove.length > 0) {
+        const { error } = await supabase
+          .from("project_assignments")
+          .delete()
+          .in("id", toRemove);
+        if (error) throw error;
+      }
+      if (toAdd.length > 0) {
+        const { error } = await supabase.from("project_assignments").insert(
+          toAdd.map((uid) => ({
+            project_id: project.id,
+            user_id: uid,
+            priority,
+            assigned_by: userId,
+          })),
+        );
+        if (error) throw error;
+      }
+      // Update priority on remaining assignments if it changed
+      const toKeep = currentAssigns
+        .filter((a) => newIds.has(a.user_id))
+        .map((a) => a.id);
+      if (toKeep.length > 0) {
+        await supabase
+          .from("project_assignments")
+          .update({ priority })
+          .in("id", toKeep);
+      }
+
+      toast.success("Project updated");
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to save project");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={!!project} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit project</DialogTitle>
+          <DialogDescription>Changes apply immediately to all assigned members.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Title</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Brief</Label>
+            <Textarea rows={5} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={priority} onValueChange={(v) => setPriority(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mandatory">Mandatory</SelectItem>
+                  <SelectItem value="recommended">Recommended</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Deadline (optional)</Label>
+              <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Replace reference attachment (optional)</Label>
+            {project?.attachment_path && !attachment && (
+              <p className="text-xs text-muted-foreground">Current attachment will be kept unless you pick a new file.</p>
+            )}
+            <Input type="file" onChange={(e) => setAttachment(e.target.files?.[0] ?? null)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Assigned members</Label>
+            <Popover open={memberPopoverOpen} onOpenChange={setMemberPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                  <span className="truncate">
+                    {memberIds.length === 0 ? "Pick member(s)" : `${memberIds.length} selected`}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search members…" />
+                  <CommandList>
+                    <CommandEmpty>No members found.</CommandEmpty>
+                    <CommandGroup>
+                      {members.map((m) => {
+                        const checked = memberIds.includes(m.id);
+                        const name = m.full_name || "(unnamed)";
+                        return (
+                          <CommandItem key={m.id} value={name} onSelect={() => toggleMember(m.id)} className="flex items-center gap-2">
+                            <Checkbox checked={checked} className="pointer-events-none" />
+                            <span className="flex-1 truncate">{name}</span>
+                            {checked && <Check className="h-4 w-4 opacity-70" />}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {memberIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {memberIds.map((id) => {
+                  const m = memberMap.get(id);
+                  if (!m) return null;
+                  return (
+                    <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                      <span className="max-w-[140px] truncate">{m.full_name || "(unnamed)"}</span>
+                      <button type="button" onClick={() => toggleMember(id)} className="hover:bg-background/40 rounded-full p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={submitting} className="gap-2">
+            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            Save changes
           </Button>
         </DialogFooter>
       </DialogContent>

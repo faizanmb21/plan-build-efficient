@@ -80,6 +80,7 @@ type Lesson = {
   position: number;
   content: LessonContent;
   section_id: string;
+  requires_submission: boolean;
 };
 type Section = { id: string; title: string; position: number; lessons: Lesson[] };
 type ProgressRow = {
@@ -150,7 +151,7 @@ function CoursePlayer() {
     const { data: lessons } = sectionIds.length
       ? await supabase
           .from("lessons")
-          .select("id,title,type,position,content,section_id")
+          .select("id,title,type,position,content,section_id,requires_submission")
           .in("section_id", sectionIds)
           .order("position")
       : { data: [] as Lesson[] };
@@ -489,9 +490,19 @@ function LessonView({
   onSubmissionSaved: () => void;
   userId: string;
 }) {
+  const [mediaOpened, setMediaOpened] = React.useState(false);
+
+  // Reset media-opened gate whenever the lesson changes
+  React.useEffect(() => { setMediaOpened(false); }, [lesson.id]);
+
+  const requiresSub = lesson.requires_submission;
   const hasAssignment =
     (lesson.type === "video" || lesson.type === "pdf" || lesson.type === "quiz") &&
     !!lesson.content?.assignment?.brief;
+
+  // For submission-gated lessons, PracticalSubmit tracks whether a submission exists.
+  // We lift that state here so the "Mark complete" gate can read it.
+  const [hasSubmission, setHasSubmission] = React.useState(false);
 
   return (
     <Card>
@@ -502,62 +513,94 @@ function LessonView({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {hasAssignment && !done && (
+        {requiresSub && !done && (
           <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div>
               <p className="font-medium text-foreground">
-                Assignment required to unlock the next lesson
+                Submission required to unlock the next lesson
               </p>
               <p className="text-muted-foreground">
-                Watch the video below, then upload your submission. Your incharge must
-                approve it before the next lesson opens.
+                {lesson.type === "practical"
+                  ? "Complete the practical below and upload your work. Your incharge must approve it before the next lesson opens."
+                  : "Watch the content below, then upload your practiced material. The next lesson unlocks once you've submitted."}
               </p>
             </div>
           </div>
         )}
 
-        {hasAssignment && (
-          <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
-            <p className="text-sm font-semibold">📋 Assignment submission</p>
-            <PracticalSubmit
-              lessonId={lesson.id}
-              brief={lesson.content.assignment?.brief ?? ""}
-              attachmentPath={lesson.content.assignment?.attachment_path ?? null}
-              attachmentName={lesson.content.assignment?.attachment_name ?? null}
-              userId={userId}
-              onSubmitted={onSubmissionSaved}
-            />
-          </div>
-        )}
-
+        {/* Video / PDF / Quiz content */}
         {lesson.type === "video" && (
-          <VideoPlayer path={lesson.content?.path} url={lesson.content?.url} />
+          <VideoPlayer
+            path={lesson.content?.path}
+            url={lesson.content?.url}
+            onPlay={() => setMediaOpened(true)}
+          />
         )}
-        {lesson.type === "pdf" && <PdfViewer path={lesson.content?.path} />}
+        {lesson.type === "pdf" && (
+          <PdfViewer path={lesson.content?.path} onView={() => setMediaOpened(true)} />
+        )}
         {lesson.type === "quiz" && (
           <QuizRunner
             content={{ questions: lesson.content.questions ?? [], passing_score: lesson.content.passing_score }}
-            onPass={hasAssignment ? () => {} : onComplete}
+            onPass={requiresSub ? () => {} : onComplete}
             done={done}
           />
         )}
+
+        {/* Practical type */}
         {lesson.type === "practical" && (
           <PracticalSubmit
             lessonId={lesson.id}
             brief={lesson.content?.brief}
             userId={userId}
             onSubmitted={() => {
-              onComplete();
+              setHasSubmission(true);
               onSubmissionSaved();
             }}
+            onSubmissionLoaded={(exists) => setHasSubmission(exists)}
           />
         )}
 
-        {(lesson.type === "video" || lesson.type === "pdf") && !hasAssignment && (
-          <div className="flex justify-end">
-            <Button onClick={onComplete} disabled={done} size="sm">
+        {/* Submission upload area for video/pdf/quiz lessons with requires_submission */}
+        {requiresSub && lesson.type !== "practical" && (
+          <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">📋 Upload practiced material</p>
+            <PracticalSubmit
+              lessonId={lesson.id}
+              brief={lesson.content.assignment?.brief ?? hasAssignment ? lesson.content.assignment?.brief ?? "" : ""}
+              attachmentPath={lesson.content.assignment?.attachment_path ?? null}
+              attachmentName={lesson.content.assignment?.attachment_name ?? null}
+              userId={userId}
+              onSubmitted={() => {
+                setHasSubmission(true);
+                onSubmissionSaved();
+              }}
+              onSubmissionLoaded={(exists) => setHasSubmission(exists)}
+            />
+          </div>
+        )}
+
+        {/* Mark complete button — only for non-submission lessons after media is opened */}
+        {!requiresSub && (lesson.type === "video" || lesson.type === "pdf") && (
+          <div className="flex items-center justify-end gap-2">
+            {!done && !mediaOpened && (
+              <p className="text-xs text-muted-foreground">Open the {lesson.type} above to enable completion</p>
+            )}
+            <Button onClick={onComplete} disabled={done || !mediaOpened} size="sm">
               {done ? "Completed" : "Mark as completed"}
+            </Button>
+          </div>
+        )}
+
+        {/* Practical: "Mark complete" enabled only after submission uploaded */}
+        {lesson.type === "practical" && !done && (
+          <div className="flex items-center justify-end gap-2">
+            {!hasSubmission && (
+              <p className="text-xs text-muted-foreground">Upload your work above to complete this lesson</p>
+            )}
+            <Button onClick={onComplete} disabled={!hasSubmission} size="sm">
+              Mark as completed
             </Button>
           </div>
         )}
@@ -592,7 +635,7 @@ function useSignedUrl(bucket: string, path: string | undefined) {
  * Video element that prevents fast-forwarding past the furthest point already watched.
  * Rewinding is allowed. Only works for HTMLVideoElement (uploaded files / direct .mp4).
  */
-function NoSeekVideo({ src }: { src: string }) {
+function NoSeekVideo({ src, onPlay }: { src: string; onPlay?: () => void }) {
   const ref = React.useRef<HTMLVideoElement | null>(null);
   const maxWatched = React.useRef(0);
   const seekedToast = React.useRef(0);
@@ -605,6 +648,7 @@ function NoSeekVideo({ src }: { src: string }) {
       controls
       controlsList="nodownload"
       onContextMenu={(e) => e.preventDefault()}
+      onPlay={onPlay}
       onTimeUpdate={(e) => {
         const t = e.currentTarget.currentTime;
         if (t > maxWatched.current) maxWatched.current = t;
@@ -626,7 +670,7 @@ function NoSeekVideo({ src }: { src: string }) {
   );
 }
 
-function VideoPlayer({ path, url }: { path?: string; url?: string }) {
+function VideoPlayer({ path, url, onPlay }: { path?: string; url?: string; onPlay?: () => void }) {
   const signed = useSignedUrl("course-content", path);
 
   // Prefer pasted link if present
@@ -638,38 +682,40 @@ function VideoPlayer({ path, url }: { path?: string; url?: string }) {
       );
     }
     if (parsed.provider === "direct") {
-      return <NoSeekVideo src={parsed.embedUrl} />;
+      return <NoSeekVideo src={parsed.embedUrl} onPlay={onPlay} />;
     }
     if (parsed.provider === "youtube") {
-      return <YouTubeEmbed embedUrl={parsed.embedUrl} originalUrl={parsed.originalUrl} />;
+      return <YouTubeEmbed embedUrl={parsed.embedUrl} originalUrl={parsed.originalUrl} onPlay={onPlay} />;
     }
+    // Other embed providers (Vimeo, Loom, Drive) — fire onPlay on iframe focus/click
     return (
-      <iframe
-        key={parsed.embedUrl}
-        src={parsed.embedUrl}
-        className="aspect-video w-full rounded-md border bg-black"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        title="Lesson video"
-      />
+      <div onClick={onPlay}>
+        <iframe
+          key={parsed.embedUrl}
+          src={parsed.embedUrl}
+          className="aspect-video w-full rounded-md border bg-black"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          title="Lesson video"
+        />
+      </div>
     );
-
   }
 
   if (!path) return <EmptyMedia label="No video added yet" />;
   if (!signed) return <div className="aspect-video w-full animate-pulse rounded-md bg-muted" />;
-  return <NoSeekVideo src={signed} />;
+  return <NoSeekVideo src={signed} onPlay={onPlay} />;
 }
 
-function PdfViewer({ path }: { path?: string }) {
+function PdfViewer({ path, onView }: { path?: string; onView?: () => void }) {
   const url = useSignedUrl("course-content", path);
   if (!path) return <EmptyMedia label="No PDF uploaded" />;
   if (!url) return <div className="h-[60vh] w-full animate-pulse rounded-md bg-muted" />;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" onClick={onView}>
       <iframe src={url} title="PDF" className="h-[60vh] w-full rounded-md border bg-white" />
       <Button asChild size="sm" variant="outline">
-        <a href={url} target="_blank" rel="noreferrer">
+        <a href={url} target="_blank" rel="noreferrer" onClick={onView}>
           <Download className="h-4 w-4" /> Open in new tab
         </a>
       </Button>
@@ -806,6 +852,7 @@ function PracticalSubmit({
   attachmentName,
   userId,
   onSubmitted,
+  onSubmissionLoaded,
 }: {
   lessonId: string;
   brief?: string;
@@ -813,6 +860,7 @@ function PracticalSubmit({
   attachmentName?: string | null;
   userId: string;
   onSubmitted: () => void;
+  onSubmissionLoaded?: (exists: boolean) => void;
 }) {
   const [uploading, setUploading] = React.useState(false);
   const [submission, setSubmission] = React.useState<{
@@ -837,8 +885,9 @@ function PracticalSubmit({
         .limit(1)
         .maybeSingle();
       setSubmission(data ?? null);
+      onSubmissionLoaded?.(!!data);
     })();
-  }, [lessonId, userId]);
+  }, [lessonId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!attachmentPath) {
