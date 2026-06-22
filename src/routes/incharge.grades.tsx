@@ -90,7 +90,7 @@ function InchargeGradesHub() {
             .order("reviewed_at", { ascending: false, nullsFirst: false })
         : { data: [] as GradedRow[] };
 
-      const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id)));
+      const lessonIds = Array.from(new Set((subs ?? []).map((s) => s.lesson_id).filter((id): id is string => !!id)));
       const { data: lessons } = lessonIds.length
         ? await supabase
             .from("lessons")
@@ -145,7 +145,7 @@ function InchargeGradesHub() {
       { course_title: string; rows: GradedRow[]; userIds: Set<string> }
     >();
     for (const s of submissions) {
-      const l = lessonMap.get(s.lesson_id);
+      const l = s.lesson_id ? lessonMap.get(s.lesson_id) : undefined;
       const cid = l?.sections?.courses?.id;
       const ctitle = l?.sections?.courses?.title;
       if (!cid || !ctitle) continue;

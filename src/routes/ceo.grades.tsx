@@ -174,7 +174,7 @@ function GradesHub() {
   const courseRows = React.useMemo(() => {
     const map = new Map<string, { course_title: string; rows: GradedRow[] }>();
     for (const s of submissions) {
-      const l = lessonMap.get(s.lesson_id);
+      const l = s.lesson_id ? lessonMap.get(s.lesson_id) : undefined;
       const cid = l?.sections?.courses?.id;
       const ctitle = l?.sections?.courses?.title;
       if (!cid || !ctitle) continue;

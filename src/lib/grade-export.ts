@@ -75,7 +75,7 @@ export function buildGradesWorkbook(opts: BuildOptions): XLSX.WorkBook {
   for (const s of submissions) {
     const p = profileById.get(s.user_id);
     if (!p || !memberRoleIds.has(s.user_id)) continue;
-    const lesson = lessonMap.get(s.lesson_id);
+    const lesson = s.lesson_id ? lessonMap.get(s.lesson_id) : undefined;
     const courseTitle = lesson?.sections?.courses?.title ?? "";
     const lessonTitle = lesson?.title ?? "";
     detailRows.push({
@@ -99,7 +99,7 @@ export function buildGradesWorkbook(opts: BuildOptions): XLSX.WorkBook {
   const memberCoursePct = new Map<string, Map<string, number[]>>(); // userId -> course -> [percents]
   for (const s of submissions) {
     if (!memberRoleIds.has(s.user_id)) continue;
-    const lesson = lessonMap.get(s.lesson_id);
+    const lesson = s.lesson_id ? lessonMap.get(s.lesson_id) : undefined;
     const ct = lesson?.sections?.courses?.title;
     if (!ct) continue;
     if (s.letter_grade == null) continue;
