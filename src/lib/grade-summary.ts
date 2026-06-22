@@ -1,14 +1,15 @@
 // Shared grade aggregation helpers.
-// Pulls submissions for a set of users and rolls them into per-user
-// or aggregate GradeAggregates for use across all dashboards.
+// Pulls submissions (both lesson and project) for a set of users and rolls
+// them into per-user or aggregate GradeAggregates for use across all
+// dashboards.
 
-import { supabase } from "@/integrations/supabase/client";
 import {
   aggregateGrades,
   emptyAggregate,
   type GradeAggregate,
   type GradedRow,
 } from "@/lib/grade-utils";
+import { fetchAllGradedRows } from "@/lib/all-grades";
 
 /**
  * Fetches all submissions for the given users and returns a Map keyed by user_id.
@@ -21,25 +22,15 @@ export async function fetchGradeSummaries(
   for (const id of userIds) out.set(id, emptyAggregate());
   if (userIds.length === 0) return out;
 
-  const { data, error } = await supabase
-    .from("submissions")
-    .select(
-      "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-    )
-    .in("user_id", userIds);
-  if (error) {
-    console.error("fetchGradeSummaries failed", error);
-    return out;
-  }
-
+  const rows = await fetchAllGradedRows(userIds);
   const byUser = new Map<string, GradedRow[]>();
-  for (const row of (data ?? []) as GradedRow[]) {
+  for (const row of rows) {
     const arr = byUser.get(row.user_id) ?? [];
     arr.push(row);
     byUser.set(row.user_id, arr);
   }
-  for (const [uid, rows] of byUser) {
-    out.set(uid, aggregateGrades(rows));
+  for (const [uid, list] of byUser) {
+    out.set(uid, aggregateGrades(list));
   }
   return out;
 }
@@ -51,17 +42,8 @@ export async function fetchAggregateForUsers(
   userIds: string[],
 ): Promise<GradeAggregate> {
   if (userIds.length === 0) return emptyAggregate();
-  const { data, error } = await supabase
-    .from("submissions")
-    .select(
-      "id,user_id,lesson_id,status,letter_grade,grade,feedback,created_at,reviewed_at,reviewed_by",
-    )
-    .in("user_id", userIds);
-  if (error) {
-    console.error("fetchAggregateForUsers failed", error);
-    return emptyAggregate();
-  }
-  return aggregateGrades((data ?? []) as GradedRow[]);
+  const rows = await fetchAllGradedRows(userIds);
+  return aggregateGrades(rows);
 }
 
 /**
