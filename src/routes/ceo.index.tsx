@@ -393,7 +393,7 @@ export async function fetchOrgPerformance(): Promise<OrgPerformance> {
 function CeoDashboard() {
   const { profile } = useAuth();
   const perfQuery = useQuery({
-    queryKey: ["ceo", "org-performance-v2"],
+    queryKey: ["ceo", "org-performance-v3-with-projects"],
     queryFn: fetchOrgPerformance,
   });
   const perf = perfQuery.data;
