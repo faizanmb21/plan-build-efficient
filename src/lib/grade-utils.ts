@@ -66,15 +66,20 @@ export function aggregateGrades(rows: GradedRow[]): GradeAggregate {
       agg.pending++;
       continue;
     }
-    const letter = (r.letter_grade ?? "").trim();
+    let letter = (r.letter_grade ?? "").trim();
+    // Derive letter from numeric grade when letter_grade is absent
+    if (!letter && r.grade !== null) {
+      letter = r.grade >= 90 ? "A+" : r.grade >= 80 ? "A" : r.grade >= 70 ? "B" : "C";
+    }
     if (letter === "A+") agg.aPlus++;
     else if (letter === "A") agg.a++;
     else if (letter === "B") agg.b++;
     else if (letter === "C") agg.c++;
-    else continue; // skip rows without a letter
+    else continue; // skip rows without a letter or grade
 
     agg.total++;
-    const pct =
+    // Prefer actual numeric grade; fall back to letter-mapped value
+    const pct = r.grade !== null ? r.grade :
       letter === "A+" ? 90 : letter === "A" ? 85 : letter === "B" ? 75 : 0;
     percentSum += pct;
     percentCount++;
