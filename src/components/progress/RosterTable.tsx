@@ -18,6 +18,7 @@ import {
 import { Download, RefreshCw, Search } from "lucide-react";
 import { CompletionBar } from "./CompletionBar";
 import { StatusBadge } from "./StatusBadge";
+import { formatDuration } from "@/lib/format-duration";
 import {
   fetchRoster,
   type RosterRow,
