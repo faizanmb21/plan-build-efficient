@@ -308,7 +308,7 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
       .eq("user_id", userId),
     supabase
       .from("project_submissions")
-      .select("status")
+      .select("status, grade")
       .eq("user_id", userId),
     supabase
       .from("assignments")
@@ -344,7 +344,13 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
     }
   }
   let pendingProj = 0;
-  for (const s of projectSubsRes.data ?? []) if (s.status === "pending") pendingProj++;
+  for (const s of projectSubsRes.data ?? []) {
+    if (s.status === "pending") pendingProj++;
+    else if (s.grade != null) {
+      gSum += s.grade;
+      gN += 1;
+    }
+  }
   const pending = pendingLesson + pendingProj;
   const avgGrade = gN > 0 ? Math.round(gSum / gN) : null;
 
