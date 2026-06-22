@@ -11,9 +11,9 @@ import {
 } from "@/lib/work-session.functions";
 import { toast } from "sonner";
 
-const GLOBAL_IDLE_MS = 3 * 60 * 1000; // 3 minutes
-const COURSE_IDLE_MS = 2 * 60 * 1000; // 2 minutes
-const WARNING_GRACE_MS = 30 * 1000; // 30-second warning
+const GLOBAL_IDLE_MS = 3 * 60 * 1000; // 3 minutes of in-tab inactivity before warning
+const COURSE_IDLE_MS = 3 * 60 * 1000; // same as global — one rule everywhere
+const WARNING_GRACE_MS = 60 * 1000;   // 60-second warning before auto clock-out
 const HEARTBEAT_MS = 30 * 1000;
 
 export type ClockOutReason = "manual" | "auto_idle_global" | "auto_idle_course";
