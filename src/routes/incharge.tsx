@@ -20,8 +20,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
+import { canEditCourseMandatory } from "@/lib/access";
+import { Settings2 } from "lucide-react";
 
-const nav: NavItem[] = [
+const baseNav: NavItem[] = [
   { to: "/incharge", label: "Dashboard", icon: LayoutDashboard },
   { to: "/incharge/members", label: "Members", icon: Users },
   { to: "/incharge/assign", label: "Assign courses", icon: Send },
@@ -58,10 +60,20 @@ function InchargeError({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 function InchargeLayout() {
-  const { roles, viewAsFranchiseId, setViewAsFranchiseId } = useAuth();
+  const { user, roles, viewAsFranchiseId, setViewAsFranchiseId } = useAuth();
   const isCeo = roles.includes("ceo");
   const isIncharge = roles.includes("incharge");
   const navigate = useNavigate();
+
+  const nav = React.useMemo<NavItem[]>(() => {
+    if (canEditCourseMandatory(user?.id, roles)) {
+      return [
+        ...baseNav,
+        { to: "/incharge/course-rules", label: "Course rules", icon: Settings2 },
+      ];
+    }
+    return baseNav;
+  }, [user?.id, roles]);
 
   // CEO without an active "view-as" gets a franchise picker first.
   const showPicker = isCeo && !isIncharge && !viewAsFranchiseId;

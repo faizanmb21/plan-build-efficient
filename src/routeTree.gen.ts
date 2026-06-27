@@ -31,6 +31,7 @@ import { Route as InchargeReviewsRouteImport } from './routes/incharge.reviews'
 import { Route as InchargeProjectsRouteImport } from './routes/incharge.projects'
 import { Route as InchargeMembersRouteImport } from './routes/incharge.members'
 import { Route as InchargeGradesRouteImport } from './routes/incharge.grades'
+import { Route as InchargeCourseRulesRouteImport } from './routes/incharge.course-rules'
 import { Route as InchargeAttendanceRouteImport } from './routes/incharge.attendance'
 import { Route as InchargeAssignRouteImport } from './routes/incharge.assign'
 import { Route as CeoViewAsMemberRouteImport } from './routes/ceo.view-as-member'
@@ -162,6 +163,11 @@ const InchargeGradesRoute = InchargeGradesRouteImport.update({
   path: '/grades',
   getParentRoute: () => InchargeRoute,
 } as any)
+const InchargeCourseRulesRoute = InchargeCourseRulesRouteImport.update({
+  id: '/course-rules',
+  path: '/course-rules',
+  getParentRoute: () => InchargeRoute,
+} as any)
 const InchargeAttendanceRoute = InchargeAttendanceRouteImport.update({
   id: '/attendance',
   path: '/attendance',
@@ -285,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/ceo/view-as-member': typeof CeoViewAsMemberRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
+  '/incharge/course-rules': typeof InchargeCourseRulesRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRouteWithChildren
   '/incharge/projects': typeof InchargeProjectsRoute
@@ -324,6 +331,7 @@ export interface FileRoutesByTo {
   '/ceo/view-as-member': typeof CeoViewAsMemberRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
+  '/incharge/course-rules': typeof InchargeCourseRulesRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRouteWithChildren
   '/incharge/projects': typeof InchargeProjectsRoute
@@ -369,6 +377,7 @@ export interface FileRoutesById {
   '/ceo/view-as-member': typeof CeoViewAsMemberRoute
   '/incharge/assign': typeof InchargeAssignRoute
   '/incharge/attendance': typeof InchargeAttendanceRoute
+  '/incharge/course-rules': typeof InchargeCourseRulesRoute
   '/incharge/grades': typeof InchargeGradesRoute
   '/incharge/members': typeof InchargeMembersRouteWithChildren
   '/incharge/projects': typeof InchargeProjectsRoute
@@ -415,6 +424,7 @@ export interface FileRouteTypes {
     | '/ceo/view-as-member'
     | '/incharge/assign'
     | '/incharge/attendance'
+    | '/incharge/course-rules'
     | '/incharge/grades'
     | '/incharge/members'
     | '/incharge/projects'
@@ -454,6 +464,7 @@ export interface FileRouteTypes {
     | '/ceo/view-as-member'
     | '/incharge/assign'
     | '/incharge/attendance'
+    | '/incharge/course-rules'
     | '/incharge/grades'
     | '/incharge/members'
     | '/incharge/projects'
@@ -498,6 +509,7 @@ export interface FileRouteTypes {
     | '/ceo/view-as-member'
     | '/incharge/assign'
     | '/incharge/attendance'
+    | '/incharge/course-rules'
     | '/incharge/grades'
     | '/incharge/members'
     | '/incharge/projects'
@@ -687,6 +699,13 @@ declare module '@tanstack/react-router' {
       path: '/grades'
       fullPath: '/incharge/grades'
       preLoaderRoute: typeof InchargeGradesRouteImport
+      parentRoute: typeof InchargeRoute
+    }
+    '/incharge/course-rules': {
+      id: '/incharge/course-rules'
+      path: '/course-rules'
+      fullPath: '/incharge/course-rules'
+      preLoaderRoute: typeof InchargeCourseRulesRouteImport
       parentRoute: typeof InchargeRoute
     }
     '/incharge/attendance': {
@@ -919,6 +938,7 @@ const InchargeMembersRouteWithChildren = InchargeMembersRoute._addFileChildren(
 interface InchargeRouteChildren {
   InchargeAssignRoute: typeof InchargeAssignRoute
   InchargeAttendanceRoute: typeof InchargeAttendanceRoute
+  InchargeCourseRulesRoute: typeof InchargeCourseRulesRoute
   InchargeGradesRoute: typeof InchargeGradesRoute
   InchargeMembersRoute: typeof InchargeMembersRouteWithChildren
   InchargeProjectsRoute: typeof InchargeProjectsRoute
@@ -929,6 +949,7 @@ interface InchargeRouteChildren {
 const InchargeRouteChildren: InchargeRouteChildren = {
   InchargeAssignRoute: InchargeAssignRoute,
   InchargeAttendanceRoute: InchargeAttendanceRoute,
+  InchargeCourseRulesRoute: InchargeCourseRulesRoute,
   InchargeGradesRoute: InchargeGradesRoute,
   InchargeMembersRoute: InchargeMembersRouteWithChildren,
   InchargeProjectsRoute: InchargeProjectsRoute,
