@@ -5,13 +5,19 @@ import { GraduationCap } from "lucide-react";
 
 export function RoleGuard({
   allow,
+  allowUserIds,
   children,
 }: {
   allow: AppRole[];
+  allowUserIds?: string[];
   children: React.ReactNode;
 }) {
   const navigate = useNavigate();
-  const { loading, session, roles, primaryRole } = useAuth();
+  const { loading, session, user, roles, primaryRole } = useAuth();
+
+  const passes =
+    roles.some((r) => allow.includes(r)) ||
+    (!!user && !!allowUserIds && allowUserIds.includes(user.id));
 
   React.useEffect(() => {
     if (loading) return;
@@ -19,12 +25,12 @@ export function RoleGuard({
       navigate({ to: "/login" });
       return;
     }
-    if (!roles.some((r) => allow.includes(r))) {
+    if (!passes) {
       navigate({ to: homeForRole(primaryRole) });
     }
-  }, [loading, session, roles, allow, primaryRole, navigate]);
+  }, [loading, session, passes, primaryRole, navigate]);
 
-  if (loading || !session || !roles.some((r) => allow.includes(r))) {
+  if (loading || !session || !passes) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground">
         <div className="flex flex-col items-center gap-2">

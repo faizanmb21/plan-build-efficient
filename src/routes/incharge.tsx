@@ -20,8 +20,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import { canEditCourseMandatory } from "@/lib/access";
-import { Settings2 } from "lucide-react";
+import { canAuthorCourses, canEditCourseMandatory } from "@/lib/access";
+import { BookOpen, Settings2 } from "lucide-react";
 
 const baseNav: NavItem[] = [
   { to: "/incharge", label: "Dashboard", icon: LayoutDashboard },
@@ -66,13 +66,16 @@ function InchargeLayout() {
   const navigate = useNavigate();
 
   const nav = React.useMemo<NavItem[]>(() => {
-    if (canEditCourseMandatory(user?.id, roles)) {
-      return [
-        ...baseNav,
-        { to: "/incharge/course-rules", label: "Course rules", icon: Settings2 },
-      ];
+    const items = [...baseNav];
+    if (canAuthorCourses(user?.id, roles) && !roles.includes("ceo")) {
+      // CEO already has its own Courses link in the CEO panel; only add this
+      // shortcut for non-CEO course authors (e.g. Maida).
+      items.push({ to: "/ceo/courses", label: "Courses (author)", icon: BookOpen });
     }
-    return baseNav;
+    if (canEditCourseMandatory(user?.id, roles)) {
+      items.push({ to: "/incharge/course-rules", label: "Course rules", icon: Settings2 });
+    }
+    return items;
   }, [user?.id, roles]);
 
   // CEO without an active "view-as" gets a franchise picker first.
