@@ -40,6 +40,7 @@ function ReviewsPage() {
   const [lessonRows, setLessonRows] = React.useState<LessonSubmission[]>([]);
   const [projectRows, setProjectRows] = React.useState<ProjectSubRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const initialTabPicked = React.useRef(false);
 
   const [activeLesson, setActiveLesson] = React.useState<LessonSubmission | null>(null);
   const [activeProject, setActiveProject] = React.useState<ProjectSubRow | null>(null);
@@ -139,6 +140,14 @@ function ReviewsPage() {
 
     setLessonRows(enrichedLessons);
     setProjectRows(enrichedProjects);
+
+    if (!initialTabPicked.current) {
+      const lessonPending = enrichedLessons.some((r) => r.status === "pending");
+      const projectPending = enrichedProjects.some((r) => r.status === "pending");
+      if (!lessonPending && projectPending) setKind("project");
+      initialTabPicked.current = true;
+    }
+
     setLoading(false);
   }, [profile?.franchise_id, user]);
 
@@ -165,8 +174,15 @@ function ReviewsPage() {
     };
   }, [kind, lessonRows, projectRows]);
 
-  const totalPending = lessonRows.filter((r) => r.status === "pending").length +
-    projectRows.filter((r) => r.status === "pending").length;
+  const lessonPendingCount = lessonRows.filter((r) => r.status === "pending").length;
+  const projectPendingCount = projectRows.filter((r) => r.status === "pending").length;
+  const totalPending = lessonPendingCount + projectPendingCount;
+
+  const jumpToPending = () => {
+    setStatusTab("pending");
+    if (lessonPendingCount === 0 && projectPendingCount > 0) setKind("project");
+    else if (projectPendingCount === 0 && lessonPendingCount > 0) setKind("lesson");
+  };
 
   return (
     <div className="space-y-6">
@@ -176,9 +192,13 @@ function ReviewsPage() {
           <p className="text-sm text-muted-foreground">
             Grade course practicals and standalone project submissions from members in your franchise.
             {totalPending > 0 && (
-              <span className="ml-2 font-medium text-amber-600 dark:text-amber-300">
+              <button
+                type="button"
+                onClick={jumpToPending}
+                className="ml-2 font-medium text-amber-600 underline-offset-2 hover:underline dark:text-amber-300"
+              >
                 {totalPending} pending review
-              </span>
+              </button>
             )}
           </p>
         </div>
