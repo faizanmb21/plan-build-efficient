@@ -39,9 +39,6 @@ export function DayReportCard({ payload, framed = true, className }: Props) {
       ? Math.min(999, Math.round((payload.hoursThisWeek / payload.targetHoursWeek) * 100))
       : 0;
 
-  const isLate = payload.lateMinutes > 0;
-  const isVeryLate = payload.lateSeverity === "very_late";
-
   return (
     <div
       className={cn(
@@ -86,46 +83,6 @@ export function DayReportCard({ payload, framed = true, className }: Props) {
               </span>
             }
           />
-          {payload.startedAtPkt && (
-            <Row
-              icon={
-                <span
-                  className={cn(
-                    "inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-bold",
-                    isVeryLate
-                      ? "bg-rose-500/20 text-rose-300"
-                      : isLate
-                        ? "bg-amber-500/20 text-amber-300"
-                        : "bg-emerald-500/20 text-emerald-300",
-                  )}
-                >
-                  ⏰
-                </span>
-              }
-              label={
-                <span className="text-muted-foreground">
-                  Started{" "}
-                  <span className="font-medium text-foreground">{payload.startedAtPkt}</span>
-                  {" PKT · "}
-                  {isLate ? (
-                    <span
-                      className={cn(
-                        "font-medium",
-                        isVeryLate ? "text-rose-300" : "text-amber-300",
-                      )}
-                    >
-                      {payload.lateMinutes}m late
-                    </span>
-                  ) : (
-                    <span className="text-emerald-300">on time</span>
-                  )}{" "}
-                  <span className="text-muted-foreground/70">
-                    (scheduled {payload.workStartTimePkt})
-                  </span>
-                </span>
-              }
-            />
-          )}
           <Row
             icon={<span className="text-[12px] leading-none">📊</span>}
             label={
@@ -143,19 +100,6 @@ export function DayReportCard({ payload, framed = true, className }: Props) {
               <span className={cn("h-2 w-2 rounded-full", STATUS_DOT[payload.status])} />
               {STATUS_LABEL[payload.status]}
             </span>
-            {isLate && (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
-                  isVeryLate
-                    ? "bg-rose-500/15 text-rose-200"
-                    : "bg-amber-500/15 text-amber-200",
-                )}
-              >
-                <span className={cn("h-2 w-2 rounded-full", isVeryLate ? "bg-rose-400" : "bg-amber-400")} />
-                Late today
-              </span>
-            )}
           </div>
         </section>
 
@@ -213,10 +157,10 @@ export function DayReportCard({ payload, framed = true, className }: Props) {
 
         {/* Course progress */}
         {payload.coursesWorkedOn.length > 0 && (
-          <section className="space-y-3 border-b border-white/5 px-5 py-4">
+          <section className="flex-1 space-y-3 px-5 py-4">
             <p className="flex items-center gap-1.5 text-sm font-semibold">
               <BookOpen className="h-3.5 w-3.5 text-primary" />
-              Course progress
+              Course progress (worked on today)
             </p>
             <div className="space-y-2.5">
               {payload.coursesWorkedOn.slice(0, 3).map((c) => (
@@ -238,26 +182,6 @@ export function DayReportCard({ payload, framed = true, className }: Props) {
             </div>
           </section>
         )}
-
-        {/* AI summary */}
-        <section className="flex-1 px-5 py-4">
-          <p className="text-sm font-semibold">Today's summary</p>
-          {payload.aiSummary ? (
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              {payload.aiSummary}
-            </p>
-          ) : (
-            <p className="mt-1.5 text-xs italic text-muted-foreground/60">
-              Summary unavailable for this report.
-            </p>
-          )}
-        </section>
-
-        {/* Footer */}
-        <footer className="flex items-center justify-between border-t border-white/10 bg-white/[0.02] px-5 py-2.5 text-[10px] uppercase tracking-wider text-muted-foreground/70">
-          <span>IRM Academy</span>
-          <span>End-of-day report</span>
-        </footer>
       </div>
     </div>
   );

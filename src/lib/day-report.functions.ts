@@ -3,10 +3,6 @@ import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Database } from "@/integrations/supabase/types";
-import {
-  buildDayReportUserPrompt,
-  DAY_REPORT_SYSTEM_PROMPT,
-} from "@/lib/day-report-prompt";
 import type {
   DayReportCourse,
   DayReportLessonCompleted,
@@ -131,49 +127,6 @@ function classifyStatus(
   if (ratio < 0.6) return "at_risk";
   if (ratio < 0.85) return "slipping";
   return "on_track";
-}
-
-// ---------- Gemini call (same pattern as session AI summary) ----------
-
-async function callGemini(systemPrompt: string, userPrompt: string): Promise<string | null> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    console.warn("GEMINI_API_KEY not set — skipping day report summary");
-    return null;
-  }
-  try {
-    const url =
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" +
-      encodeURIComponent(key);
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 500,
-          // gemini-2.5-flash thinking tokens count against maxOutputTokens;
-          // disable thinking so the 2-4 sentence summary isn't truncated.
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
-    });
-    if (!res.ok) {
-      console.warn("Gemini error", res.status, await res.text());
-      return null;
-    }
-    const json: any = await res.json();
-    const text = json?.candidates?.[0]?.content?.parts
-      ?.map((p: any) => p?.text ?? "")
-      .join("")
-      .trim();
-    return text || null;
-  } catch (e) {
-    console.warn("Gemini exception", e);
-    return null;
-  }
 }
 
 // ---------- Build the payload (deterministic part) ----------
@@ -413,11 +366,6 @@ export const generateDayReport = createServerFn({ method: "POST" })
 
     const payload = await buildPayload(ctx.userId, reportDate);
     if (!payload) return { ok: false as const, error: "Profile not found" };
-
-    // AI summary (best-effort; report still saves without it)
-    const userPrompt = buildDayReportUserPrompt(payload);
-    const aiSummary = await callGemini(DAY_REPORT_SYSTEM_PROMPT, userPrompt);
-    if (aiSummary) payload.aiSummary = aiSummary;
 
     const { error } = await (supabaseAdmin.from as any)("day_reports")
       .upsert(
