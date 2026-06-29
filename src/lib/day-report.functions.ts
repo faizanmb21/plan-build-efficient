@@ -151,7 +151,13 @@ async function callGemini(systemPrompt: string, userPrompt: string): Promise<str
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: { temperature: 0.5, maxOutputTokens: 300 },
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 500,
+          // gemini-2.5-flash thinking tokens count against maxOutputTokens;
+          // disable thinking so the 2-4 sentence summary isn't truncated.
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
     });
     if (!res.ok) {

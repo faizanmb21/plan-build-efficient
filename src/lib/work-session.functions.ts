@@ -171,7 +171,14 @@ async function callGeminiAI(prompt: string, systemPrompt: string): Promise<strin
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.6, maxOutputTokens: 400 },
+        generationConfig: {
+          temperature: 0.6,
+          maxOutputTokens: 600,
+          // gemini-2.5-flash is a thinking model — thinking tokens count
+          // against maxOutputTokens, so short summaries get cut off mid
+          // sentence. Disable thinking for these recaps.
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
     });
     if (!res.ok) {
