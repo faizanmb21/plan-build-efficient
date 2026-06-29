@@ -9,6 +9,8 @@ import {
   pauseSession as pauseFn,
   resumeSession as resumeFn,
 } from "@/lib/work-session.functions";
+import { generateDayReport as generateDayReportFn } from "@/lib/day-report.functions";
+import type { DayReportPayload } from "@/lib/day-report-types";
 import { toast } from "sonner";
 
 const GLOBAL_IDLE_MS = 3 * 60 * 1000; // 3 minutes of in-tab inactivity before warning
@@ -42,6 +44,7 @@ interface Ctx {
   isPausing: boolean;
   pausedReason: ClockOutReason | null;
   lastSummary: LastSessionSummary | null;
+  lastDayReport: DayReportPayload | null;
   idleWarning: IdleWarning;
   start: () => Promise<void>;
   stop: (reason?: ClockOutReason) => Promise<void>;
@@ -49,6 +52,7 @@ interface Ctx {
   resume: () => Promise<void>;
   dismissPaused: () => void;
   dismissIdleWarning: () => void;
+  dismissDayReport: () => void;
   registerCourseActivity: () => () => void;
 }
 
@@ -66,6 +70,7 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   const heartbeatRpc = useServerFn(heartbeatFn);
   const pauseRpc = useServerFn(pauseFn);
   const resumeRpc = useServerFn(resumeFn);
+  const generateDayReportRpc = useServerFn(generateDayReportFn);
 
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [startedAt, setStartedAt] = React.useState<number | null>(null);
@@ -76,6 +81,7 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   const [isPaused, setIsPaused] = React.useState(false);
   const [pausedReason, setPausedReason] = React.useState<ClockOutReason | null>(null);
   const [lastSummary, setLastSummary] = React.useState<LastSessionSummary | null>(null);
+  const [lastDayReport, setLastDayReport] = React.useState<DayReportPayload | null>(null);
   const [idleWarning, setIdleWarning] = React.useState<IdleWarning>(null);
 
   const lastActivityRef = React.useRef<number>(Date.now());
@@ -202,6 +208,13 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
             gradesCount: res.gradesCount,
             endReason: reason,
           });
+          // Best-effort: generate the end-of-day report. Failure here must not
+          // block clock-out — the session has already ended successfully.
+          generateDayReportRpc({ data: { accessToken } })
+            .then((dr) => {
+              if (dr.ok) setLastDayReport(dr.payload);
+            })
+            .catch((e) => console.warn("day report generation failed", e));
         } else if (res.error && /already ended/i.test(res.error)) {
           // Session was ended elsewhere (another tab, focus page, server cleanup).
           // Treat as success — just clear local state.
@@ -424,6 +437,7 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     lastCourseActivityRef.current = Date.now();
     setIdleWarning(null);
   }, []);
+  const dismissDayReport = React.useCallback(() => setLastDayReport(null), []);
 
   const value: Ctx = {
     sessionId,
@@ -436,6 +450,7 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     isPausing,
     pausedReason,
     lastSummary,
+    lastDayReport,
     idleWarning,
     start,
     stop,
@@ -443,6 +458,7 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     resume,
     dismissPaused,
     dismissIdleWarning,
+    dismissDayReport,
     registerCourseActivity,
   };
 

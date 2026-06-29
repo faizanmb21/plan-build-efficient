@@ -23,6 +23,7 @@ import { Route as MemberIndexRouteImport } from './routes/member.index'
 import { Route as InchargeIndexRouteImport } from './routes/incharge.index'
 import { Route as CeoIndexRouteImport } from './routes/ceo.index'
 import { Route as QaSubmissionsRouteImport } from './routes/qa.submissions'
+import { Route as MemberTodayRouteImport } from './routes/member.today'
 import { Route as MemberProjectsRouteImport } from './routes/member.projects'
 import { Route as MemberProgressRouteImport } from './routes/member.progress'
 import { Route as MemberGradesRouteImport } from './routes/member.grades'
@@ -46,6 +47,7 @@ import { Route as CeoAttendanceRouteImport } from './routes/ceo.attendance'
 import { Route as CeoAssignRouteImport } from './routes/ceo.assign'
 import { Route as CeoFranchisesIndexRouteImport } from './routes/ceo.franchises.index'
 import { Route as CeoCoursesIndexRouteImport } from './routes/ceo.courses.index'
+import { Route as MemberReportsDateRouteImport } from './routes/member.reports.$date'
 import { Route as MemberCoursesIdRouteImport } from './routes/member.courses.$id'
 import { Route as InchargeMembersUserIdRouteImport } from './routes/incharge.members.$userId'
 import { Route as CeoMembersUserIdRouteImport } from './routes/ceo.members.$userId'
@@ -122,6 +124,11 @@ const QaSubmissionsRoute = QaSubmissionsRouteImport.update({
   id: '/submissions',
   path: '/submissions',
   getParentRoute: () => QaRoute,
+} as any)
+const MemberTodayRoute = MemberTodayRouteImport.update({
+  id: '/today',
+  path: '/today',
+  getParentRoute: () => MemberRoute,
 } as any)
 const MemberProjectsRoute = MemberProjectsRouteImport.update({
   id: '/projects',
@@ -238,6 +245,11 @@ const CeoCoursesIndexRoute = CeoCoursesIndexRouteImport.update({
   path: '/courses/',
   getParentRoute: () => CeoRoute,
 } as any)
+const MemberReportsDateRoute = MemberReportsDateRouteImport.update({
+  id: '/reports/$date',
+  path: '/reports/$date',
+  getParentRoute: () => MemberRoute,
+} as any)
 const MemberCoursesIdRoute = MemberCoursesIdRouteImport.update({
   id: '/courses/$id',
   path: '/courses/$id',
@@ -300,6 +312,7 @@ export interface FileRoutesByFullPath {
   '/member/grades': typeof MemberGradesRoute
   '/member/progress': typeof MemberProgressRoute
   '/member/projects': typeof MemberProjectsRoute
+  '/member/today': typeof MemberTodayRoute
   '/qa/submissions': typeof QaSubmissionsRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
@@ -310,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/ceo/members/$userId': typeof CeoMembersUserIdRoute
   '/incharge/members/$userId': typeof InchargeMembersUserIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
+  '/member/reports/$date': typeof MemberReportsDateRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/franchises/': typeof CeoFranchisesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
@@ -340,6 +354,7 @@ export interface FileRoutesByTo {
   '/member/grades': typeof MemberGradesRoute
   '/member/progress': typeof MemberProgressRoute
   '/member/projects': typeof MemberProjectsRoute
+  '/member/today': typeof MemberTodayRoute
   '/qa/submissions': typeof QaSubmissionsRoute
   '/ceo': typeof CeoIndexRoute
   '/incharge': typeof InchargeIndexRoute
@@ -350,6 +365,7 @@ export interface FileRoutesByTo {
   '/ceo/members/$userId': typeof CeoMembersUserIdRoute
   '/incharge/members/$userId': typeof InchargeMembersUserIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
+  '/member/reports/$date': typeof MemberReportsDateRoute
   '/ceo/courses': typeof CeoCoursesIndexRoute
   '/ceo/franchises': typeof CeoFranchisesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
@@ -386,6 +402,7 @@ export interface FileRoutesById {
   '/member/grades': typeof MemberGradesRoute
   '/member/progress': typeof MemberProgressRoute
   '/member/projects': typeof MemberProjectsRoute
+  '/member/today': typeof MemberTodayRoute
   '/qa/submissions': typeof QaSubmissionsRoute
   '/ceo/': typeof CeoIndexRoute
   '/incharge/': typeof InchargeIndexRoute
@@ -396,6 +413,7 @@ export interface FileRoutesById {
   '/ceo/members/$userId': typeof CeoMembersUserIdRoute
   '/incharge/members/$userId': typeof InchargeMembersUserIdRoute
   '/member/courses/$id': typeof MemberCoursesIdRoute
+  '/member/reports/$date': typeof MemberReportsDateRoute
   '/ceo/courses/': typeof CeoCoursesIndexRoute
   '/ceo/franchises/': typeof CeoFranchisesIndexRoute
   '/ceo/courses/$id/edit': typeof CeoCoursesIdEditRoute
@@ -433,6 +451,7 @@ export interface FileRouteTypes {
     | '/member/grades'
     | '/member/progress'
     | '/member/projects'
+    | '/member/today'
     | '/qa/submissions'
     | '/ceo/'
     | '/incharge/'
@@ -443,6 +462,7 @@ export interface FileRouteTypes {
     | '/ceo/members/$userId'
     | '/incharge/members/$userId'
     | '/member/courses/$id'
+    | '/member/reports/$date'
     | '/ceo/courses/'
     | '/ceo/franchises/'
     | '/ceo/courses/$id/edit'
@@ -473,6 +493,7 @@ export interface FileRouteTypes {
     | '/member/grades'
     | '/member/progress'
     | '/member/projects'
+    | '/member/today'
     | '/qa/submissions'
     | '/ceo'
     | '/incharge'
@@ -483,6 +504,7 @@ export interface FileRouteTypes {
     | '/ceo/members/$userId'
     | '/incharge/members/$userId'
     | '/member/courses/$id'
+    | '/member/reports/$date'
     | '/ceo/courses'
     | '/ceo/franchises'
     | '/ceo/courses/$id/edit'
@@ -518,6 +540,7 @@ export interface FileRouteTypes {
     | '/member/grades'
     | '/member/progress'
     | '/member/projects'
+    | '/member/today'
     | '/qa/submissions'
     | '/ceo/'
     | '/incharge/'
@@ -528,6 +551,7 @@ export interface FileRouteTypes {
     | '/ceo/members/$userId'
     | '/incharge/members/$userId'
     | '/member/courses/$id'
+    | '/member/reports/$date'
     | '/ceo/courses/'
     | '/ceo/franchises/'
     | '/ceo/courses/$id/edit'
@@ -644,6 +668,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/qa/submissions'
       preLoaderRoute: typeof QaSubmissionsRouteImport
       parentRoute: typeof QaRoute
+    }
+    '/member/today': {
+      id: '/member/today'
+      path: '/today'
+      fullPath: '/member/today'
+      preLoaderRoute: typeof MemberTodayRouteImport
+      parentRoute: typeof MemberRoute
     }
     '/member/projects': {
       id: '/member/projects'
@@ -806,6 +837,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoCoursesIndexRouteImport
       parentRoute: typeof CeoRoute
     }
+    '/member/reports/$date': {
+      id: '/member/reports/$date'
+      path: '/reports/$date'
+      fullPath: '/member/reports/$date'
+      preLoaderRoute: typeof MemberReportsDateRouteImport
+      parentRoute: typeof MemberRoute
+    }
     '/member/courses/$id': {
       id: '/member/courses/$id'
       path: '/courses/$id'
@@ -966,8 +1004,10 @@ interface MemberRouteChildren {
   MemberGradesRoute: typeof MemberGradesRoute
   MemberProgressRoute: typeof MemberProgressRoute
   MemberProjectsRoute: typeof MemberProjectsRoute
+  MemberTodayRoute: typeof MemberTodayRoute
   MemberIndexRoute: typeof MemberIndexRoute
   MemberCoursesIdRoute: typeof MemberCoursesIdRoute
+  MemberReportsDateRoute: typeof MemberReportsDateRoute
 }
 
 const MemberRouteChildren: MemberRouteChildren = {
@@ -975,8 +1015,10 @@ const MemberRouteChildren: MemberRouteChildren = {
   MemberGradesRoute: MemberGradesRoute,
   MemberProgressRoute: MemberProgressRoute,
   MemberProjectsRoute: MemberProjectsRoute,
+  MemberTodayRoute: MemberTodayRoute,
   MemberIndexRoute: MemberIndexRoute,
   MemberCoursesIdRoute: MemberCoursesIdRoute,
+  MemberReportsDateRoute: MemberReportsDateRoute,
 }
 
 const MemberRouteWithChildren =

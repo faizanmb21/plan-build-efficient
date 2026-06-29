@@ -21,6 +21,7 @@ import { updateExpectedDailyHours } from "@/lib/work-session.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Sparkles, Save, Loader2 } from "lucide-react";
+import { MemberTodayReport } from "@/components/day-report/MemberTodayReport";
 import {
   BarChart,
   Bar,
@@ -156,6 +157,8 @@ export function MemberDetailView({ userId, canEditSchedule = false }: Props) {
           </p>
         )}
       </header>
+
+      <MemberTodayReport userId={userId} />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Kpi label="Completion" value={`${k.completionPct}%`} />

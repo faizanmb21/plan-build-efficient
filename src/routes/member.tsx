@@ -1,16 +1,18 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell, type NavItem } from "@/components/AppShell";
-import { LayoutDashboard, Award, Activity, FolderKanban, TrendingUp, Eye, X } from "lucide-react";
+import { LayoutDashboard, Award, Activity, FolderKanban, TrendingUp, Eye, X, FileText } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useGradeNotifications } from "@/hooks/use-grade-notifications";
 import { WorkSessionProvider } from "@/hooks/use-work-session";
 import { SessionPausedOverlay } from "@/components/work/SessionPausedOverlay";
 import { IdleWarningModal } from "@/components/work/IdleWarningModal";
+import { DayReportModal } from "@/components/day-report/DayReportModal";
 import { Button } from "@/components/ui/button";
 
 const nav: NavItem[] = [
   { to: "/member", label: "My Courses", icon: LayoutDashboard },
+  { to: "/member/today", label: "Today", icon: FileText },
   { to: "/member/progress", label: "My Progress", icon: TrendingUp },
   { to: "/member/projects", label: "Projects", icon: FolderKanban },
   { to: "/member/focus", label: "Focus", icon: Activity },
@@ -72,6 +74,7 @@ function MemberLayout() {
           </AppShell>
           <SessionPausedOverlay />
           <IdleWarningModal />
+          <DayReportModal />
         </WorkSessionProvider>
       )}
     </RoleGuard>
