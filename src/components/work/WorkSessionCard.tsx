@@ -3,8 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useWorkSession } from "@/hooks/use-work-session";
-import { Play, Square, Clock, Sparkles, Loader2, Pause, PlayCircle } from "lucide-react";
-import { formatClock, formatDuration } from "@/lib/format-duration";
+import { Play, Square, Clock, Loader2, Pause, PlayCircle } from "lucide-react";
+import { formatClock } from "@/lib/format-duration";
 
 const fmt = formatClock;
 
@@ -21,7 +21,6 @@ export function WorkSessionCard() {
     isClockingIn,
     isClockingOut,
     isPausing,
-    lastSummary,
   } = useWorkSession();
 
   // Live tick — only when actively running
@@ -126,25 +125,6 @@ export function WorkSessionCard() {
           </p>
         )}
 
-        {lastSummary && !isClockedIn && (
-          <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
-            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-primary">
-              <Sparkles className="h-3.5 w-3.5" /> Today's session report
-            </div>
-            <p className="text-sm leading-relaxed">
-              {lastSummary.summary ?? "Session recorded — summary unavailable."}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-              <span>{formatDuration(lastSummary.activeSec)} active</span>
-              <span>{lastSummary.lessonsCount} lessons</span>
-              <span>{lastSummary.projectsCount} projects</span>
-              <span>{lastSummary.gradesCount} grades</span>
-              <span className="capitalize">
-                ended: {lastSummary.endReason.replace("_", " ")}
-              </span>
-            </div>
-          </div>
-        )}
       </CardContent>
     </Card>
   );

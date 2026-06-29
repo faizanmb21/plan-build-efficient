@@ -99,7 +99,7 @@ function MemberHome() {
   const [streakDays, setStreakDays] = React.useState(0);
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
 
-  const { lastSummary } = useWorkSession();
+  const { lastDayReport } = useWorkSession();
   const fetchTodayReport = useServerFn(getTodaysSessionReport);
 
   const todayReportQuery = useQuery({
@@ -115,10 +115,10 @@ function MemberHome() {
 
   // Refetch today's report after clock-out so it persists across refreshes
   React.useEffect(() => {
-    if (lastSummary) {
+    if (lastDayReport) {
       todayReportQuery.refetch();
     }
-  }, [lastSummary, todayReportQuery]);
+  }, [lastDayReport, todayReportQuery]);
 
   React.useEffect(() => {
     if (!effectiveUserId) return;

@@ -20,7 +20,7 @@ import { attendancePercent } from "@/lib/attendance-utils";
 import { updateExpectedDailyHours } from "@/lib/work-session.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Sparkles, Save, Loader2 } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { MemberTodayReport } from "@/components/day-report/MemberTodayReport";
 import {
   BarChart,
@@ -301,12 +301,6 @@ export function MemberDetailView({ userId, canEditSchedule = false }: Props) {
                       )}
                     </div>
                   </div>
-                  {s.aiSummary && (
-                    <p className="mt-2 flex gap-1.5 text-sm leading-relaxed">
-                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                      <span>{s.aiSummary}</span>
-                    </p>
-                  )}
                 </li>
               ))}
             </ul>

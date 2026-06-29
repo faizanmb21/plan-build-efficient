@@ -22,17 +22,6 @@ export type ClockOutReason = "manual" | "auto_idle_global" | "auto_idle_course";
 export type SessionStatus = "active" | "paused";
 export type IdleWarning = null | "global" | "course";
 
-export interface LastSessionSummary {
-  sessionId: string;
-  endedAt: string;
-  activeSec: number;
-  summary: string | null;
-  lessonsCount: number;
-  projectsCount: number;
-  gradesCount: number;
-  endReason: ClockOutReason;
-}
-
 interface Ctx {
   sessionId: string | null;
   startedAt: number | null;
@@ -43,7 +32,6 @@ interface Ctx {
   isClockingOut: boolean;
   isPausing: boolean;
   pausedReason: ClockOutReason | null;
-  lastSummary: LastSessionSummary | null;
   lastDayReport: DayReportPayload | null;
   idleWarning: IdleWarning;
   start: () => Promise<void>;
@@ -80,7 +68,6 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   const [isPausing, setIsPausing] = React.useState(false);
   const [isPaused, setIsPaused] = React.useState(false);
   const [pausedReason, setPausedReason] = React.useState<ClockOutReason | null>(null);
-  const [lastSummary, setLastSummary] = React.useState<LastSessionSummary | null>(null);
   const [lastDayReport, setLastDayReport] = React.useState<DayReportPayload | null>(null);
   const [idleWarning, setIdleWarning] = React.useState<IdleWarning>(null);
 
@@ -198,18 +185,9 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
         });
         unsentActiveRef.current = 0;
         if (res.ok) {
-          setLastSummary({
-            sessionId: res.sessionId,
-            endedAt: res.endedAt,
-            activeSec: res.activeSec,
-            summary: res.summary,
-            lessonsCount: res.lessonsCount,
-            projectsCount: res.projectsCount,
-            gradesCount: res.gradesCount,
-            endReason: reason,
-          });
-          // Best-effort: generate the end-of-day report. Failure here must not
-          // block clock-out — the session has already ended successfully.
+          // The day-end report is the only thing we surface on clock-out now.
+          // Best-effort: failure must not block clock-out — the session has
+          // already ended successfully.
           generateDayReportRpc({ data: { accessToken } })
             .then((dr) => {
               if (dr.ok) setLastDayReport(dr.payload);
@@ -323,7 +301,6 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     if (sessionRef.current) return;
     setIsClockingIn(true);
     setPausedReason(null);
-    setLastSummary(null);
     try {
       const accessToken = await getToken();
       const res = await clockInRpc({ data: { accessToken } });
@@ -449,7 +426,6 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     isClockingOut,
     isPausing,
     pausedReason,
-    lastSummary,
     lastDayReport,
     idleWarning,
     start,

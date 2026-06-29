@@ -152,50 +152,8 @@ export const resumeSession = createServerFn({ method: "POST" })
     return { ok: true as const, pausedSeconds: nextPaused };
   });
 
-// ---------- Clock out + summary ----------
+// ---------- Clock out ----------
 type EndReason = "manual" | "auto_idle_global" | "auto_idle_course";
-
-async function callGeminiAI(prompt: string, systemPrompt: string): Promise<string | null> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    console.warn("GEMINI_API_KEY not set — skipping AI summary");
-    return null;
-  }
-  try {
-    const url =
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" +
-      encodeURIComponent(key);
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.6,
-          maxOutputTokens: 600,
-          // gemini-2.5-flash is a thinking model — thinking tokens count
-          // against maxOutputTokens, so short summaries get cut off mid
-          // sentence. Disable thinking for these recaps.
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
-    });
-    if (!res.ok) {
-      console.warn("Gemini API error", res.status, await res.text());
-      return null;
-    }
-    const json: any = await res.json();
-    const text = json?.candidates?.[0]?.content?.parts
-      ?.map((p: any) => p?.text ?? "")
-      .join("")
-      .trim();
-    return text || null;
-  } catch (e) {
-    console.warn("Gemini API exception", e);
-    return null;
-  }
-}
 
 export const clockOut = createServerFn({ method: "POST" })
   .inputValidator((d: {
@@ -243,91 +201,19 @@ export const clockOut = createServerFn({ method: "POST" })
         .eq("id", data.sessionId);
     }
 
-    // Gather context
-    const [lessonsRes, projectsRes, gradesLessonRes, gradesProjectRes] = await Promise.all([
-      supabaseAdmin
-        .from("lesson_progress")
-        .select("lesson_id, completed_at, lessons(title)")
-        .eq("user_id", ctx.userId)
-        .eq("completed", true)
-        .gte("completed_at", cur.started_at)
-        .lte("completed_at", endedAt),
-      supabaseAdmin
-        .from("project_submissions")
-        .select("created_at, projects(title)")
-        .eq("user_id", ctx.userId)
-        .gte("created_at", cur.started_at)
-        .lte("created_at", endedAt),
-      supabaseAdmin
-        .from("submissions")
-        .select("letter_grade, grade, reviewed_at, lessons(title)")
-        .eq("user_id", ctx.userId)
-        .not("reviewed_at", "is", null)
-        .gte("reviewed_at", cur.started_at)
-        .lte("reviewed_at", endedAt),
-      supabaseAdmin
-        .from("project_submissions")
-        .select("letter_grade, grade, reviewed_at, projects(title)")
-        .eq("user_id", ctx.userId)
-        .not("reviewed_at", "is", null)
-        .gte("reviewed_at", cur.started_at)
-        .lte("reviewed_at", endedAt),
-    ]);
-
-    const lessons = (lessonsRes.data ?? [])
-      .map((r: any) => r.lessons?.title)
-      .filter(Boolean);
-    const projects = (projectsRes.data ?? [])
-      .map((r: any) => r.projects?.title)
-      .filter(Boolean);
-    const grades: string[] = [];
-    for (const g of gradesLessonRes.data ?? []) {
-      const t = (g as any).lessons?.title;
-      if (t && (g.letter_grade || g.grade != null)) {
-        grades.push(`${t}: ${g.letter_grade ?? g.grade}`);
-      }
-    }
-    for (const g of gradesProjectRes.data ?? []) {
-      const t = (g as any).projects?.title;
-      if (t && (g.letter_grade || g.grade != null)) {
-        grades.push(`Project ${t}: ${g.letter_grade ?? g.grade}`);
-      }
-    }
-
-    const activeHours = activeSec / 3600;
-    const pausedMin = Math.round(totalPaused / 60);
-    const prompt = [
-      `Clock in: ${new Date(cur.started_at).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}`,
-      `Clock out: ${new Date(endedAt).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}`,
-      `Total active time: ${activeHours.toFixed(2)} hours`,
-      `Total paused time: ${pausedMin} minutes`,
-      `End reason: ${data.endReason ?? "manual"}`,
-      lessons.length ? `Lessons completed: ${lessons.join("; ")}` : "Lessons completed: none",
-      projects.length ? `Projects submitted: ${projects.join("; ")}` : "Projects submitted: none",
-      grades.length ? `Grades received: ${grades.join("; ")}` : "Grades received: none",
-    ].join("\n");
-
-    const systemPrompt =
-      "You write a warm, encouraging end-of-session summary for a learner at a creative training academy. Max 4 sentences. Be specific about what they accomplished. Mention active hours (and pause time briefly if non-zero). Avoid emoji. Address them in second person.";
-
-    const summary = await callGeminiAI(prompt, systemPrompt);
-    if (summary) {
-      await supabaseAdmin
-        .from("study_sessions")
-        .update({ ai_summary: summary })
-        .eq("id", data.sessionId);
-    }
-
+    // Per-session AI summary was removed — the day-end report card is now the
+    // only AI-generated artifact on clock-out. We still return the basic
+    // numeric counts the UI uses for transition state, but no AI text.
     return {
       ok: true as const,
       sessionId: data.sessionId,
       endedAt,
       activeSec,
       pausedSec: totalPaused,
-      summary: summary ?? null,
-      lessonsCount: lessons.length,
-      projectsCount: projects.length,
-      gradesCount: grades.length,
+      summary: null,
+      lessonsCount: 0,
+      projectsCount: 0,
+      gradesCount: 0,
     };
   });
 

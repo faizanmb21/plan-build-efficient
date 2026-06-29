@@ -21,7 +21,6 @@ interface SessionRow {
   idle_seconds: number | null;
   status: string | null;
   end_reason: string | null;
-  ai_summary: string | null;
 }
 
 interface SnapRow {
@@ -68,7 +67,7 @@ export function DayDetailDialog({
         supabase
           .from("study_sessions")
           .select(
-            "id, started_at, ended_at, active_seconds, idle_seconds, status, end_reason, ai_summary",
+            "id, started_at, ended_at, active_seconds, idle_seconds, status, end_reason",
           )
           .eq("user_id", memberId)
           .gte("started_at", dayStartIso)
@@ -198,11 +197,6 @@ export function DayDetailDialog({
                       </Badge>
                     )}
                   </div>
-                  {s.ai_summary && (
-                    <p className="basis-full text-[11px] italic leading-snug text-muted-foreground">
-                      {s.ai_summary}
-                    </p>
-                  )}
                 </li>
               ))}
             </ul>

@@ -36,7 +36,6 @@ export interface SessionHistoryRow {
   endedAt: string | null;
   activeSeconds: number;
   endReason: string | null;
-  aiSummary: string | null;
 }
 
 export interface MemberDetail {
@@ -422,7 +421,7 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
   // Recent sessions w/ AI summary
   const { data: sessRecent } = await supabase
     .from("study_sessions")
-    .select("id, started_at, ended_at, active_seconds, end_reason, ai_summary")
+    .select("id, started_at, ended_at, active_seconds, end_reason")
     .eq("user_id", userId)
     .order("started_at", { ascending: false })
     .limit(20);
@@ -432,7 +431,6 @@ export async function fetchMemberDetail(userId: string): Promise<MemberDetail | 
     endedAt: s.ended_at,
     activeSeconds: s.active_seconds ?? 0,
     endReason: s.end_reason,
-    aiSummary: s.ai_summary,
   }));
 
   const expectedDailyHours = Number((profile as any).expected_daily_hours ?? 8);
