@@ -38,7 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Send, Trash2, Loader2, Check, ChevronsUpDown, X } from "lucide-react";
+import { Send, Trash2, Loader2, Check, ChevronsUpDown, X, Users, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/incharge/assign")({
@@ -70,7 +70,7 @@ function InchargeAssignPage() {
   const [submitting, setSubmitting] = React.useState(false);
 
   const [courseIds, setCourseIds] = React.useState<string[]>([]);
-  const [scope, setScope] = React.useState<Scope>("members");
+  const [scope, setScope] = React.useState<Scope>("franchise");
   const [memberIds, setMemberIds] = React.useState<string[]>([]);
   const [priority, setPriority] = React.useState<"mandatory" | "recommended">("mandatory");
   const [deadline, setDeadline] = React.useState<string>("");
@@ -149,13 +149,14 @@ function InchargeAssignPage() {
     setMemberIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
-  async function handleAssign() {
+  async function handleAssign(overrideScope?: Scope) {
     if (courseIds.length === 0) {
       toast.error("Pick at least one course");
       return;
     }
+    const effectiveScope = overrideScope ?? scope;
     let targetIds: string[] = [];
-    if (scope === "members") {
+    if (effectiveScope === "members") {
       if (memberIds.length === 0) {
         toast.error("Pick at least one member");
         return;
@@ -469,10 +470,57 @@ function InchargeAssignPage() {
             />
           </div>
 
-          <Button onClick={handleAssign} disabled={submitting} className="gap-2">
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Assign
-          </Button>
+          {scope === "members" &&
+            memberIds.length > 0 &&
+            memberIds.length < members.length && (
+              <div className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <div className="flex-1">
+                  <p className="font-medium text-amber-200">
+                    Only {memberIds.length} of {members.length} members selected
+                  </p>
+                  <p className="text-amber-200/80">
+                    The other {members.length - memberIds.length} members in your
+                    franchise will not see this course. If you want everyone to see
+                    it, assign to all.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 border-amber-500/40"
+                  onClick={() => handleAssign("franchise")}
+                  disabled={submitting}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Assign to all
+                </Button>
+              </div>
+            )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => handleAssign()} disabled={submitting} className="gap-2">
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {scope === "franchise"
+                ? `Assign to all ${members.length} members`
+                : "Assign"}
+            </Button>
+            {scope === "members" && (
+              <Button
+                variant="secondary"
+                onClick={() => handleAssign("franchise")}
+                disabled={submitting || members.length === 0}
+                className="gap-2"
+              >
+                <Users className="h-4 w-4" />
+                Assign to all my members ({members.length})
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
