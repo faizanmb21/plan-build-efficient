@@ -5,13 +5,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Building2, Clock, Users } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { formatDuration } from "@/lib/format-duration";
+import { AttendanceTimesheet } from "@/components/attendance/AttendanceTimesheet";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/ceo/attendance")({
   component: CeoAttendancePage,
 });
 
 interface FranchiseRollup {
-  franchise_id: string | null;
+  franchise_id: string;
   name: string;
   member_count: number;
   active_today: number;
@@ -19,19 +29,33 @@ interface FranchiseRollup {
   live_now: number;
 }
 
-import { formatDuration } from "@/lib/format-duration";
-
 const LIVE_STALE_MS = 10 * 60 * 1000;
-const fmt = formatDuration;
+const PKT = "Asia/Karachi";
+
+function pktDateKey(d: Date): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PKT,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(d);
+}
+
+function pktDayStartUtcIso(): string {
+  const todayKey = pktDateKey(new Date());
+  const [y, m, d] = todayKey.split("-").map((n) => parseInt(n, 10));
+  return new Date(Date.UTC(y, m - 1, d) - 5 * 3600_000).toISOString();
+}
 
 function CeoAttendancePage() {
   const [loading, setLoading] = React.useState(true);
   const [rows, setRows] = React.useState<FranchiseRollup[]>([]);
+  const [selectedFranchise, setSelectedFranchise] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
-    const dayStart = new Date();
-    dayStart.setHours(0, 0, 0, 0);
+    const dayStartIso = pktDayStartUtcIso();
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 7);
 
@@ -51,7 +75,7 @@ function CeoAttendancePage() {
       franchiseMembers.set(p.franchise_id, (franchiseMembers.get(p.franchise_id) ?? 0) + 1);
     }
 
-    const acc = new Map<string | null, FranchiseRollup>();
+    const acc = new Map<string, FranchiseRollup>();
     for (const f of franchises ?? []) {
       acc.set(f.id, {
         franchise_id: f.id,
@@ -65,16 +89,20 @@ function CeoAttendancePage() {
 
     for (const s of sessions ?? []) {
       const fid = userToFranchise.get(s.user_id) ?? null;
+      if (!fid) continue;
       const row = acc.get(fid);
       if (!row) continue;
-      const startedToday = new Date(s.started_at) >= dayStart;
+      const startedToday = s.started_at >= dayStartIso;
       if (startedToday) row.active_today += s.active_seconds ?? 0;
       row.active_week += s.active_seconds ?? 0;
       const lh = (s as any).last_heartbeat_at ?? s.started_at;
       const fresh = lh ? Date.now() - new Date(lh).getTime() < LIVE_STALE_MS : false;
       if (!s.ended_at && (s as any).status !== "completed" && fresh) row.live_now += 1;
     }
-    setRows(Array.from(acc.values()).sort((a, b) => b.active_today - a.active_today));
+    const list = Array.from(acc.values()).sort((a, b) => b.active_today - a.active_today);
+    setRows(list);
+    // Default detail view to the franchise with the most activity today.
+    setSelectedFranchise((prev) => prev ?? list[0]?.franchise_id ?? null);
     setLoading(false);
   }, []);
 
@@ -82,57 +110,109 @@ function CeoAttendancePage() {
     load();
   }, [load]);
 
+  const selected = rows.find((r) => r.franchise_id === selectedFranchise) ?? null;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-display font-semibold tracking-tight">Attendance rollup</h1>
-          <p className="text-muted-foreground mt-1">All franchises, focused minutes.</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">Attendance</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Org-wide rollup, then a Jibble-style weekly timesheet per franchise.
+          </p>
         </div>
         <Button onClick={load} variant="outline" size="sm" disabled={loading}>
-          {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Refresh
         </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {rows.map((r) => (
-          <Card key={r.franchise_id ?? "none"}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-primary" />
-                {r.name}
-                {r.live_now > 0 && (
-                  <Badge className="ml-auto bg-green-500/15 text-green-500 border-green-500/30">
-                    {r.live_now} live
-                  </Badge>
-                )}
-              </CardTitle>
-              <CardDescription className="flex items-center gap-1">
-                <Users className="h-3 w-3" /> {r.member_count} members
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> Today
-                </div>
-                <div className="text-2xl font-display font-semibold tabular-nums">
-                  {fmt(r.active_today)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> 7 days
-                </div>
-                <div className="text-2xl font-display font-semibold tabular-nums">
-                  {fmt(r.active_week)}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Franchise rollups — clickable to drill in */}
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Franchises ({rows.length})
+        </h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((r) => (
+            <button
+              key={r.franchise_id}
+              type="button"
+              onClick={() => setSelectedFranchise(r.franchise_id)}
+              className={cn(
+                "text-left transition-colors",
+                selectedFranchise === r.franchise_id
+                  ? "ring-2 ring-primary/60 rounded-lg"
+                  : "",
+              )}
+            >
+              <Card className={selectedFranchise === r.franchise_id ? "border-primary/40" : ""}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    {r.name}
+                    {r.live_now > 0 && (
+                      <Badge className="ml-auto border-green-500/30 bg-green-500/15 text-green-500">
+                        <span className="mr-1 h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
+                        {r.live_now} live
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="flex items-center gap-1 text-[11px]">
+                    <Users className="h-3 w-3" /> {r.member_count} members
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-3 pt-0">
+                  <div>
+                    <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <Clock className="h-3 w-3" /> Today
+                    </div>
+                    <div className="font-display text-xl font-semibold tabular-nums">
+                      {formatDuration(r.active_today)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <Clock className="h-3 w-3" /> 7 days
+                    </div>
+                    <div className="font-display text-xl font-semibold tabular-nums">
+                      {formatDuration(r.active_week)}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Detailed timesheet */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Weekly timesheet
+          </h2>
+          <Select
+            value={selectedFranchise ?? "all"}
+            onValueChange={(v) => setSelectedFranchise(v === "all" ? null : v)}
+          >
+            <SelectTrigger className="h-8 w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All franchises</SelectItem>
+              {rows.map((r) => (
+                <SelectItem key={r.franchise_id} value={r.franchise_id}>
+                  {r.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <AttendanceTimesheet
+          franchiseId={selectedFranchise}
+          scopeLabel={selected?.name ?? "All franchises"}
+        />
+      </section>
     </div>
   );
 }
