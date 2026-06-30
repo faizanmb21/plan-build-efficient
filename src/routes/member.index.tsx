@@ -46,8 +46,7 @@ import {
 import { emptyAggregate, type GradeAggregate } from "@/lib/grade-utils";
 import { fetchCompletionSummary } from "@/lib/completion-summary";
 import { WorkSessionCard } from "@/components/work/WorkSessionCard";
-import { getTodaysSessionReport } from "@/lib/work-session.functions";
-import { useWorkSession } from "@/hooks/use-work-session";
+import { MemberTodayReport } from "@/components/day-report/MemberTodayReport";
 import { formatDuration } from "@/lib/format-duration";
 
 
@@ -98,27 +97,6 @@ function MemberHome() {
   const [hoursStudied, setHoursStudied] = React.useState(0);
   const [streakDays, setStreakDays] = React.useState(0);
   const [activeDays, setActiveDays] = React.useState<Set<string>>(new Set());
-
-  const { lastDayReport } = useWorkSession();
-  const fetchTodayReport = useServerFn(getTodaysSessionReport);
-
-  const todayReportQuery = useQuery({
-    queryKey: ["member", "today-report", effectiveUserId],
-    queryFn: async () => {
-      if (!effectiveUserId) return null;
-      const { data: sess } = await supabase.auth.getSession();
-      const res = await fetchTodayReport({ data: { accessToken: sess.session?.access_token } });
-      return res.ok ? res : null;
-    },
-    enabled: !!effectiveUserId && !previewMember,
-  });
-
-  // Refetch today's report after clock-out so it persists across refreshes
-  React.useEffect(() => {
-    if (lastDayReport) {
-      todayReportQuery.refetch();
-    }
-  }, [lastDayReport, todayReportQuery]);
 
   React.useEffect(() => {
     if (!effectiveUserId) return;
@@ -381,34 +359,10 @@ function MemberHome() {
       {/* Work session clock-in card */}
       {!previewMember && <WorkSessionCard />}
 
-      {/* Today's session report — persists across refreshes */}
-      {!previewMember && todayReportQuery.data?.latestEndedAt && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Today's session
-                </CardTitle>
-                <CardDescription>
-                  {todayReportQuery.data.sessionCount} session
-                  {todayReportQuery.data.sessionCount !== 1 ? "s" : ""} ·{" "}
-                  {formatDuration(todayReportQuery.data.totalActiveSec)} active
-                  {todayReportQuery.data.totalPausedSec > 0 &&
-                    ` · ${formatDuration(todayReportQuery.data.totalPausedSec)} paused`}
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {todayReportQuery.data.latestSummary ? (
-              <p className="text-sm leading-relaxed">{todayReportQuery.data.latestSummary}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">No AI summary available.</p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Today's end-of-day report — persists across refreshes, shows nothing
+          until the member has clocked out at least once today. */}
+      {!previewMember && effectiveUserId && (
+        <MemberTodayReport userId={effectiveUserId} />
       )}
 
       {/* Welcome header */}

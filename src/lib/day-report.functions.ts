@@ -262,29 +262,62 @@ async function buildPayload(userId: string, reportDate: string): Promise<DayRepo
     }))),
   ];
 
-  // 6) Courses worked on today — group sessions by course_id, then look up
-  //    course meta + the trainee's overall completion in that course.
-  const courseSecToday = new Map<string, number>();
-  for (const s of todaySessions) {
-    if (!s.course_id) continue;
-    courseSecToday.set(
-      s.course_id,
-      (courseSecToday.get(s.course_id) ?? 0) + (s.active_seconds ?? 0),
+  // 6) Courses worked on today. study_sessions don't carry a course_id (the
+  //    work clock is global), so we derive "worked on today" from the lessons
+  //    they completed today and the lessons they submitted today, mapped
+  //    lesson -> section -> course. If neither produced a course but the
+  //    member still logged time, fall back to their assigned courses so an
+  //    active member's card is never blank.
+  const todayLessonIds = Array.from(
+    new Set<string>([
+      ...(lessonRows ?? []).map((r: any) => r.lesson_id).filter(Boolean),
+      ...(lessonSubsRes.data ?? []).map((r: any) => r.lesson_id).filter(Boolean),
+    ]),
+  );
+
+  let candidateCourseIds: string[] = [];
+  if (todayLessonIds.length > 0) {
+    const { data: lessonMeta } = await supabaseAdmin
+      .from("lessons")
+      .select("id, section_id")
+      .in("id", todayLessonIds);
+    const sectionIds = Array.from(
+      new Set((lessonMeta ?? []).map((l: any) => l.section_id).filter(Boolean)),
+    );
+    if (sectionIds.length > 0) {
+      const { data: secs } = await supabaseAdmin
+        .from("sections")
+        .select("id, course_id")
+        .in("id", sectionIds);
+      candidateCourseIds = Array.from(
+        new Set((secs ?? []).map((s: any) => s.course_id).filter(Boolean)),
+      );
+    }
+  }
+
+  // Fallback to assigned courses when they logged time but completed/submitted
+  // nothing today.
+  if (candidateCourseIds.length === 0 && activeSecToday > 0) {
+    const { data: assigned } = await supabaseAdmin
+      .from("assignments")
+      .select("course_id")
+      .eq("user_id", userId);
+    candidateCourseIds = Array.from(
+      new Set((assigned ?? []).map((a: any) => a.course_id).filter(Boolean)),
     );
   }
+
   const coursesWorkedOn: DayReportCourse[] = [];
-  if (courseSecToday.size > 0) {
-    const courseIds = Array.from(courseSecToday.keys());
+  if (candidateCourseIds.length > 0) {
     const [{ data: courses }, { data: sectionsRows }] = await Promise.all([
-      supabaseAdmin.from("courses").select("id, title").in("id", courseIds),
+      supabaseAdmin.from("courses").select("id, title").in("id", candidateCourseIds),
       supabaseAdmin
         .from("sections")
         .select("id, course_id, lessons(id)")
-        .in("course_id", courseIds),
+        .in("course_id", candidateCourseIds),
     ]);
     const titleByCourse = new Map((courses ?? []).map((c) => [c.id, c.title]));
 
-    // Build lesson_id -> course_id for completion counting
     const lessonIdToCourse = new Map<string, string>();
     const totalLessonsPerCourse = new Map<string, number>();
     for (const sec of (sectionsRows ?? []) as any[]) {
@@ -293,9 +326,7 @@ async function buildPayload(userId: string, reportDate: string): Promise<DayRepo
         sec.course_id,
         (totalLessonsPerCourse.get(sec.course_id) ?? 0) + lessons.length,
       );
-      for (const l of lessons) {
-        lessonIdToCourse.set(l.id, sec.course_id);
-      }
+      for (const l of lessons) lessonIdToCourse.set(l.id, sec.course_id);
     }
 
     const allLessonIds = Array.from(lessonIdToCourse.keys());
@@ -304,17 +335,17 @@ async function buildPayload(userId: string, reportDate: string): Promise<DayRepo
           .from("lesson_progress")
           .select("lesson_id, completed")
           .eq("user_id", userId)
+          .eq("completed", true)
           .in("lesson_id", allLessonIds)
       : { data: [] as { lesson_id: string; completed: boolean }[] };
 
     const doneByCourse = new Map<string, number>();
     for (const p of (progressRows ?? []) as any[]) {
-      if (!p.completed) continue;
       const cid = lessonIdToCourse.get(p.lesson_id);
       if (cid) doneByCourse.set(cid, (doneByCourse.get(cid) ?? 0) + 1);
     }
 
-    for (const [cid, sec] of courseSecToday.entries()) {
+    for (const cid of candidateCourseIds) {
       const total = totalLessonsPerCourse.get(cid) ?? 0;
       const done = doneByCourse.get(cid) ?? 0;
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -324,10 +355,10 @@ async function buildPayload(userId: string, reportDate: string): Promise<DayRepo
         completionPct: pct,
         done,
         total,
-        hoursToday: Math.round((sec / 3600) * 10) / 10,
       });
     }
-    coursesWorkedOn.sort((a, b) => b.hoursToday - a.hoursToday);
+    // Show the courses they're furthest along in first.
+    coursesWorkedOn.sort((a, b) => b.completionPct - a.completionPct);
   }
 
   const status = classifyStatus(hoursThisWeek, targetHoursWeek);

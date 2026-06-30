@@ -25,7 +25,6 @@ export interface DayReportCourse {
   completionPct: number;
   done: number;
   total: number;
-  hoursToday: number;
 }
 
 export interface DayReportPayload {
