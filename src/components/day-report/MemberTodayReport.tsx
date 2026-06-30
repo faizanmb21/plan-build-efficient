@@ -1,21 +1,26 @@
 import * as React from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchDayReport } from "@/lib/day-report.functions";
+import { generateDayReport } from "@/lib/day-report.functions";
 import type { DayReportPayload } from "@/lib/day-report-types";
 import { DayReportCard } from "./DayReportCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface Props {
-  userId: string;
+  /**
+   * Target member. Omit for self (the logged-in member). When set, the caller
+   * must be the member, a CEO, or the incharge of their franchise.
+   */
+  userId?: string;
 }
 
 /**
- * Fetches today's day report for a given member and renders the card.
- * Renders nothing if no report exists yet. Used by Incharge and CEO views.
+ * Generates today's report on view and renders the card. Always current — it
+ * doesn't depend on the member having cleanly clocked out. Server-side auth
+ * restricts who can generate for whom.
  */
 export function MemberTodayReport({ userId }: Props) {
-  const fetchFn = useServerFn(fetchDayReport);
+  const generateFn = useServerFn(generateDayReport);
   const [payload, setPayload] = React.useState<DayReportPayload | null>(null);
   const [loading, setLoading] = React.useState(true);
 
@@ -23,13 +28,17 @@ export function MemberTodayReport({ userId }: Props) {
     (async () => {
       setLoading(true);
       const { data: sess } = await supabase.auth.getSession();
-      const res = await fetchFn({
-        data: { userId, accessToken: sess.session?.access_token },
-      });
-      if (res.ok) setPayload(res.payload ?? null);
+      const accessToken = sess.session?.access_token;
+      try {
+        const res = await generateFn({ data: { userId, accessToken } });
+        if (res.ok) setPayload(res.payload ?? null);
+        else setPayload(null);
+      } catch {
+        setPayload(null);
+      }
       setLoading(false);
     })();
-  }, [userId, fetchFn]);
+  }, [userId, generateFn]);
 
   if (loading || !payload) return null;
 

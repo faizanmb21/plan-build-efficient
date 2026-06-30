@@ -40,6 +40,30 @@ async function getCaller(explicitToken?: string) {
   return { ok: true as const, userId: data.user.id };
 }
 
+// ---------- Authorization ----------
+
+// True if `callerId` may read/generate `targetUserId`'s report: self, any CEO,
+// or the incharge of the target's franchise.
+async function canAccessMember(callerId: string, targetUserId: string): Promise<boolean> {
+  if (callerId === targetUserId) return true;
+  const { data: callerRoles } = await supabaseAdmin
+    .from("user_roles")
+    .select("role, franchise_id")
+    .eq("user_id", callerId);
+  const roles = (callerRoles ?? []).map((r) => r.role as string);
+  if (roles.includes("ceo")) return true;
+  const inchargeFranchise = (callerRoles ?? []).find(
+    (r) => r.role === "incharge",
+  )?.franchise_id;
+  if (!inchargeFranchise) return false;
+  const { data: target } = await supabaseAdmin
+    .from("profiles")
+    .select("franchise_id")
+    .eq("id", targetUserId)
+    .maybeSingle();
+  return target?.franchise_id === inchargeFranchise;
+}
+
 // ---------- PKT date helpers ----------
 
 function pktDateParts(d: Date): { year: number; month: number; day: number } {
@@ -388,20 +412,25 @@ async function buildPayload(userId: string, reportDate: string): Promise<DayRepo
 // ---------- Server fns ----------
 
 export const generateDayReport = createServerFn({ method: "POST" })
-  .inputValidator((d: { accessToken?: string }) => d ?? {})
+  .inputValidator((d: { userId?: string; accessToken?: string }) => d ?? {})
   .handler(async ({ data }) => {
     const ctx = await getCaller(data?.accessToken);
     if (!ctx.ok) return { ok: false as const, error: ctx.error };
 
+    const targetUserId = data.userId ?? ctx.userId;
+    if (!(await canAccessMember(ctx.userId, targetUserId))) {
+      return { ok: false as const, error: "Not authorized" };
+    }
+
     const reportDate = pktDateString(new Date());
 
-    const payload = await buildPayload(ctx.userId, reportDate);
+    const payload = await buildPayload(targetUserId, reportDate);
     if (!payload) return { ok: false as const, error: "Profile not found" };
 
     const { error } = await (supabaseAdmin.from as any)("day_reports")
       .upsert(
         {
-          user_id: ctx.userId,
+          user_id: targetUserId,
           report_date: reportDate,
           payload,
           generated_at: new Date().toISOString(),

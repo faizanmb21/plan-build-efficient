@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { fetchDayReport, listDayReports } from "@/lib/day-report.functions";
+import { generateDayReport, listDayReports } from "@/lib/day-report.functions";
 import type { DayReportPayload } from "@/lib/day-report-types";
 import { DayReportCard } from "@/components/day-report/DayReportCard";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +16,7 @@ export const Route = createFileRoute("/member/today")({
 
 function TodayPage() {
   const { user } = useAuth();
-  const fetchToday = useServerFn(fetchDayReport);
+  const generateToday = useServerFn(generateDayReport);
   const listAll = useServerFn(listDayReports);
 
   const [loading, setLoading] = React.useState(true);
@@ -30,10 +30,11 @@ function TodayPage() {
     setLoading(true);
     const { data: sess } = await supabase.auth.getSession();
     const accessToken = sess.session?.access_token;
-    const [todayRes, listRes] = await Promise.all([
-      fetchToday({ data: { accessToken } }),
-      listAll({ data: { accessToken, limit: 14 } }),
-    ]);
+    // Generate fresh so the report always reflects the member's real activity,
+    // even if they never manually clocked out (left tab open, auto-idle, etc.).
+    // Generate first so the upserted row is included in the history list below.
+    const todayRes = await generateToday({ data: { accessToken } });
+    const listRes = await listAll({ data: { accessToken, limit: 14 } });
     if (todayRes.ok) setPayload(todayRes.payload ?? null);
     if (listRes.ok) {
       setHistory(
@@ -44,7 +45,7 @@ function TodayPage() {
       );
     }
     setLoading(false);
-  }, [user, fetchToday, listAll]);
+  }, [user, generateToday, listAll]);
 
   React.useEffect(() => {
     load();

@@ -359,11 +359,9 @@ function MemberHome() {
       {/* Work session clock-in card */}
       {!previewMember && <WorkSessionCard />}
 
-      {/* Today's end-of-day report — persists across refreshes, shows nothing
-          until the member has clocked out at least once today. */}
-      {!previewMember && effectiveUserId && (
-        <MemberTodayReport userId={effectiveUserId} />
-      )}
+      {/* Today's end-of-day report — generated on view so it's always current,
+          regardless of how the member clocked out. */}
+      {!previewMember && <MemberTodayReport />}
 
       {/* Welcome header */}
       <header className="flex flex-wrap items-end justify-between gap-3">

@@ -227,7 +227,7 @@ export function RosterTable({ scope, detailRoutePrefix }: Props) {
                   <tr key={r.userId} className="border-b border-border/40 hover:bg-muted/30">
                     <td className="py-2 pr-4">
                       <Link
-                        to={`${detailRoutePrefix}/$userId`}
+                        to={`${detailRoutePrefix}/$userId` as "/ceo/members/$userId"}
                         params={{ userId: r.userId }}
                         className="font-medium hover:underline"
                       >
