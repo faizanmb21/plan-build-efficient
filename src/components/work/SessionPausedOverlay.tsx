@@ -21,8 +21,8 @@ export function SessionPausedOverlay() {
         </p>
         <p className="mt-3 text-xs text-muted-foreground/80">
           {pausedReason === "auto_idle_course"
-            ? "No scroll or click activity on the course page for 3 minutes."
-            : "No mouse or keyboard activity for 3 minutes."}
+            ? "No activity on the course page for 3 minutes while it was visible."
+            : "No mouse or keyboard activity for 3 minutes while the app was visible."}
         </p>
         <div className="mt-6 flex flex-col gap-2">
           <Button

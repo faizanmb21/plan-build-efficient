@@ -11,21 +11,19 @@ import {
 import { useWorkSession } from "@/hooks/use-work-session";
 import { Coffee } from "lucide-react";
 
-const GRACE_SEC = 60;
-
 export function IdleWarningModal() {
   const { idleWarning, dismissIdleWarning } = useWorkSession();
-  const [secondsLeft, setSecondsLeft] = React.useState(GRACE_SEC);
+  const [secondsLeft, setSecondsLeft] = React.useState(0);
 
+  // The countdown tracks the engine's REAL deadline — the same timestamp the
+  // auto clock-out fires on — so what the member sees is always the truth and
+  // clicking the button before 0 always saves the session.
   React.useEffect(() => {
-    if (!idleWarning) {
-      setSecondsLeft(GRACE_SEC);
-      return;
-    }
-    setSecondsLeft(GRACE_SEC);
-    const t = window.setInterval(() => {
-      setSecondsLeft((s) => Math.max(0, s - 1));
-    }, 1000);
+    if (!idleWarning) return;
+    const update = () =>
+      setSecondsLeft(Math.max(0, Math.ceil((idleWarning.deadline - Date.now()) / 1000)));
+    update();
+    const t = window.setInterval(update, 250);
     return () => window.clearInterval(t);
   }, [idleWarning]);
 
@@ -41,9 +39,10 @@ export function IdleWarningModal() {
           </AlertDialogTitle>
           <AlertDialogDescription>
             We noticed you've been away from{" "}
-            {idleWarning === "course" ? "your course" : "the app"}. Please stay
-            focused and come back when you're ready — we'll clock you out
-            automatically in <span className="font-semibold text-foreground">{secondsLeft}s</span>.
+            {idleWarning?.kind === "course" ? "your course" : "the app"}. Click
+            the button (or just move your mouse) to keep your session running —
+            otherwise we'll clock you out in{" "}
+            <span className="font-semibold text-foreground">{secondsLeft}s</span>.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

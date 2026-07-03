@@ -121,7 +121,9 @@ export function WorkSessionCard() {
 
         {!isClockedIn && (
           <p className="text-xs text-muted-foreground">
-            Auto clock-out: 3 min idle anywhere in the app. You'll get a 60-second warning before being clocked out. Switching browser tabs does NOT count as idle.
+            Your clock keeps running even if you switch tabs or briefly close the
+            browser. Auto clock-out only happens after 3 minutes of no activity
+            while the app is visible — with a 60-second warning first.
           </p>
         )}
 

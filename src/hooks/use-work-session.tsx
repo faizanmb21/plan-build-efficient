@@ -8,19 +8,41 @@ import {
   heartbeatSession as heartbeatFn,
   pauseSession as pauseFn,
   resumeSession as resumeFn,
+  resumeOpenSession as resumeOpenSessionFn,
 } from "@/lib/work-session.functions";
 import { generateDayReport as generateDayReportFn } from "@/lib/day-report.functions";
 import type { DayReportPayload } from "@/lib/day-report-types";
 import { toast } from "sonner";
 
-const GLOBAL_IDLE_MS = 3 * 60 * 1000; // 3 minutes of in-tab inactivity before warning
-const COURSE_IDLE_MS = 3 * 60 * 1000; // same as global — one rule everywhere
-const WARNING_GRACE_MS = 60 * 1000;   // 60-second warning before auto clock-out
-const HEARTBEAT_MS = 30 * 1000;
+// ---------------------------------------------------------------------------
+// Timing model (server-authoritative, like Jibble/Clockify):
+// - The SERVER owns time: active = (now - started_at) - paused time. The
+//   browser is only a display and an activity sensor. Tab switching,
+//   background throttling, tab freezing, or closing the tab can never corrupt
+//   the clock — it keeps running server-side until an explicit clock-out.
+// - Idle policy: only VISIBLE inactivity counts. 3 min of no input while the
+//   app is visible → 60s warning with a fixed deadline → auto clock-out. Time
+//   in a hidden tab NEVER counts toward idle.
+// - Abandoned sessions (tab closed, laptop shut): the server sweeps any open
+//   session whose last heartbeat is >30 min old and finalizes it backdated to
+//   that heartbeat, so hours stay accurate and no zombie sessions linger.
+// ---------------------------------------------------------------------------
+
+const IDLE_MS = 3 * 60 * 1000; // visible inactivity before auto clock-out
+const WARNING_GRACE_MS = 60 * 1000; // warning shown for the final 60s
+const HEARTBEAT_MS = 30 * 1000; // liveness ping cadence
+const CHECK_MS = 5 * 1000; // engine tick
+// If the engine tick gap is much larger than the cadence, the tab was
+// throttled/frozen/hidden — that stretch must not count as idle.
+const SUSPEND_GAP_MS = CHECK_MS * 3;
+// Wake-ups after very long suspensions (laptop slept overnight with the tab
+// open) go through a full server reconcile instead: the server finalizes the
+// session backdated to its last heartbeat. Mirrors STALE_SESSION_MS on the
+// server.
+const STALE_RECONCILE_MS = 30 * 60 * 1000;
 
 export type ClockOutReason = "manual" | "auto_idle_global" | "auto_idle_course";
-export type SessionStatus = "active" | "paused";
-export type IdleWarning = null | "global" | "course";
+export type IdleWarning = { kind: "global" | "course"; deadline: number } | null;
 
 interface Ctx {
   sessionId: string | null;
@@ -58,11 +80,13 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   const heartbeatRpc = useServerFn(heartbeatFn);
   const pauseRpc = useServerFn(pauseFn);
   const resumeRpc = useServerFn(resumeFn);
+  const resumeOpenRpc = useServerFn(resumeOpenSessionFn);
   const generateDayReportRpc = useServerFn(generateDayReportFn);
 
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [startedAt, setStartedAt] = React.useState<number | null>(null);
-  const [activeSeconds, setActiveSeconds] = React.useState(0);
+  const [pausedSeconds, setPausedSeconds] = React.useState(0);
+  const [pausedAtMs, setPausedAtMs] = React.useState<number | null>(null);
   const [isClockingIn, setIsClockingIn] = React.useState(false);
   const [isClockingOut, setIsClockingOut] = React.useState(false);
   const [isPausing, setIsPausing] = React.useState(false);
@@ -73,53 +97,127 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
 
   const lastActivityRef = React.useRef<number>(Date.now());
   const lastCourseActivityRef = React.useRef<number>(Date.now());
-  const unsentActiveRef = React.useRef<number>(0);
   const sessionRef = React.useRef<string | null>(null);
   const pausedRef = React.useRef<boolean>(false);
-  const courseActiveRef = React.useRef<number>(0);
-  // Wallclock tick anchor so elapsed time keeps advancing even when the
-  // background tab throttles our interval (browser fires it less often, but
-  // each tick adds the real wallclock delta, not a fixed 30s).
-  const lastTickRef = React.useRef<number>(Date.now());
+  const stoppingRef = React.useRef<boolean>(false);
+  const courseWatchersRef = React.useRef<number>(0);
+  const warningRef = React.useRef<IdleWarning>(null);
+  const lastEngineTickRef = React.useRef<number>(Date.now());
+  const lastHeartbeatRef = React.useRef<number>(0);
 
   const isClockedIn = !!sessionId;
 
   React.useEffect(() => {
     pausedRef.current = isPaused;
   }, [isPaused]);
+  React.useEffect(() => {
+    warningRef.current = idleWarning;
+  }, [idleWarning]);
 
-  // Resume an open session on mount
+  // Derived display time — pure function of server timestamps + wall clock.
+  // Always correct, instantly, no matter how long the tab was asleep.
+  const [, forceRender] = React.useReducer((n: number) => n + 1, 0);
+  React.useEffect(() => {
+    if (!isClockedIn) return;
+    const t = window.setInterval(() => {
+      if (document.visibilityState === "visible") forceRender();
+    }, 1000);
+    const onVis = () => forceRender();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [isClockedIn]);
+
+  const nowMs = Date.now();
+  const activeSeconds = startedAt
+    ? Math.max(
+        0,
+        Math.round((nowMs - startedAt) / 1000) -
+          pausedSeconds -
+          (pausedAtMs ? Math.max(0, Math.round((nowMs - pausedAtMs) / 1000)) : 0),
+      )
+    : 0;
+
+  const adoptSession = React.useCallback(
+    (s: {
+      id: string;
+      startedAt: string;
+      status: "active" | "paused";
+      pausedAt: string | null;
+      pausedSeconds: number;
+    }) => {
+      sessionRef.current = s.id;
+      setSessionId(s.id);
+      setStartedAt(new Date(s.startedAt).getTime());
+      setPausedSeconds(s.pausedSeconds ?? 0);
+      setPausedAtMs(s.pausedAt ? new Date(s.pausedAt).getTime() : null);
+      const paused = s.status === "paused";
+      setIsPaused(paused);
+      pausedRef.current = paused;
+      const now = Date.now();
+      lastActivityRef.current = now;
+      lastCourseActivityRef.current = now;
+      lastEngineTickRef.current = now;
+      setIdleWarning(null);
+    },
+    [],
+  );
+
+  const clearLocalSession = React.useCallback(() => {
+    sessionRef.current = null;
+    setSessionId(null);
+    setStartedAt(null);
+    setPausedSeconds(0);
+    setPausedAtMs(null);
+    setIsPaused(false);
+    pausedRef.current = false;
+    setIdleWarning(null);
+  }, []);
+
+  // Reconcile with the server: sweeps abandoned sessions (backdating their
+  // hours to the last heartbeat) and adopts the live one, if any. Runs on
+  // mount and after very long suspensions (laptop slept with the tab open).
+  const syncInFlightRef = React.useRef(false);
+  const syncWithServer = React.useCallback(async () => {
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
+    try {
+      const accessToken = await getToken();
+      const res = await resumeOpenRpc({ data: { accessToken } });
+      if (!res.ok) return;
+      if (res.recovered) {
+        toast.info(
+          "Your previous session ended while you were away — those hours are saved.",
+        );
+      }
+      if (res.session) adoptSession(res.session);
+      else if (sessionRef.current) clearLocalSession();
+    } catch (e) {
+      console.warn("session sync failed", e);
+    } finally {
+      syncInFlightRef.current = false;
+    }
+  }, [resumeOpenRpc, adoptSession, clearLocalSession]);
+  const syncRef = React.useRef(syncWithServer);
+  React.useEffect(() => {
+    syncRef.current = syncWithServer;
+  }, [syncWithServer]);
+
   React.useEffect(() => {
     if (!user) return;
-    (async () => {
-      const { data } = await supabase
-        .from("study_sessions")
-        .select("id, started_at, active_seconds, status")
-        .eq("user_id", user.id)
-        .is("ended_at", null)
-        .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        setSessionId(data.id);
-        sessionRef.current = data.id;
-        setStartedAt(new Date(data.started_at).getTime());
-        setActiveSeconds(data.active_seconds ?? 0);
-        const paused = (data as any).status === "paused";
-        setIsPaused(paused);
-        pausedRef.current = paused;
-      }
-    })();
+    syncRef.current();
   }, [user]);
 
-  // Activity listeners — only matter when clocked in (we still listen while paused so
-  // resume detection works via dismissIdleWarning if user clicks "I'm here")
+  // Activity listeners — any real input resets both idle clocks and clears a
+  // pending warning.
   React.useEffect(() => {
     if (!isClockedIn) return;
     const onActivity = () => {
-      lastActivityRef.current = Date.now();
-      lastCourseActivityRef.current = Date.now();
-      // Activity dismisses any pending warning
+      const now = Date.now();
+      lastActivityRef.current = now;
+      lastCourseActivityRef.current = now;
       setIdleWarning((w) => (w ? null : w));
     };
     window.addEventListener("mousemove", onActivity, { passive: true });
@@ -136,10 +234,7 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     };
   }, [isClockedIn]);
 
-  // Page Visibility — when the tab is hidden no user-input events fire,
-  // so we'd wrongly trip the idle timers. When the tab becomes visible
-  // again, reset the activity refs so the user gets a fresh idle window
-  // and the timer display recomputes immediately.
+  // Coming back to the tab always grants a fresh idle window.
   React.useEffect(() => {
     if (!isClockedIn) return;
     const onVis = () => {
@@ -147,55 +242,34 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
         const now = Date.now();
         lastActivityRef.current = now;
         lastCourseActivityRef.current = now;
-        // Force a re-render so the displayed elapsed time catches up.
-        setActiveSeconds((s) => s);
+        lastEngineTickRef.current = now;
+        setIdleWarning(null);
       }
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [isClockedIn]);
 
-
-  const clearLocalSession = React.useCallback(() => {
-    sessionRef.current = null;
-    setSessionId(null);
-    setStartedAt(null);
-    setActiveSeconds(0);
-    setIsPaused(false);
-    pausedRef.current = false;
-    unsentActiveRef.current = 0;
-    setIdleWarning(null);
-  }, []);
-
   const stop = React.useCallback(
     async (reason: ClockOutReason = "manual") => {
       const sid = sessionRef.current;
-      if (!sid) return;
+      if (!sid || stoppingRef.current) return;
+      stoppingRef.current = true;
       setIsClockingOut(true);
       setIdleWarning(null);
       try {
         const accessToken = await getToken();
         const res = await clockOutRpc({
-          data: {
-            sessionId: sid,
-            endReason: reason,
-            deltaActiveSec: pausedRef.current ? 0 : unsentActiveRef.current,
-            accessToken,
-          },
+          data: { sessionId: sid, endReason: reason, accessToken },
         });
-        unsentActiveRef.current = 0;
         if (res.ok) {
-          // The day-end report is the only thing we surface on clock-out now.
-          // Best-effort: failure must not block clock-out — the session has
-          // already ended successfully.
+          // Day-end report is the only artifact surfaced on clock-out.
+          // Best-effort: its failure must never block the clock-out itself.
           generateDayReportRpc({ data: { accessToken } })
             .then((dr) => {
               if (dr.ok) setLastDayReport(dr.payload);
             })
             .catch((e) => console.warn("day report generation failed", e));
-        } else if (res.error && /already ended/i.test(res.error)) {
-          // Session was ended elsewhere (another tab, focus page, server cleanup).
-          // Treat as success — just clear local state.
         } else if (res.error) {
           toast.error(res.error);
         }
@@ -203,17 +277,22 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
         if (reason !== "manual") setPausedReason(reason);
       } catch (e) {
         console.error("clockOut failed", e);
-        // Even on error, clear local state — the row may already be ended.
+        // Clear local state anyway — resumeOpenSession will re-adopt the row
+        // on next load if it is actually still open.
         clearLocalSession();
       } finally {
+        stoppingRef.current = false;
         setIsClockingOut(false);
       }
     },
-    [clockOutRpc, clearLocalSession],
+    [clockOutRpc, clearLocalSession, generateDayReportRpc],
   );
+  const stopRef = React.useRef(stop);
+  React.useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
 
-  // Realtime: if the session is ended from another tab / Focus page / server,
-  // mirror that state here instantly so both timers stay in lockstep.
+  // Realtime: mirror session changes made from another tab / the Focus page.
   React.useEffect(() => {
     if (!user || !sessionId) return;
     const channel = supabase
@@ -231,13 +310,13 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
           if (!row) return;
           if (row.ended_at) {
             clearLocalSession();
-          } else if (row.status === "paused" && !pausedRef.current) {
-            setIsPaused(true);
-            pausedRef.current = true;
-          } else if (row.status === "active" && pausedRef.current) {
-            setIsPaused(false);
-            pausedRef.current = false;
+            return;
           }
+          const paused = row.status === "paused";
+          setIsPaused(paused);
+          pausedRef.current = paused;
+          setPausedAtMs(row.paused_at ? new Date(row.paused_at).getTime() : null);
+          if (typeof row.paused_seconds === "number") setPausedSeconds(row.paused_seconds);
         },
       )
       .subscribe();
@@ -246,56 +325,92 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     };
   }, [user, sessionId, clearLocalSession]);
 
-  // Heartbeat + idle detection (global)
+  // Engine: heartbeat + idle detection. One interval, deadline-based warning.
   React.useEffect(() => {
     if (!isClockedIn) return;
-    lastTickRef.current = Date.now();
-    const t = window.setInterval(async () => {
-      const now = Date.now();
-      // Real wallclock delta — keeps advancing correctly even when the
-      // browser throttles this interval for a hidden tab.
-      const deltaSec = Math.max(0, (now - lastTickRef.current) / 1000);
-      lastTickRef.current = now;
+    lastEngineTickRef.current = Date.now();
+    lastHeartbeatRef.current = Date.now();
 
-      // While paused: no active accumulation, no idle triggers, no warning.
-      if (pausedRef.current) return;
-
-      // Timer always counts up while clocked in — hidden tab still counts.
-      if (deltaSec > 0) {
-        setActiveSeconds((s) => s + deltaSec);
-        unsentActiveRef.current += deltaSec;
-      }
-
+    const sendHeartbeat = (now: number) => {
+      if (now - lastHeartbeatRef.current < HEARTBEAT_MS) return;
+      lastHeartbeatRef.current = now;
       const sid = sessionRef.current;
-      if (sid && unsentActiveRef.current >= HEARTBEAT_MS / 1000) {
-        const toSend = unsentActiveRef.current;
-        unsentActiveRef.current = 0;
+      if (!sid) return;
+      (async () => {
         try {
           const accessToken = await getToken();
-          await heartbeatRpc({ data: { sessionId: sid, deltaActiveSec: toSend, accessToken } });
+          const res = await heartbeatRpc({ data: { sessionId: sid, accessToken } });
+          if (!res.ok && /already ended|not found/i.test(res.error ?? "")) {
+            // Session was closed elsewhere — sync local state.
+            clearLocalSession();
+          }
         } catch {
-          unsentActiveRef.current += toSend;
+          // Offline / transient — the next beat will retry.
         }
-      }
+      })();
+    };
 
-      // Idle checks only count time the user could actually have interacted.
-      // If the tab is hidden, mousemove/keydown don't fire, so we pause the
-      // idle countdown by treating "now" as the last activity moment.
-      if (document.visibilityState !== "visible") {
+    const t = window.setInterval(() => {
+      const now = Date.now();
+      const gap = now - lastEngineTickRef.current;
+      lastEngineTickRef.current = now;
+      if (!sessionRef.current) return;
+
+      // Woke from a VERY long suspension (laptop slept overnight with the
+      // tab open): let the server reconcile — it finalizes the session
+      // backdated to the last heartbeat so the sleep never counts as work.
+      if (gap > STALE_RECONCILE_MS) {
         lastActivityRef.current = now;
         lastCourseActivityRef.current = now;
+        if (warningRef.current) setIdleWarning(null);
+        syncRef.current();
         return;
       }
 
-      const sinceActivity = now - lastActivityRef.current;
-      if (sinceActivity >= GLOBAL_IDLE_MS) {
-        stop("auto_idle_global");
-      } else if (sinceActivity >= GLOBAL_IDLE_MS - WARNING_GRACE_MS) {
-        setIdleWarning((w) => w ?? "global");
+      // Hidden tab, or we just woke from throttle/freeze: that stretch can
+      // never count as idle. This kills the wake-up race deterministically —
+      // regardless of whether this tick or the visibilitychange handler runs
+      // first, the gap itself proves we were suspended.
+      if (document.visibilityState !== "visible" || gap > SUSPEND_GAP_MS) {
+        lastActivityRef.current = now;
+        lastCourseActivityRef.current = now;
+        if (warningRef.current) setIdleWarning(null);
+        sendHeartbeat(now);
+        return;
       }
-    }, HEARTBEAT_MS / 6); // ~5s — finer granularity for warning timing
+
+      sendHeartbeat(now);
+
+      if (pausedRef.current || stoppingRef.current) return;
+
+      // A warning is pending: the ONLY thing that auto-clocks-out is its
+      // fixed deadline. Clicking "I'm here" (or any input) clears it first,
+      // so the button can never lose a race against the timer.
+      const w = warningRef.current;
+      if (w) {
+        if (now >= w.deadline) {
+          stopRef.current(w.kind === "course" ? "auto_idle_course" : "auto_idle_global");
+        }
+        return;
+      }
+
+      const idleFor = now - lastActivityRef.current;
+      if (idleFor >= IDLE_MS - WARNING_GRACE_MS) {
+        setIdleWarning({ kind: "global", deadline: lastActivityRef.current + IDLE_MS });
+        return;
+      }
+      if (courseWatchersRef.current > 0) {
+        const courseIdleFor = now - lastCourseActivityRef.current;
+        if (courseIdleFor >= IDLE_MS - WARNING_GRACE_MS) {
+          setIdleWarning({
+            kind: "course",
+            deadline: lastCourseActivityRef.current + IDLE_MS,
+          });
+        }
+      }
+    }, CHECK_MS);
     return () => window.clearInterval(t);
-  }, [isClockedIn, heartbeatRpc, stop]);
+  }, [isClockedIn, heartbeatRpc, clearLocalSession]);
 
   const start = React.useCallback(async () => {
     if (sessionRef.current) return;
@@ -308,15 +423,17 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
         toast.error(res.error || "Could not clock in");
         return;
       }
-      sessionRef.current = res.sessionId;
-      setSessionId(res.sessionId);
-      setStartedAt(new Date(res.startedAt).getTime());
-      setActiveSeconds(0);
-      setIsPaused(res.status === "paused");
-      pausedRef.current = res.status === "paused";
-      lastActivityRef.current = Date.now();
-      lastCourseActivityRef.current = Date.now();
-      unsentActiveRef.current = 0;
+      if (res.recovered) {
+        toast.info("Your previous session ended while you were away — those hours are saved.");
+      }
+      adoptSession({
+        id: res.sessionId,
+        startedAt: res.startedAt,
+        status: res.status,
+        pausedAt: res.pausedAt ?? null,
+        pausedSeconds: res.pausedSeconds ?? 0,
+      });
+      lastHeartbeatRef.current = Date.now();
       toast.success("Clocked in. Work session started.");
     } catch (e) {
       console.error(e);
@@ -324,7 +441,7 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     } finally {
       setIsClockingIn(false);
     }
-  }, [clockInRpc]);
+  }, [clockInRpc, adoptSession]);
 
   const pause = React.useCallback(async () => {
     const sid = sessionRef.current;
@@ -332,18 +449,14 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
     setIsPausing(true);
     try {
       const accessToken = await getToken();
-      const toSend = unsentActiveRef.current;
-      unsentActiveRef.current = 0;
-      const res = await pauseRpc({
-        data: { sessionId: sid, deltaActiveSec: toSend, accessToken },
-      });
+      const res = await pauseRpc({ data: { sessionId: sid, accessToken } });
       if (!res.ok) {
         toast.error(res.error || "Could not pause");
-        unsentActiveRef.current += toSend;
         return;
       }
       setIsPaused(true);
       pausedRef.current = true;
+      setPausedAtMs(res.pausedAt ? new Date(res.pausedAt).getTime() : Date.now());
       setIdleWarning(null);
       toast.success("Session paused. Idle checks suspended.");
     } finally {
@@ -364,8 +477,11 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
       }
       setIsPaused(false);
       pausedRef.current = false;
-      lastActivityRef.current = Date.now();
-      lastCourseActivityRef.current = Date.now();
+      setPausedAtMs(null);
+      if (typeof res.pausedSeconds === "number") setPausedSeconds(res.pausedSeconds);
+      const now = Date.now();
+      lastActivityRef.current = now;
+      lastCourseActivityRef.current = now;
       toast.success("Resumed. Welcome back.");
     } finally {
       setIsPausing(false);
@@ -373,47 +489,37 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
   }, [resumeRpc]);
 
   const registerCourseActivity = React.useCallback(() => {
-    courseActiveRef.current += 1;
+    courseWatchersRef.current += 1;
     lastCourseActivityRef.current = Date.now();
 
     const reset = () => {
       lastCourseActivityRef.current = Date.now();
     };
-
     const handlers = ["scroll", "click", "keydown", "touchstart", "mousemove"] as const;
     handlers.forEach((ev) =>
       window.addEventListener(ev, reset, { passive: true } as AddEventListenerOptions),
     );
-
-    const timer = window.setInterval(() => {
-      if (!sessionRef.current || pausedRef.current) return;
-      // Pause the course-idle countdown while the tab is hidden — no
-      // mousemove/keydown can fire there, so it isn't real inactivity.
-      if (document.visibilityState !== "visible") {
-        lastCourseActivityRef.current = Date.now();
-        return;
-      }
-      const since = Date.now() - lastCourseActivityRef.current;
-      if (since >= COURSE_IDLE_MS) {
-        stop("auto_idle_course");
-      } else if (since >= COURSE_IDLE_MS - WARNING_GRACE_MS) {
-        setIdleWarning((w) => w ?? "course");
-      }
-    }, 5_000);
-
     return () => {
-      courseActiveRef.current = Math.max(0, courseActiveRef.current - 1);
-      window.clearInterval(timer);
+      courseWatchersRef.current = Math.max(0, courseWatchersRef.current - 1);
       handlers.forEach((ev) => window.removeEventListener(ev, reset));
     };
-  }, [stop]);
+  }, []);
 
   const dismissPaused = React.useCallback(() => setPausedReason(null), []);
   const dismissIdleWarning = React.useCallback(() => {
-    lastActivityRef.current = Date.now();
-    lastCourseActivityRef.current = Date.now();
+    const now = Date.now();
+    lastActivityRef.current = now;
+    lastCourseActivityRef.current = now;
     setIdleWarning(null);
-  }, []);
+    // Refresh liveness immediately so the session reads as fresh.
+    const sid = sessionRef.current;
+    if (sid) {
+      lastHeartbeatRef.current = now;
+      getToken()
+        .then((accessToken) => heartbeatRpc({ data: { sessionId: sid, accessToken } }))
+        .catch(() => {});
+    }
+  }, [heartbeatRpc]);
   const dismissDayReport = React.useCallback(() => setLastDayReport(null), []);
 
   const value: Ctx = {
@@ -447,7 +553,7 @@ export function useWorkSession(): Ctx {
   return ctx;
 }
 
-/** Mount inside a course-page route to enable Trigger A (2-min idle on course pages). */
+/** Mount inside a course-page route to enable course-page idle detection. */
 export function useCourseInactivityClockOut() {
   const { registerCourseActivity, isClockedIn } = useWorkSession();
   React.useEffect(() => {
