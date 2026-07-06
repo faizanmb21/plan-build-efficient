@@ -3,6 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AttendanceTimesheet } from "@/components/attendance/AttendanceTimesheet";
+import { AttendanceReport } from "@/components/attendance/AttendanceReport";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/incharge/attendance")({
   component: AttendancePage,
@@ -45,18 +47,32 @@ function AttendancePage() {
           Attendance
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Weekly timesheet for{" "}
+          Timesheet and monthly report cards for{" "}
           <span className="font-medium text-foreground">
             {franchiseName ?? "your franchise"}
           </span>
-          . Click any day cell to see clock-in/out times, sessions and snapshots.
+          .
         </p>
       </header>
 
-      <AttendanceTimesheet
-        franchiseId={franchiseId}
-        scopeLabel={franchiseName ?? "Franchise"}
-      />
+      <Tabs defaultValue="timesheet">
+        <TabsList>
+          <TabsTrigger value="timesheet">Weekly timesheet</TabsTrigger>
+          <TabsTrigger value="report">Monthly report</TabsTrigger>
+        </TabsList>
+        <TabsContent value="timesheet" className="mt-4">
+          <AttendanceTimesheet
+            franchiseId={franchiseId}
+            scopeLabel={franchiseName ?? "Franchise"}
+          />
+        </TabsContent>
+        <TabsContent value="report" className="mt-4">
+          <AttendanceReport
+            franchiseId={franchiseId}
+            scopeLabel={franchiseName ?? "Franchise"}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

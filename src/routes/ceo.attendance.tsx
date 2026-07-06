@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { formatDuration } from "@/lib/format-duration";
 import { AttendanceTimesheet } from "@/components/attendance/AttendanceTimesheet";
+import { AttendanceReport } from "@/components/attendance/AttendanceReport";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/ceo/attendance")({
@@ -185,11 +187,11 @@ function CeoAttendancePage() {
         </div>
       </section>
 
-      {/* Detailed timesheet */}
+      {/* Detailed timesheet + monthly report */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Weekly timesheet
+            Attendance detail
           </h2>
           <Select
             value={selectedFranchise ?? "all"}
@@ -208,10 +210,24 @@ function CeoAttendancePage() {
             </SelectContent>
           </Select>
         </div>
-        <AttendanceTimesheet
-          franchiseId={selectedFranchise}
-          scopeLabel={selected?.name ?? "All franchises"}
-        />
+        <Tabs defaultValue="timesheet">
+          <TabsList>
+            <TabsTrigger value="timesheet">Weekly timesheet</TabsTrigger>
+            <TabsTrigger value="report">Monthly report</TabsTrigger>
+          </TabsList>
+          <TabsContent value="timesheet" className="mt-4">
+            <AttendanceTimesheet
+              franchiseId={selectedFranchise}
+              scopeLabel={selected?.name ?? "All franchises"}
+            />
+          </TabsContent>
+          <TabsContent value="report" className="mt-4">
+            <AttendanceReport
+              franchiseId={selectedFranchise}
+              scopeLabel={selected?.name ?? "All franchises"}
+            />
+          </TabsContent>
+        </Tabs>
       </section>
     </div>
   );
