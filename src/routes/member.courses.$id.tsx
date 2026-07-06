@@ -385,8 +385,12 @@ function CoursePlayer() {
                       {blockingLesson?.title}
                     </span>{" "}
                     first to unlock this lesson.
-                    {blockingLesson?.requires_submission ||
-                    blockingLesson?.type === "practical"
+                    {blockingLesson?.type === "practical" ||
+                    (blockingLesson?.requires_submission &&
+                      !!(
+                        blockingLesson?.content?.assignment?.brief ||
+                        blockingLesson?.content?.assignment?.attachment_path
+                      ))
                       ? " Upload your submission there to move on."
                       : ""}
                   </p>
@@ -496,9 +500,18 @@ function LessonView({
   React.useEffect(() => { setMediaOpened(false); }, [lesson.id]);
 
   const requiresSub = lesson.requires_submission;
+  // An assignment is attached when the lesson content carries a brief or an
+  // attachment file.
   const hasAssignment =
     (lesson.type === "video" || lesson.type === "pdf" || lesson.type === "quiz") &&
-    !!lesson.content?.assignment?.brief;
+    !!(lesson.content?.assignment?.brief || lesson.content?.assignment?.attachment_path);
+  // Two kinds of "mandatory":
+  // 1. Mandatory watch (toggle on, NO assignment attached): the member must
+  //    watch in order — completion is the normal watch → mark-complete flow.
+  //    No upload is demanded.
+  // 2. Mandatory assignment (assignment attached + toggle on): the member
+  //    must SUBMIT the assignment before the next lesson unlocks.
+  const uploadRequired = requiresSub && hasAssignment;
 
   // For submission-gated lessons, PracticalSubmit tracks whether a submission exists.
   // We lift that state here so the "Mark complete" gate can read it.
@@ -513,7 +526,7 @@ function LessonView({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {requiresSub && !done && (
+        {(uploadRequired || lesson.type === "practical") && !done && (
           <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div>
@@ -523,7 +536,7 @@ function LessonView({
               <p className="text-muted-foreground">
                 {lesson.type === "practical"
                   ? "Complete the practical below and upload your work. The next lesson unlocks once you've submitted."
-                  : "Watch the content below, then upload your practiced material. The next lesson unlocks once you've submitted."}
+                  : "Watch the content below, then upload your assignment work. The next lesson unlocks once you've submitted."}
               </p>
             </div>
           </div>
@@ -543,7 +556,7 @@ function LessonView({
         {lesson.type === "quiz" && (
           <QuizRunner
             content={{ questions: lesson.content.questions ?? [], passing_score: lesson.content.passing_score }}
-            onPass={requiresSub ? () => {} : onComplete}
+            onPass={uploadRequired ? () => {} : onComplete}
             done={done}
           />
         )}
@@ -562,10 +575,13 @@ function LessonView({
           />
         )}
 
-        {/* Submission upload area for video/pdf/quiz lessons with requires_submission */}
-        {requiresSub && lesson.type !== "practical" && (
+        {/* Assignment upload area — shown whenever an assignment is attached.
+            Blocking only when the mandatory toggle is also on. */}
+        {hasAssignment && lesson.type !== "practical" && (
           <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
-            <p className="text-sm font-semibold">📋 Upload practiced material</p>
+            <p className="text-sm font-semibold">
+              📋 Assignment{uploadRequired ? "" : " (optional)"}
+            </p>
             <PracticalSubmit
               lessonId={lesson.id}
               brief={lesson.content?.assignment?.brief ?? ""}
@@ -574,10 +590,10 @@ function LessonView({
               userId={userId}
               onSubmitted={async () => {
                 setHasSubmission(true);
-                // Submitting IS what unlocks the next lesson — complete this
-                // one automatically so the member is never stuck in a
-                // submit → "Resubmit" loop.
-                if (!done) await Promise.resolve(onComplete());
+                // For a mandatory assignment, submitting IS what unlocks the
+                // next lesson — complete automatically so the member is never
+                // stuck in a submit → "Resubmit" loop.
+                if (uploadRequired && !done) await Promise.resolve(onComplete());
                 onSubmissionSaved();
               }}
               onSubmissionLoaded={(exists) => setHasSubmission(exists)}
@@ -585,14 +601,14 @@ function LessonView({
           </div>
         )}
 
-        {/* Mandatory non-practical lessons: completion is gated on having a
-            submission. Auto-completed on upload above; this button unsticks
-            members who already submitted before that fix. */}
-        {requiresSub && lesson.type !== "practical" && !done && (
+        {/* Mandatory assignment: completion is gated on having a submission.
+            Auto-completed on upload above; this button unsticks members who
+            submitted before that fix shipped. */}
+        {uploadRequired && lesson.type !== "practical" && !done && (
           <div className="flex items-center justify-end gap-2">
             {!hasSubmission && (
               <p className="text-xs text-muted-foreground">
-                Upload your practiced material above to complete this lesson
+                Upload your assignment work above to complete this lesson
               </p>
             )}
             <Button onClick={onComplete} disabled={!hasSubmission} size="sm">
@@ -601,8 +617,10 @@ function LessonView({
           </div>
         )}
 
-        {/* Mark complete button — only for non-submission lessons after media is opened */}
-        {!requiresSub && (lesson.type === "video" || lesson.type === "pdf") && (
+        {/* Watch-to-complete — video/pdf lessons without a mandatory
+            assignment (including mandatory-watch lessons with no assignment
+            attached). */}
+        {!uploadRequired && (lesson.type === "video" || lesson.type === "pdf") && (
           <div className="flex items-center justify-end gap-2">
             {!done && !mediaOpened && (
               <p className="text-xs text-muted-foreground">Open the {lesson.type} above to enable completion</p>
