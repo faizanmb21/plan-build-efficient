@@ -385,9 +385,9 @@ function CoursePlayer() {
                       {blockingLesson?.title}
                     </span>{" "}
                     first to unlock this lesson.
-                    {blockingLesson?.content?.assignment?.brief ||
+                    {blockingLesson?.requires_submission ||
                     blockingLesson?.type === "practical"
-                      ? " Your assignment must be approved by your incharge."
+                      ? " Upload your submission there to move on."
                       : ""}
                   </p>
                   {blockingLesson && (
@@ -486,7 +486,7 @@ function LessonView({
 }: {
   lesson: Lesson;
   done: boolean;
-  onComplete: () => void;
+  onComplete: () => void | Promise<void>;
   onSubmissionSaved: () => void;
   userId: string;
 }) {
@@ -522,7 +522,7 @@ function LessonView({
               </p>
               <p className="text-muted-foreground">
                 {lesson.type === "practical"
-                  ? "Complete the practical below and upload your work. Your incharge must approve it before the next lesson opens."
+                  ? "Complete the practical below and upload your work. The next lesson unlocks once you've submitted."
                   : "Watch the content below, then upload your practiced material. The next lesson unlocks once you've submitted."}
               </p>
             </div>
@@ -568,16 +568,36 @@ function LessonView({
             <p className="text-sm font-semibold">📋 Upload practiced material</p>
             <PracticalSubmit
               lessonId={lesson.id}
-              brief={lesson.content.assignment?.brief ?? hasAssignment ? lesson.content.assignment?.brief ?? "" : ""}
-              attachmentPath={lesson.content.assignment?.attachment_path ?? null}
-              attachmentName={lesson.content.assignment?.attachment_name ?? null}
+              brief={lesson.content?.assignment?.brief ?? ""}
+              attachmentPath={lesson.content?.assignment?.attachment_path ?? null}
+              attachmentName={lesson.content?.assignment?.attachment_name ?? null}
               userId={userId}
-              onSubmitted={() => {
+              onSubmitted={async () => {
                 setHasSubmission(true);
+                // Submitting IS what unlocks the next lesson — complete this
+                // one automatically so the member is never stuck in a
+                // submit → "Resubmit" loop.
+                if (!done) await Promise.resolve(onComplete());
                 onSubmissionSaved();
               }}
               onSubmissionLoaded={(exists) => setHasSubmission(exists)}
             />
+          </div>
+        )}
+
+        {/* Mandatory non-practical lessons: completion is gated on having a
+            submission. Auto-completed on upload above; this button unsticks
+            members who already submitted before that fix. */}
+        {requiresSub && lesson.type !== "practical" && !done && (
+          <div className="flex items-center justify-end gap-2">
+            {!hasSubmission && (
+              <p className="text-xs text-muted-foreground">
+                Upload your practiced material above to complete this lesson
+              </p>
+            )}
+            <Button onClick={onComplete} disabled={!hasSubmission} size="sm">
+              Mark as completed
+            </Button>
           </div>
         )}
 
