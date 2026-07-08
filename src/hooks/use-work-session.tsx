@@ -73,6 +73,25 @@ async function getToken() {
   return data.session?.access_token;
 }
 
+// Watching a lesson counts as working. Course videos are YouTube embeds inside
+// an <iframe> (all mouse/keyboard events happen INSIDE the iframe, invisible to
+// the parent window) or uploaded HTML5 <video> elements. So treat as active:
+//  - focus currently inside any <iframe> (the trainee clicked into the player)
+//  - any <video> on the page actually playing
+// Without this, a member watching a 20-minute video gets auto-clocked-out at 3
+// minutes because the parent page sees no input.
+function isMediaActive(): boolean {
+  if (typeof document === "undefined") return false;
+  const ae = document.activeElement as HTMLElement | null;
+  if (ae && ae.tagName === "IFRAME") return true;
+  const vids = document.getElementsByTagName("video");
+  for (let i = 0; i < vids.length; i++) {
+    const v = vids[i];
+    if (!v.paused && !v.ended && v.readyState > 2) return true;
+  }
+  return false;
+}
+
 export function WorkSessionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const clockInRpc = useServerFn(clockInFn);
@@ -220,17 +239,32 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
       lastCourseActivityRef.current = now;
       setIdleWarning((w) => (w ? null : w));
     };
+    // Fires when focus leaves the window — e.g. the trainee clicked into a
+    // YouTube player iframe. That's activity, not stepping away.
+    const onBlur = () => {
+      if (document.activeElement?.tagName === "IFRAME") onActivity();
+    };
     window.addEventListener("mousemove", onActivity, { passive: true });
     window.addEventListener("keydown", onActivity);
     window.addEventListener("click", onActivity);
     window.addEventListener("touchstart", onActivity, { passive: true });
     window.addEventListener("scroll", onActivity, { passive: true });
+    window.addEventListener("blur", onBlur);
+    // Media events don't bubble — listen in the capture phase so any playing
+    // <video> continuously counts as activity (timeupdate fires ~4×/sec).
+    document.addEventListener("play", onActivity, true);
+    document.addEventListener("playing", onActivity, true);
+    document.addEventListener("timeupdate", onActivity, true);
     return () => {
       window.removeEventListener("mousemove", onActivity);
       window.removeEventListener("keydown", onActivity);
       window.removeEventListener("click", onActivity);
       window.removeEventListener("touchstart", onActivity);
       window.removeEventListener("scroll", onActivity);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("play", onActivity, true);
+      document.removeEventListener("playing", onActivity, true);
+      document.removeEventListener("timeupdate", onActivity, true);
     };
   }, [isClockedIn]);
 
@@ -371,7 +405,13 @@ export function WorkSessionProvider({ children }: { children: React.ReactNode })
       // never count as idle. This kills the wake-up race deterministically —
       // regardless of whether this tick or the visibilitychange handler runs
       // first, the gap itself proves we were suspended.
-      if (document.visibilityState !== "visible" || gap > SUSPEND_GAP_MS) {
+      // Hidden/suspended tab, OR the trainee is watching a lesson (playing
+      // video / focus inside an embedded player iframe) — none of that is idle.
+      if (
+        document.visibilityState !== "visible" ||
+        gap > SUSPEND_GAP_MS ||
+        isMediaActive()
+      ) {
         lastActivityRef.current = now;
         lastCourseActivityRef.current = now;
         if (warningRef.current) setIdleWarning(null);
