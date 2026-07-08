@@ -17,7 +17,6 @@ import {
   CalendarDays,
   Search,
   Download,
-  Printer,
   X as XIcon,
   GraduationCap,
 } from "lucide-react";
@@ -26,14 +25,12 @@ import {
   pktMonthKey,
   shiftMonth,
   monthLabel,
-  buildSummaryCsv,
-  buildMemberDailyCsv,
-  downloadCsv,
   type MemberMonthReport,
   type ReportDay,
 } from "@/lib/attendance-report";
 import { formatDuration } from "@/lib/format-duration";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Props {
   franchiseId: string | null;
@@ -46,6 +43,7 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [selected, setSelected] = React.useState<MemberMonthReport | null>(null);
+  const [exporting, setExporting] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -67,10 +65,12 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
 
   const stats = React.useMemo(() => {
     const n = filtered.length;
-    if (n === 0) return { avgAttendance: 0, avgPunctuality: 0, totalHours: 0, lateTotal: 0 };
+    if (n === 0)
+      return { avgAttendance: 0, avgPunctuality: 0, avgCompletion: 0, totalHours: 0, lateTotal: 0 };
     return {
       avgAttendance: Math.round(filtered.reduce((a, r) => a + r.attendancePct, 0) / n),
       avgPunctuality: Math.round(filtered.reduce((a, r) => a + r.punctualityPct, 0) / n),
+      avgCompletion: Math.round(filtered.reduce((a, r) => a + r.completionPct, 0) / n),
       totalHours: filtered.reduce((a, r) => a + r.activeSec, 0),
       lateTotal: filtered.reduce((a, r) => a + r.lateDays, 0),
     };
@@ -78,15 +78,21 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
 
   const isCurrentMonth = monthKey >= pktMonthKey();
 
+  const exportRosterPdf = async () => {
+    setExporting(true);
+    try {
+      const mod = await import("./report-pdf");
+      await mod.downloadRosterPdf(filtered, monthKey, scopeLabel);
+    } catch (e) {
+      console.error(e);
+      toast.error("Could not build the PDF — try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      {/* Print rules: only the selected report card prints */}
-      <style>{`@media print {
-        body * { visibility: hidden !important; }
-        .print-card, .print-card * { visibility: visible !important; }
-        .print-card { position: absolute !important; left: 0; top: 0; width: 100%; }
-      }`}</style>
-
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
@@ -115,16 +121,15 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
           variant="secondary"
           size="sm"
           className="ml-auto gap-1.5"
-          disabled={loading || filtered.length === 0}
-          onClick={() =>
-            downloadCsv(
-              `attendance-${scopeLabel.toLowerCase().replace(/\s+/g, "-")}-${monthKey}.csv`,
-              buildSummaryCsv(filtered, monthKey),
-            )
-          }
+          disabled={loading || exporting || filtered.length === 0}
+          onClick={exportRosterPdf}
         >
-          <Download className="h-3.5 w-3.5" />
-          Export CSV
+          {exporting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          Download PDF
         </Button>
         <div className="relative">
           <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -138,7 +143,7 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
       </div>
 
       {/* Scope stats */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Stat
           label="Avg attendance"
           value={`${stats.avgAttendance}%`}
@@ -148,6 +153,11 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
           label="Avg punctuality"
           value={`${stats.avgPunctuality}%`}
           valueClass={pctClass(stats.avgPunctuality)}
+        />
+        <Stat
+          label="Avg completion"
+          value={`${stats.avgCompletion}%`}
+          valueClass={pctClass(stats.avgCompletion)}
         />
         <Stat label="Total hours" value={formatDuration(stats.totalHours)} />
         <Stat
@@ -171,7 +181,7 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-md border border-white/10">
-          <Table className="min-w-[880px]">
+          <Table className="min-w-[1000px]">
             <TableHeader>
               <TableRow className="bg-card/50">
                 <TableHead>Member</TableHead>
@@ -181,9 +191,10 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
                 <TableHead className="text-right">Attendance</TableHead>
                 <TableHead className="text-right">Punctuality</TableHead>
                 <TableHead className="text-right">Hours</TableHead>
+                <TableHead className="text-right">Completion</TableHead>
+                <TableHead className="text-right">Avg grade</TableHead>
                 <TableHead className="text-right">Lessons</TableHead>
                 <TableHead className="text-right">Subs</TableHead>
-                <TableHead className="text-right">Avg grade</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -224,11 +235,18 @@ export function AttendanceReport({ franchiseId, scopeLabel }: Props) {
                       {r.hoursPct}% of target
                     </p>
                   </TableCell>
+                  <TableCell className="text-right">
+                    <PctChip pct={r.completionPct} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {r.gradedCount > 0 ? (
+                      <PctChip pct={r.gradeAvgPct} />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{r.lessonsCompleted}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.submissionsCount}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.avgGrade ?? "—"}
-                  </TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" variant="outline" onClick={() => setSelected(r)}>
                       Report card
@@ -269,9 +287,23 @@ function ReportCard({
   onClose: () => void;
 }) {
   const cardRef = React.useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = React.useState(false);
   React.useEffect(() => {
     cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [member.userId]);
+
+  const exportMemberPdf = async () => {
+    setExporting(true);
+    try {
+      const mod = await import("./report-pdf");
+      await mod.downloadMemberPdf(member, monthKey, scopeLabel);
+    } catch (e) {
+      console.error(e);
+      toast.error("Could not build the PDF — try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Calendar layout: pad to the weekday of the 1st (Mon-first grid)
   const firstDow = member.days[0]
@@ -286,21 +318,13 @@ function ReportCard({
           Report card
         </h3>
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() =>
-              downloadCsv(
-                `${member.fullName.toLowerCase().replace(/\s+/g, "-")}-${monthKey}.csv`,
-                buildMemberDailyCsv(member),
-              )
-            }
-          >
-            <Download className="h-3.5 w-3.5" /> Daily CSV
-          </Button>
-          <Button size="sm" className="gap-1.5" onClick={() => window.print()}>
-            <Printer className="h-3.5 w-3.5" /> Print / Save PDF
+          <Button size="sm" className="gap-1.5" onClick={exportMemberPdf} disabled={exporting}>
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            Download PDF
           </Button>
           <Button size="sm" variant="ghost" onClick={onClose}>
             <XIcon className="h-4 w-4" />
@@ -308,7 +332,7 @@ function ReportCard({
         </div>
       </div>
 
-      <div className="print-card mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-card text-card-foreground shadow-xl print:border-black/20 print:shadow-none">
+      <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-card text-card-foreground shadow-xl">
         {/* Header */}
         <header className="flex items-center justify-between gap-3 border-b border-white/10 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent px-6 py-4 print:border-black/10">
           <div>
@@ -325,19 +349,73 @@ function ReportCard({
           </div>
         </header>
 
-        {/* Big percentages */}
+        {/* Big percentages — attendance row + performance row */}
         <section className="grid grid-cols-3 gap-px border-b border-white/10 bg-white/5 print:border-black/10">
           <BigPct label="Attendance" pct={member.attendancePct} sub={`${member.presentDays} of ${member.workingDayCount} days`} />
           <BigPct label="Punctuality" pct={member.punctualityPct} sub={`${member.onTimeDays} on time · ${member.lateDays} late`} />
           <BigPct label="Hours target" pct={member.hoursPct} sub={`${formatDuration(member.activeSec)} of ${formatDuration(member.targetSec)}`} />
         </section>
+        <section className="grid grid-cols-3 gap-px border-b border-white/10 bg-white/5 print:border-black/10">
+          <BigPct
+            label="Course completion"
+            pct={member.completionPct}
+            sub={`${member.courses.length} assigned course${member.courses.length === 1 ? "" : "s"}`}
+          />
+          <BigPct
+            label="Avg grade"
+            pct={member.gradedCount > 0 ? member.gradeAvgPct : null}
+            sub={
+              member.gradedCount > 0
+                ? `${member.gradedCount} graded · ${member.gradePassRate}% pass`
+                : "Nothing graded this month"
+            }
+          />
+          <BigPct
+            label="Submissions"
+            pct={null}
+            text={`${member.submissionsCount}`}
+            sub={`${member.gradedCount} graded · ${member.gradePending} pending QA`}
+          />
+        </section>
 
         {/* Training output */}
-        <section className="grid grid-cols-3 gap-3 border-b border-white/10 px-6 py-4 print:border-black/10">
-          <Mini label="Lessons completed" value={`${member.lessonsCompleted}`} />
-          <Mini label="Submissions" value={`${member.submissionsCount}`} />
-          <Mini label="Avg grade" value={member.avgGrade != null ? `${member.avgGrade}` : "—"} />
+        <section className="grid grid-cols-1 gap-3 border-b border-white/10 px-6 py-4 print:border-black/10">
+          <Mini label="Lessons completed this month" value={`${member.lessonsCompleted}`} />
         </section>
+
+        {/* Per-course standing */}
+        {member.courses.length > 0 && (
+          <section className="border-b border-white/10 px-6 py-4">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Course progress (current standing)
+            </p>
+            <div className="space-y-2.5">
+              {member.courses.slice(0, 6).map((c) => (
+                <div key={c.courseId} className="space-y-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="truncate text-xs font-medium">{c.title}</p>
+                    <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {c.pct}% · {c.done}/{c.total}
+                    </p>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                    <div
+                      className={cn(
+                        "h-full rounded-full",
+                        c.pct >= 90
+                          ? "bg-emerald-500/80"
+                          : c.pct >= 75
+                            ? "bg-amber-500/80"
+                            : "bg-rose-500/70",
+                      )}
+                      style={{ width: `${Math.min(100, c.pct)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Day calendar */}
         <section className="px-6 py-4">
@@ -411,10 +489,27 @@ function DayCell({ day }: { day: ReportDay }) {
   );
 }
 
-function BigPct({ label, pct, sub }: { label: string; pct: number; sub: string }) {
+function BigPct({
+  label,
+  pct,
+  text,
+  sub,
+}: {
+  label: string;
+  pct: number | null;
+  text?: string;
+  sub: string;
+}) {
   return (
     <div className="bg-card px-6 py-4 text-center">
-      <p className={cn("text-3xl font-bold tabular-nums", pctClass(pct))}>{pct}%</p>
+      <p
+        className={cn(
+          "text-3xl font-bold tabular-nums",
+          pct != null ? pctClass(pct) : "text-foreground",
+        )}
+      >
+        {text ?? (pct != null ? `${pct}%` : "—")}
+      </p>
       <p className="mt-0.5 text-xs font-medium">{label}</p>
       <p className="text-[10px] text-muted-foreground">{sub}</p>
     </div>

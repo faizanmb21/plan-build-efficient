@@ -1,9 +1,11 @@
 // Monthly attendance + training report (ClassDojo-style report cards for
 // trainees). One row per member for a PKT calendar month: day-by-day
-// attendance classification plus training output (lessons, submissions,
-// grades), with percentage summaries and CSV export builders.
+// attendance classification plus performance (course completion standing,
+// month grades via aggregateGrades) and training output.
 
 import { supabase } from "@/integrations/supabase/client";
+import { fetchCompletionSummary } from "@/lib/completion-summary";
+import { aggregateGrades, type GradedRow } from "@/lib/grade-utils";
 
 const PKT = "Asia/Karachi";
 const LATE_GRACE_MIN = 5;
@@ -19,6 +21,14 @@ export interface ReportDay {
   lateMinutes: number;
   activeSec: number;
   firstStartIso: string | null;
+}
+
+export interface ReportCourse {
+  courseId: string;
+  title: string;
+  pct: number;
+  done: number;
+  total: number;
 }
 
 export interface MemberMonthReport {
@@ -37,8 +47,14 @@ export interface MemberMonthReport {
   targetSec: number;
   hoursPct: number;
   lessonsCompleted: number;
-  submissionsCount: number;
-  avgGrade: number | null;
+  // Performance
+  completionPct: number; // overall course completion standing (cumulative)
+  courses: ReportCourse[]; // per assigned course standing
+  submissionsCount: number; // month submissions (lesson + project, incl pending)
+  gradedCount: number; // month submissions that were graded
+  gradePending: number;
+  gradeAvgPct: number; // 0-100 average of graded work this month
+  gradePassRate: number; // 0-100
   days: ReportDay[];
 }
 
@@ -133,7 +149,7 @@ export async function loadMonthlyReport({
     new Date(pktDayStartUtcIso(dayKeys[nDays - 1])).getTime() + 24 * 3600_000 - 1,
   ).toISOString();
 
-  const [sessionsRes, lessonsRes, subsRes] = await Promise.all([
+  const [sessionsRes, lessonsRes, subsRes, projSubsRes, completion] = await Promise.all([
     supabase
       .from("study_sessions")
       .select("user_id, started_at, active_seconds")
@@ -149,10 +165,19 @@ export async function loadMonthlyReport({
       .lte("completed_at", rangeEnd),
     supabase
       .from("submissions")
-      .select("user_id, created_at, grade")
+      .select("id, user_id, created_at, grade, letter_grade, status")
       .in("user_id", ids)
       .gte("created_at", rangeStart)
       .lte("created_at", rangeEnd),
+    supabase
+      .from("project_submissions")
+      .select("id, user_id, created_at, grade, letter_grade, status")
+      .in("user_id", ids)
+      .gte("created_at", rangeStart)
+      .lte("created_at", rangeEnd),
+    // Course completion is the member's CURRENT overall standing (cumulative),
+    // not month-scoped — that's what "completion" means on a report card.
+    fetchCompletionSummary({ userIds: ids }),
   ]);
 
   // Group sessions per user per PKT day
@@ -174,16 +199,30 @@ export async function loadMonthlyReport({
   for (const l of lessonsRes.data ?? []) {
     lessonsByUser.set(l.user_id, (lessonsByUser.get(l.user_id) ?? 0) + 1);
   }
-  const subsByUser = new Map<string, { n: number; gradeSum: number; graded: number }>();
-  for (const s of subsRes.data ?? []) {
-    const cur = subsByUser.get(s.user_id) ?? { n: 0, gradeSum: 0, graded: 0 };
-    cur.n += 1;
-    if (s.grade != null) {
-      cur.gradeSum += s.grade;
-      cur.graded += 1;
-    }
-    subsByUser.set(s.user_id, cur);
-  }
+
+  // Month grade rows (lesson + project submissions) per user, in the
+  // GradedRow shape aggregateGrades expects.
+  const gradeRowsByUser = new Map<string, GradedRow[]>();
+  const pushRow = (r: any, source: "lesson" | "project") => {
+    const arr = gradeRowsByUser.get(r.user_id) ?? [];
+    arr.push({
+      id: r.id,
+      user_id: r.user_id,
+      lesson_id: null,
+      project_id: null,
+      source,
+      status: r.status,
+      letter_grade: r.letter_grade ?? null,
+      grade: r.grade ?? null,
+      feedback: null,
+      created_at: r.created_at,
+      reviewed_at: null,
+      reviewed_by: null,
+    });
+    gradeRowsByUser.set(r.user_id, arr);
+  };
+  for (const s of subsRes.data ?? []) pushRow(s, "lesson");
+  for (const s of projSubsRes.data ?? []) pushRow(s, "project");
 
   const todayKey = pktDateKey(new Date());
 
@@ -247,7 +286,20 @@ export async function loadMonthlyReport({
     const targetSec = workingDayCount * expectedDailyHours * 3600;
     const hoursPct = targetSec > 0 ? Math.round((activeSec / targetSec) * 100) : 0;
 
-    const subs = subsByUser.get(p.id);
+    const gradeRows = gradeRowsByUser.get(p.id) ?? [];
+    const agg = aggregateGrades(gradeRows);
+
+    const uSum = completion.byUser.get(p.id);
+    const courses: ReportCourse[] = Array.from(uSum?.byCourse.values() ?? [])
+      .map((c) => ({
+        courseId: c.courseId,
+        title: completion.courseTitles.get(c.courseId) ?? "Course",
+        pct: c.pct,
+        done: c.done,
+        total: c.total,
+      }))
+      .sort((a, b) => b.pct - a.pct);
+
     return {
       userId: p.id,
       fullName: p.full_name ?? "Member",
@@ -264,8 +316,13 @@ export async function loadMonthlyReport({
       targetSec,
       hoursPct,
       lessonsCompleted: lessonsByUser.get(p.id) ?? 0,
-      submissionsCount: subs?.n ?? 0,
-      avgGrade: subs && subs.graded > 0 ? Math.round(subs.gradeSum / subs.graded) : null,
+      completionPct: uSum?.overallPct ?? 0,
+      courses,
+      submissionsCount: gradeRows.length,
+      gradedCount: agg.total,
+      gradePending: agg.pending,
+      gradeAvgPct: agg.averagePercent,
+      gradePassRate: agg.passRate,
       days,
     };
   });
@@ -274,92 +331,12 @@ export async function loadMonthlyReport({
   return reports;
 }
 
-// ---------- CSV builders ----------
-
-function csvCell(v: string | number | null | undefined): string {
-  const s = v == null ? "" : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function hoursStr(sec: number): string {
-  return (sec / 3600).toFixed(1);
-}
-
-export function buildSummaryCsv(rows: MemberMonthReport[], monthKey: string): string {
-  const header = [
-    "Member",
-    "Month",
-    "Working days",
-    "Present",
-    "On time",
-    "Late",
-    "Absent",
-    "Attendance %",
-    "Punctuality %",
-    "Hours",
-    "Target hours",
-    "Hours %",
-    "Lessons completed",
-    "Submissions",
-    "Avg grade",
-  ];
-  const lines = [header.join(",")];
-  for (const r of rows) {
-    lines.push(
-      [
-        csvCell(r.fullName),
-        monthLabel(monthKey),
-        r.workingDayCount,
-        r.presentDays,
-        r.onTimeDays,
-        r.lateDays,
-        r.absentDays,
-        r.attendancePct,
-        r.punctualityPct,
-        hoursStr(r.activeSec),
-        hoursStr(r.targetSec),
-        r.hoursPct,
-        r.lessonsCompleted,
-        r.submissionsCount,
-        r.avgGrade ?? "",
-      ].join(","),
-    );
-  }
-  return lines.join("\n");
-}
-
-export function buildMemberDailyCsv(r: MemberMonthReport): string {
-  const header = ["Date", "Day", "Status", "Late by (min)", "Hours", "First clock-in (PKT)"];
-  const lines = [header.join(",")];
-  for (const d of r.days) {
-    if (d.status === "future") continue;
-    lines.push(
-      [
-        d.date,
-        d.dow,
-        d.status.replace("_", " "),
-        d.lateMinutes || "",
-        d.activeSec ? hoursStr(d.activeSec) : "",
-        d.firstStartIso
-          ? new Intl.DateTimeFormat("en-US", {
-              timeZone: PKT,
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true,
-            }).format(new Date(d.firstStartIso))
-          : "",
-      ].join(","),
-    );
-  }
-  return lines.join("\n");
-}
-
-export function downloadCsv(filename: string, csv: string) {
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+/** First clock-in shown as PKT wall-clock time, e.g. "10:24 AM". */
+export function formatPktClockTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: PKT,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
 }
