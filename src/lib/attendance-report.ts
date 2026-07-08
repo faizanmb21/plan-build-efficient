@@ -6,57 +6,21 @@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchCompletionSummary } from "@/lib/completion-summary";
 import { aggregateGrades, type GradedRow } from "@/lib/grade-utils";
+import type {
+  MemberMonthReport,
+  ReportCourse,
+  ReportDay,
+  ReportDayStatus,
+} from "@/lib/attendance-report-shared";
+
+// Pure types + math (score, weekly breakdown, labels) live in the shared
+// module so the PDF renderer and preview scripts can use them without pulling
+// in the supabase client. Re-exported here so existing imports keep working.
+export * from "@/lib/attendance-report-shared";
 
 const PKT = "Asia/Karachi";
 const LATE_GRACE_MIN = 5;
 const VERY_LATE_MIN = 60;
-
-export type ReportDayStatus = "present" | "late" | "very_late" | "absent" | "off" | "future";
-
-export interface ReportDay {
-  /** YYYY-MM-DD (PKT calendar date) */
-  date: string;
-  dow: string;
-  status: ReportDayStatus;
-  lateMinutes: number;
-  activeSec: number;
-  firstStartIso: string | null;
-}
-
-export interface ReportCourse {
-  courseId: string;
-  title: string;
-  pct: number;
-  done: number;
-  total: number;
-}
-
-export interface MemberMonthReport {
-  userId: string;
-  fullName: string;
-  expectedDailyHours: number;
-  workStartTime: string;
-  workingDayCount: number;
-  presentDays: number; // on-time + late (they showed up)
-  onTimeDays: number;
-  lateDays: number;
-  absentDays: number;
-  attendancePct: number; // showed-up / working days elapsed
-  punctualityPct: number; // on-time / showed-up
-  activeSec: number;
-  targetSec: number;
-  hoursPct: number;
-  lessonsCompleted: number;
-  // Performance
-  completionPct: number; // overall course completion standing (cumulative)
-  courses: ReportCourse[]; // per assigned course standing
-  submissionsCount: number; // month submissions (lesson + project, incl pending)
-  gradedCount: number; // month submissions that were graded
-  gradePending: number;
-  gradeAvgPct: number; // 0-100 average of graded work this month
-  gradePassRate: number; // 0-100
-  days: ReportDay[];
-}
 
 // ---------- PKT date helpers ----------
 
@@ -67,28 +31,6 @@ function pktDateKey(d: Date): string {
     month: "2-digit",
     day: "2-digit",
   }).format(d);
-}
-
-/** Current month in PKT as "YYYY-MM". */
-export function pktMonthKey(d: Date = new Date()): string {
-  return pktDateKey(d).slice(0, 7);
-}
-
-export function shiftMonth(monthKey: string, by: number): string {
-  const [y, m] = monthKey.split("-").map((n) => parseInt(n, 10));
-  const total = y * 12 + (m - 1) + by;
-  const ny = Math.floor(total / 12);
-  const nm = (total % 12) + 1;
-  return `${ny}-${String(nm).padStart(2, "0")}`;
-}
-
-export function monthLabel(monthKey: string): string {
-  const [y, m] = monthKey.split("-").map((n) => parseInt(n, 10));
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(y, m - 1, 1)));
 }
 
 function daysInMonth(monthKey: string): number {
@@ -323,6 +265,10 @@ export async function loadMonthlyReport({
       gradePending: agg.pending,
       gradeAvgPct: agg.averagePercent,
       gradePassRate: agg.passRate,
+      gradeAPlus: agg.aPlus,
+      gradeA: agg.a,
+      gradeB: agg.b,
+      gradeC: agg.c,
       days,
     };
   });
@@ -331,12 +277,3 @@ export async function loadMonthlyReport({
   return reports;
 }
 
-/** First clock-in shown as PKT wall-clock time, e.g. "10:24 AM". */
-export function formatPktClockTime(iso: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: PKT,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(new Date(iso));
-}

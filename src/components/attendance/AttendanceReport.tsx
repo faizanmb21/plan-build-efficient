@@ -25,6 +25,8 @@ import {
   pktMonthKey,
   shiftMonth,
   monthLabel,
+  monthlyScore,
+  weeklyBreakdown,
   type MemberMonthReport,
   type ReportDay,
 } from "@/lib/attendance-report";
@@ -349,45 +351,23 @@ function ReportCard({
           </div>
         </header>
 
-        {/* Big percentages — attendance row + performance row */}
-        <section className="grid grid-cols-3 gap-px border-b border-white/10 bg-white/5 print:border-black/10">
-          <BigPct label="Attendance" pct={member.attendancePct} sub={`${member.presentDays} of ${member.workingDayCount} days`} />
-          <BigPct label="Punctuality" pct={member.punctualityPct} sub={`${member.onTimeDays} on time · ${member.lateDays} late`} />
-          <BigPct label="Hours target" pct={member.hoursPct} sub={`${formatDuration(member.activeSec)} of ${formatDuration(member.targetSec)}`} />
-        </section>
-        <section className="grid grid-cols-3 gap-px border-b border-white/10 bg-white/5 print:border-black/10">
-          <BigPct
-            label="Course completion"
-            pct={member.completionPct}
-            sub={`${member.courses.length} assigned course${member.courses.length === 1 ? "" : "s"}`}
-          />
-          <BigPct
-            label="Avg grade"
-            pct={member.gradedCount > 0 ? member.gradeAvgPct : null}
-            sub={
-              member.gradedCount > 0
-                ? `${member.gradedCount} graded · ${member.gradePassRate}% pass`
-                : "Nothing graded this month"
-            }
-          />
-          <BigPct
-            label="Submissions"
-            pct={null}
-            text={`${member.submissionsCount}`}
-            sub={`${member.gradedCount} graded · ${member.gradePending} pending QA`}
-          />
-        </section>
-
-        {/* Training output */}
-        <section className="grid grid-cols-1 gap-3 border-b border-white/10 px-6 py-4 print:border-black/10">
-          <Mini label="Lessons completed this month" value={`${member.lessonsCompleted}`} />
+        {/* Hero — monthly score ring + metric bars */}
+        <section className="flex flex-col items-center gap-5 border-b border-white/10 px-6 py-5 sm:flex-row">
+          <ScoreRingSvg member={member} />
+          <div className="w-full flex-1 space-y-2.5">
+            <MetricRow label="Attendance" detail={`${member.presentDays}/${member.workingDayCount} days`} pct={member.attendancePct} />
+            <MetricRow label="Punctuality" detail={`${member.lateDays} late day${member.lateDays === 1 ? "" : "s"}`} pct={member.punctualityPct} />
+            <MetricRow label="Hours" detail={`${formatDuration(member.activeSec)} of ${formatDuration(member.targetSec)}`} pct={member.hoursPct} />
+            <MetricRow label="Course completion" detail={`${member.courses.length} course${member.courses.length === 1 ? "" : "s"}`} pct={member.completionPct} />
+            <MetricRow label="Avg grade" detail={member.gradedCount > 0 ? `${member.gradedCount} graded` : "nothing graded"} pct={member.gradedCount > 0 ? member.gradeAvgPct : null} />
+          </div>
         </section>
 
         {/* Per-course standing */}
         {member.courses.length > 0 && (
           <section className="border-b border-white/10 px-6 py-4">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Course progress (current standing)
+              Course completion (current standing)
             </p>
             <div className="space-y-2.5">
               {member.courses.slice(0, 6).map((c) => (
@@ -395,10 +375,10 @@ function ReportCard({
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="truncate text-xs font-medium">{c.title}</p>
                     <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                      {c.pct}% · {c.done}/{c.total}
+                      {c.done}/{c.total} · {c.pct}%
                     </p>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                  <div className="h-2 overflow-hidden rounded-full bg-white/5">
                     <div
                       className={cn(
                         "h-full rounded-full",
@@ -414,8 +394,19 @@ function ReportCard({
                 </div>
               ))}
             </div>
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              {member.lessonsCompleted} lesson{member.lessonsCompleted === 1 ? "" : "s"} completed this
+              month · {member.submissionsCount} submission{member.submissionsCount === 1 ? "" : "s"} ·{" "}
+              {member.gradePending} pending QA
+            </p>
           </section>
         )}
+
+        {/* Hours by week + grade mix */}
+        <section className="grid gap-5 border-b border-white/10 px-6 py-4 sm:grid-cols-2">
+          <WeeklyBars member={member} />
+          <GradeMixBar member={member} />
+        </section>
 
         {/* Day calendar */}
         <section className="px-6 py-4">
@@ -489,38 +480,176 @@ function DayCell({ day }: { day: ReportDay }) {
   );
 }
 
-function BigPct({
-  label,
-  pct,
-  text,
-  sub,
-}: {
-  label: string;
-  pct: number | null;
-  text?: string;
-  sub: string;
-}) {
+function pctHex(pct: number): string {
+  return pct >= 90 ? "#34d399" : pct >= 75 ? "#fbbf24" : "#fb7185";
+}
+
+function ScoreRingSvg({ member }: { member: MemberMonthReport }) {
+  const { score, letter } = monthlyScore(member);
+  const R = 50;
+  const C = 2 * Math.PI * R;
+  const dash = (Math.min(100, score) / 100) * C;
+  const color = pctHex(score);
   return (
-    <div className="bg-card px-6 py-4 text-center">
-      <p
-        className={cn(
-          "text-3xl font-bold tabular-nums",
-          pct != null ? pctClass(pct) : "text-foreground",
-        )}
-      >
-        {text ?? (pct != null ? `${pct}%` : "—")}
-      </p>
-      <p className="mt-0.5 text-xs font-medium">{label}</p>
-      <p className="text-[10px] text-muted-foreground">{sub}</p>
+    <div className="relative h-28 w-28 shrink-0">
+      <svg viewBox="0 0 120 120" className="h-28 w-28 -rotate-90">
+        <circle cx="60" cy="60" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="11" />
+        <circle
+          cx="60"
+          cy="60"
+          r={R}
+          fill="none"
+          stroke={color}
+          strokeWidth="11"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${C}`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-3xl font-bold tabular-nums leading-none">{score}</span>
+        <span className="mt-1 text-[8px] uppercase tracking-wider text-muted-foreground">
+          Monthly score
+        </span>
+        <span
+          className="mt-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+          style={{ color, backgroundColor: `${color}22` }}
+        >
+          Grade {letter}
+        </span>
+      </div>
     </div>
   );
 }
 
-function Mini({ label, value }: { label: string; value: string }) {
+function MetricRow({
+  label,
+  detail,
+  pct,
+}: {
+  label: string;
+  detail: string;
+  pct: number | null;
+}) {
+  const v = pct ?? 0;
   return (
-    <div className="text-center">
-      <p className="text-xl font-semibold tabular-nums">{value}</p>
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span>
+          {label} <span className="text-[10px] text-muted-foreground">· {detail}</span>
+        </span>
+        <span className={cn("font-semibold tabular-nums", pct != null ? pctClass(v) : "text-muted-foreground")}>
+          {pct != null ? `${pct}%` : "—"}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/5">
+        {pct != null && (
+          <div
+            className={cn(
+              "h-full rounded-full",
+              v >= 90 ? "bg-emerald-500/80" : v >= 75 ? "bg-amber-500/80" : "bg-rose-500/70",
+            )}
+            style={{ width: `${Math.min(100, v)}%` }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WeeklyBars({ member }: { member: MemberMonthReport }) {
+  const weeks = weeklyBreakdown(member);
+  const weeklyTargetSec = 5 * member.expectedDailyHours * 3600;
+  const maxActive = Math.max(...weeks.map((w) => w.activeSec), 0);
+  const maxSec = Math.max(maxActive, weeklyTargetSec) * 1.18 || 1;
+  const targetPct = (weeklyTargetSec / maxSec) * 100;
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Hours by week
+        </p>
+        <p className="text-[10px] text-muted-foreground">
+          Target {Math.round(weeklyTargetSec / 3600)}h/wk
+        </p>
+      </div>
+      {weeks.length === 0 ? (
+        <p className="text-xs text-muted-foreground/70">No hours yet.</p>
+      ) : (
+        <>
+          <div className="relative flex h-20 items-end gap-3">
+            <div
+              className="absolute inset-x-0 border-t border-dashed border-white/25"
+              style={{ bottom: `${targetPct}%` }}
+            />
+            {weeks.map((w) => {
+              const h = Math.max(3, (w.activeSec / maxSec) * 100);
+              const hit = w.targetSec === 0 || w.activeSec >= w.targetSec;
+              return (
+                <div key={w.label} className="flex flex-1 flex-col items-center justify-end">
+                  <span className="mb-1 text-[9px] text-muted-foreground">
+                    {(w.activeSec / 3600).toFixed(1)}h
+                  </span>
+                  <div
+                    className={cn("w-6 rounded-t", hit ? "bg-primary" : "bg-primary/40")}
+                    style={{ height: `${h}%` }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-1 flex border-t border-white/5 pt-1">
+            {weeks.map((w) => (
+              <span key={w.label} className="flex-1 text-center text-[10px] text-muted-foreground">
+                {w.label}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function GradeMixBar({ member }: { member: MemberMonthReport }) {
+  const total = member.gradedCount;
+  const segs = [
+    { label: "A+", n: member.gradeAPlus, cls: "bg-emerald-500" },
+    { label: "A", n: member.gradeA, cls: "bg-emerald-400" },
+    { label: "B", n: member.gradeB, cls: "bg-amber-500" },
+    { label: "C", n: member.gradeC, cls: "bg-rose-500" },
+  ];
+  return (
+    <div>
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Grade mix {total > 0 ? `(${total} graded)` : ""}
+      </p>
+      {total === 0 ? (
+        <p className="text-xs text-muted-foreground/70">
+          No graded work this month.
+          {member.gradePending > 0 ? ` ${member.gradePending} pending QA.` : ""}
+        </p>
+      ) : (
+        <>
+          <div className="flex h-4 overflow-hidden rounded">
+            {segs
+              .filter((x) => x.n > 0)
+              .map((x) => (
+                <div key={x.label} className={x.cls} style={{ width: `${(x.n / total) * 100}%` }} />
+              ))}
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-muted-foreground">
+            {segs.map((x) => (
+              <span key={x.label} className="inline-flex items-center gap-1.5">
+                <span className={cn("h-2 w-2 rounded-sm", x.cls)} />
+                {x.label} · {x.n}
+              </span>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
+            {member.gradePending} pending QA · {member.gradePassRate}% pass rate
+          </p>
+        </>
+      )}
     </div>
   );
 }
