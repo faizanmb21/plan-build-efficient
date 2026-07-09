@@ -244,7 +244,7 @@ function FocusPage() {
             {isClockedIn
               ? isPaused
                 ? "Timer is frozen. Resume when you're back."
-                : "Focused time is being recorded. Switching browser tabs does NOT count as idle."
+                : "Focused time is being recorded until you clock out."
               : "You'll be asked to pick a screen or window to share. Sharing is required."}
           </CardDescription>
         </CardHeader>
@@ -301,8 +301,8 @@ function FocusPage() {
           </div>
           {!isClockedIn && (
             <p className="text-xs text-muted-foreground">
-              You'll be asked to pick a screen/window. Stopping the share will clock you out. Idle
-              warning fires after 3 minutes of in-tab inactivity; auto clock-out 60 seconds later.
+              You'll be asked to pick a screen/window. Stopping the share will clock you out. Your
+              clock keeps running until you clock out.
             </p>
           )}
         </CardContent>

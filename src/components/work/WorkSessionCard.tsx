@@ -45,7 +45,7 @@ export function WorkSessionCard() {
             </CardTitle>
             <CardDescription>
               {isPaused
-                ? "Paused — timer frozen, idle checks suspended."
+                ? "Paused — timer frozen."
                 : isClockedIn
                   ? "Your focused time is being recorded."
                   : "Start your work session when you sit down to learn."}
@@ -121,9 +121,8 @@ export function WorkSessionCard() {
 
         {!isClockedIn && (
           <p className="text-xs text-muted-foreground">
-            Your clock keeps running even if you switch tabs or briefly close the
-            browser. Auto clock-out only happens after 3 minutes of no activity
-            while the app is visible — with a 60-second warning first.
+            Your clock keeps running until you clock out — switching tabs, watching
+            videos, or briefly closing the browser won't stop it.
           </p>
         )}
 

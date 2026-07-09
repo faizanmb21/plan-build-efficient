@@ -5,8 +5,6 @@ import { LayoutDashboard, Award, Activity, FolderKanban, TrendingUp, Eye, X, Fil
 import { useAuth } from "@/lib/auth";
 import { useGradeNotifications } from "@/hooks/use-grade-notifications";
 import { WorkSessionProvider } from "@/hooks/use-work-session";
-import { SessionPausedOverlay } from "@/components/work/SessionPausedOverlay";
-import { IdleWarningModal } from "@/components/work/IdleWarningModal";
 import { DayReportModal } from "@/components/day-report/DayReportModal";
 import { Button } from "@/components/ui/button";
 
@@ -72,8 +70,6 @@ function MemberLayout() {
           <AppShell nav={nav} roleLabel="Member">
             <Outlet />
           </AppShell>
-          <SessionPausedOverlay />
-          <IdleWarningModal />
           <DayReportModal />
         </WorkSessionProvider>
       )}

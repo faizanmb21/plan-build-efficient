@@ -24,8 +24,6 @@ import {
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
 import { YouTubeEmbed } from "@/components/YouTubeEmbed";
-import { useInactivityLogout } from "@/hooks/use-inactivity-logout";
-import { useCourseInactivityClockOut } from "@/hooks/use-work-session";
 
 
 export const Route = createFileRoute("/member/courses/$id")({
@@ -276,40 +274,7 @@ function CoursePlayer() {
   }
 
   // Pause any playing media (HTML <video> or YouTube/Vimeo iframe) inside the
-  // lesson area. Used when the tab loses focus or inactivity warning fires.
   const lessonAreaRef = React.useRef<HTMLDivElement | null>(null);
-  const pauseMedia = React.useCallback(() => {
-    const root = lessonAreaRef.current;
-    if (!root) return;
-    root.querySelectorAll("video").forEach((v) => {
-      try {
-        v.pause();
-      } catch {
-        /* noop */
-      }
-    });
-    root.querySelectorAll("iframe").forEach((f) => {
-      // Reload the iframe — works for any provider and stops playback/audio.
-      try {
-        const src = f.src;
-        if (src) f.src = src;
-      } catch {
-        /* noop */
-      }
-    });
-  }, []);
-
-  // 3-min inactivity → 30s warning → sign out.
-  useInactivityLogout({
-    enabled: !!user,
-    idleMs: 180_000,
-    warnMs: 30_000,
-    onInactive: pauseMedia,
-  });
-
-  // Trigger A: 2-min no scroll/click on course page → auto clock-out work session.
-  useCourseInactivityClockOut();
-
 
   if (loading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
