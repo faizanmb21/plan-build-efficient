@@ -16,6 +16,13 @@ export interface NavItem {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  /**
+   * Extra path prefixes that should also mark this item active. Use for
+   * grouped nav sections whose sub-routes don't share a URL prefix with
+   * `to` (e.g. a "Trainees" item at /ceo/members that should also light up
+   * on /ceo/attendance).
+   */
+  matchPrefixes?: string[];
 }
 
 interface AppShellProps {
@@ -86,9 +93,11 @@ export function AppShell({ nav, roleLabel, children }: AppShellProps) {
               {(() => {
                 const match = nav.find((n) => {
                   const isRoot = n.to === "/ceo" || n.to === "/incharge" || n.to === "/member";
-                  return isRoot
-                    ? location.pathname === n.to
-                    : location.pathname === n.to || location.pathname.startsWith(n.to + "/");
+                  if (isRoot) return location.pathname === n.to;
+                  const prefixes = [n.to, ...(n.matchPrefixes ?? [])];
+                  return prefixes.some(
+                    (p) => location.pathname === p || location.pathname.startsWith(p + "/"),
+                  );
                 });
                 return match?.label ?? "";
               })()}
@@ -151,10 +160,12 @@ function SidebarInner({
           // highlight the Dashboard while a child page is active.
           const isRootSection =
             item.to === "/ceo" || item.to === "/incharge" || item.to === "/member";
+          const prefixes = [item.to, ...(item.matchPrefixes ?? [])];
           const active = isRootSection
             ? location.pathname === item.to
-            : location.pathname === item.to ||
-              location.pathname.startsWith(item.to + "/");
+            : prefixes.some(
+                (p) => location.pathname === p || location.pathname.startsWith(p + "/"),
+              );
           const Icon = item.icon;
           return (
             <Link

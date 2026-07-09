@@ -1,19 +1,16 @@
-import { createFileRoute, Outlet, useRouter, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouter, useNavigate, useLocation } from "@tanstack/react-router";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell, type NavItem } from "@/components/AppShell";
+import { SectionSubNav, type SubNavTab } from "@/components/SectionSubNav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertTriangle,
   LayoutDashboard,
   FileCheck,
-  Activity,
   Users,
-  GraduationCap,
-  Send,
-  FolderKanban,
   Building2,
   Eye,
   X,
@@ -21,16 +18,31 @@ import {
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { canAuthorCourses, canEditCourseMandatory } from "@/lib/access";
-import { BookOpen, Settings2 } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
+// 4 top-level sections (no Franchises/View-as sprawl to consolidate here —
+// unlike CEO there's nothing left over for a "Settings" group). Sub-pages
+// keep their own URLs, reached via the SectionSubNav above the page content.
 const baseNav: NavItem[] = [
-  { to: "/incharge", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/incharge/members", label: "Members", icon: Users },
-  { to: "/incharge/assign", label: "Assign courses", icon: Send },
-  { to: "/incharge/projects", label: "Projects", icon: FolderKanban },
-  { to: "/incharge/grades", label: "Grades", icon: GraduationCap },
-  { to: "/incharge/attendance", label: "Attendance", icon: Activity },
-  { to: "/incharge/reviews", label: "Submissions", icon: FileCheck },
+  { to: "/incharge", label: "Home", icon: LayoutDashboard },
+  {
+    to: "/incharge/members",
+    label: "Trainees",
+    icon: Users,
+    matchPrefixes: ["/incharge/attendance"],
+  },
+  {
+    to: "/incharge/assign",
+    label: "Training",
+    icon: BookOpen,
+    matchPrefixes: ["/incharge/projects", "/incharge/course-rules"],
+  },
+  {
+    to: "/incharge/reviews",
+    label: "Reviews",
+    icon: FileCheck,
+    matchPrefixes: ["/incharge/grades"],
+  },
 ];
 
 export const Route = createFileRoute("/incharge")({
@@ -64,19 +76,53 @@ function InchargeLayout() {
   const isCeo = roles.includes("ceo");
   const isIncharge = roles.includes("incharge");
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const nav = React.useMemo<NavItem[]>(() => {
-    const items = [...baseNav];
+  // Training section's tabs, extended with the course-author / course-rules
+  // shortcuts for users who have those permissions (e.g. Maida) — these used
+  // to be separate top-level sidebar items; now they live inside Training.
+  const trainingTabs = React.useMemo<SubNavTab[]>(() => {
+    const tabs: SubNavTab[] = [
+      { to: "/incharge/assign", label: "Assign" },
+      { to: "/incharge/projects", label: "Projects" },
+    ];
     if (canAuthorCourses(user?.id, roles) && !roles.includes("ceo")) {
       // CEO already has its own Courses link in the CEO panel; only add this
       // shortcut for non-CEO course authors (e.g. Maida).
-      items.push({ to: "/ceo/courses", label: "Courses (author)", icon: BookOpen });
+      tabs.push({ to: "/ceo/courses", label: "Courses (author)" });
     }
     if (canEditCourseMandatory(user?.id, roles)) {
-      items.push({ to: "/incharge/course-rules", label: "Course rules", icon: Settings2 });
+      tabs.push({ to: "/incharge/course-rules", label: "Course rules" });
     }
-    return items;
+    return tabs;
   }, [user?.id, roles]);
+
+  const INCHARGE_SECTIONS: { matchPrefixes: string[]; tabs: SubNavTab[] }[] = [
+    {
+      matchPrefixes: ["/incharge/members", "/incharge/attendance"],
+      tabs: [
+        { to: "/incharge/members", label: "Members" },
+        { to: "/incharge/attendance", label: "Attendance" },
+      ],
+    },
+    {
+      matchPrefixes: ["/incharge/assign", "/incharge/projects", "/incharge/course-rules"],
+      tabs: trainingTabs,
+    },
+    {
+      matchPrefixes: ["/incharge/reviews", "/incharge/grades"],
+      tabs: [
+        { to: "/incharge/reviews", label: "Submissions" },
+        { to: "/incharge/grades", label: "Grades" },
+      ],
+    },
+  ];
+
+  const activeSection = INCHARGE_SECTIONS.find((s) =>
+    s.matchPrefixes.some(
+      (p) => location.pathname === p || location.pathname.startsWith(p + "/"),
+    ),
+  );
 
   // CEO without an active "view-as" gets a franchise picker first.
   const showPicker = isCeo && !isIncharge && !viewAsFranchiseId;
@@ -98,7 +144,7 @@ function InchargeLayout() {
 
   return (
     <RoleGuard allow={["incharge", "ceo"]}>
-      <AppShell nav={nav} roleLabel="Incharge">
+      <AppShell nav={baseNav} roleLabel="Incharge">
         {isCeo && viewAsFranchiseId && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-accent/40 bg-accent/10 px-4 py-2 text-sm">
             <span className="flex items-center gap-2">
@@ -128,7 +174,14 @@ function InchargeLayout() {
           </div>
         )}
 
-        {showPicker ? <FranchisePicker /> : <Outlet />}
+        {showPicker ? (
+          <FranchisePicker />
+        ) : (
+          <>
+            {activeSection && <SectionSubNav tabs={activeSection.tabs} />}
+            <Outlet />
+          </>
+        )}
       </AppShell>
     </RoleGuard>
   );
