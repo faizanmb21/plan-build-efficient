@@ -204,18 +204,24 @@ export const heartbeatSession = createServerFn({ method: "POST" })
 
     const nowIso = new Date().toISOString();
     const paused = (cur as any).status === "paused";
+    // The extra .is("ended_at", null) guards against a frozen tab resuming a
+    // suspended in-flight heartbeat hours later and stomping a row that was
+    // finalized in the meantime (observed in production: last_heartbeat_at
+    // hours AFTER ended_at).
     if (paused) {
       await supabaseAdmin
         .from("study_sessions")
         .update({ last_heartbeat_at: nowIso })
-        .eq("id", data.sessionId);
+        .eq("id", data.sessionId)
+        .is("ended_at", null);
       return { ok: true as const };
     }
     const { activeSec } = wallClockFigures(cur as SessionTimeRow, nowIso);
     await supabaseAdmin
       .from("study_sessions")
       .update({ active_seconds: activeSec, last_heartbeat_at: nowIso })
-      .eq("id", data.sessionId);
+      .eq("id", data.sessionId)
+      .is("ended_at", null);
     return { ok: true as const, activeSeconds: activeSec };
   });
 
@@ -246,7 +252,8 @@ export const pauseSession = createServerFn({ method: "POST" })
         paused_at: nowIso,
         last_heartbeat_at: nowIso,
       } as any)
-      .eq("id", data.sessionId);
+      .eq("id", data.sessionId)
+      .is("ended_at", null);
     if (error) return { ok: false as const, error: error.message };
     return { ok: true as const, pausedAt: nowIso };
   });
@@ -281,7 +288,8 @@ export const resumeSession = createServerFn({ method: "POST" })
         paused_seconds: nextPaused,
         last_heartbeat_at: nowIso,
       } as any)
-      .eq("id", data.sessionId);
+      .eq("id", data.sessionId)
+      .is("ended_at", null);
     if (error) return { ok: false as const, error: error.message };
     return { ok: true as const, pausedSeconds: nextPaused };
   });
@@ -309,8 +317,22 @@ export const clockOut = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!cur || cur.user_id !== ctx.userId) return { ok: false as const, error: "Not found" };
 
-    // Idempotent: a racing second clock-out (another tab, idle timer, retry)
-    // returns the stored figures instead of an error.
+    // KILL SWITCH: the idle auto-clock-out feature was removed from the app,
+    // but trainees with stale cached bundles (tabs never reloaded since the
+    // old deploy) still run the deleted 3-minute timer and call this with an
+    // auto_idle reason. Refuse it server-side — their session keeps running —
+    // and tell them how to get the fixed build. New clients only ever send
+    // "manual".
+    if (data.endReason && data.endReason !== "manual") {
+      return {
+        ok: false as const,
+        error:
+          "Auto clock-out has been removed — your clock is still running. Please refresh the app (Ctrl+Shift+R / Cmd+Shift+R) to get the update.",
+      };
+    }
+
+    // Idempotent: a racing second clock-out (another tab, retry) returns the
+    // stored figures instead of an error.
     if (cur.ended_at) {
       return {
         ok: true as const,
