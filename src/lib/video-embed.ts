@@ -1,7 +1,7 @@
 // Detect and normalize video links from popular platforms into a safe embed URL.
 // Returns null when the URL doesn't match anything we know how to embed.
 
-export type EmbedProvider = "youtube" | "vimeo" | "loom" | "drive" | "direct";
+export type EmbedProvider = "youtube" | "vimeo" | "loom" | "drive" | "gdoc" | "direct";
 
 export interface ParsedEmbed {
   provider: EmbedProvider;
@@ -19,7 +19,15 @@ export function parseVideoUrl(raw: string): ParsedEmbed | null {
   try {
     u = new URL(trimmed);
   } catch {
-    return null;
+    // Salvage pastes with junk around the link (leading text, double-pasted
+    // URLs, trailing punctuation): grab the first http(s) run and retry.
+    const salvaged = trimmed.match(/https?:\/\/\S+/)?.[0];
+    if (!salvaged) return null;
+    try {
+      u = new URL(salvaged);
+    } catch {
+      return null;
+    }
   }
   if (u.protocol !== "https:" && u.protocol !== "http:") return null;
   const host = u.hostname.toLowerCase();
@@ -88,6 +96,20 @@ export function parseVideoUrl(raw: string): ParsedEmbed | null {
       return {
         provider: "drive",
         embedUrl: `https://drive.google.com/file/d/${id}/preview`,
+        originalUrl: trimmed,
+      };
+    }
+  }
+
+  // Google Docs / Sheets / Slides — trainers sometimes paste these into
+  // video lessons. All three support an embeddable /preview mode (the /edit
+  // URL refuses to render in an iframe).
+  if (host === "docs.google.com") {
+    const m = u.pathname.match(/^\/(document|spreadsheets|presentation)\/d\/([^/]+)/);
+    if (m) {
+      return {
+        provider: "gdoc",
+        embedUrl: `https://docs.google.com/${m[1]}/d/${m[2]}/preview`,
         originalUrl: trimmed,
       };
     }

@@ -20,6 +20,7 @@ import {
   Download,
   Lock,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseVideoUrl } from "@/lib/video-embed";
@@ -732,6 +733,24 @@ function VideoPlayer({ path, url, onPlay }: { path?: string; url?: string; onPla
   if (url && url.trim()) {
     const parsed = parseVideoUrl(url);
     if (!parsed) {
+      // Unknown link type — never a dead end. Let the member open it in a
+      // new tab, which also counts as opening the lesson media.
+      const href = url.trim().match(/https?:\/\/\S+/)?.[0];
+      if (href) {
+        return (
+          <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-md border bg-muted/40 p-6 text-center">
+            <ExternalLink className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              This lesson's content opens outside the player.
+            </p>
+            <Button asChild size="lg">
+              <a href={href} target="_blank" rel="noreferrer" onClick={onPlay}>
+                Open lesson content <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </Button>
+          </div>
+        );
+      }
       return (
         <EmptyMedia label="This video link isn't supported. Edit the lesson and paste a YouTube, Vimeo, Loom, Drive, or .mp4 URL." />
       );
