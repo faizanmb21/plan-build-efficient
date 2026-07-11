@@ -45,9 +45,24 @@ function extractVideoId(embedUrl: string): string | null {
 export function YouTubeEmbed({ embedUrl, originalUrl, onPlay }: Props) {
   const videoId = React.useMemo(() => extractVideoId(embedUrl), [embedUrl]);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const wrapRef = React.useRef<HTMLDivElement | null>(null);
   const [blocked, setBlocked] = React.useState(false);
   const onPlayRef = React.useRef(onPlay);
   onPlayRef.current = onPlay;
+
+  // Fallback engagement signal: if the IFrame API fails to load (adblock,
+  // network), clicking into the player still moves focus into the iframe and
+  // fires window blur — count that as opening the video.
+  React.useEffect(() => {
+    const onBlur = () => {
+      const el = document.activeElement;
+      if (el && el.tagName === "IFRAME" && wrapRef.current?.contains(el)) {
+        onPlayRef.current?.();
+      }
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, []);
 
   React.useEffect(() => {
     if (!videoId) return;
@@ -91,13 +106,15 @@ export function YouTubeEmbed({ embedUrl, originalUrl, onPlay }: Props) {
   if (!videoId) {
     // Fallback to plain iframe if we can't parse the id (shouldn't happen).
     return (
-      <iframe
-        src={embedUrl}
-        className="aspect-video w-full rounded-md border bg-black"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        title="Lesson video"
-      />
+      <div ref={wrapRef}>
+        <iframe
+          src={embedUrl}
+          className="aspect-video w-full rounded-md border bg-black"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          title="Lesson video"
+        />
+      </div>
     );
   }
 
@@ -113,7 +130,12 @@ export function YouTubeEmbed({ embedUrl, originalUrl, onPlay }: Props) {
           </p>
         </div>
         <Button asChild size="lg">
-          <a href={originalUrl} target="_blank" rel="noreferrer">
+          <a
+            href={originalUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => onPlayRef.current?.()}
+          >
             <Youtube className="h-4 w-4" /> Watch on YouTube
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
@@ -123,7 +145,7 @@ export function YouTubeEmbed({ embedUrl, originalUrl, onPlay }: Props) {
   }
 
   return (
-    <div className="space-y-2">
+    <div ref={wrapRef} className="space-y-2">
       <div className="aspect-video w-full overflow-hidden rounded-md border bg-black">
         <div ref={containerRef} className="h-full w-full" />
       </div>

@@ -464,6 +464,17 @@ function LessonView({
   // Reset media-opened gate whenever the lesson changes
   React.useEffect(() => { setMediaOpened(false); }, [lesson.id]);
 
+  // Failsafe: play-detection can miss on exotic embeds (cross-origin iframes
+  // swallow clicks; provider APIs can fail to load). After 45s on the lesson,
+  // enable completion anyway — the gate is an anti-instant-skip nudge, and a
+  // member must NEVER be permanently stuck on a video they actually watched.
+  React.useEffect(() => {
+    if (done || mediaOpened) return;
+    if (lesson.type !== "video" && lesson.type !== "pdf") return;
+    const t = window.setTimeout(() => setMediaOpened(true), 45_000);
+    return () => window.clearTimeout(t);
+  }, [lesson.id, lesson.type, done, mediaOpened]);
+
   const requiresSub = lesson.requires_submission;
   // An assignment is attached when the lesson content carries a brief or an
   // attachment file.
@@ -673,6 +684,47 @@ function NoSeekVideo({ src, onPlay }: { src: string; onPlay?: () => void }) {
   );
 }
 
+/**
+ * Detects the user clicking INTO a cross-origin iframe. Click events inside
+ * an iframe never bubble to this document, so a wrapper onClick can't see
+ * them — but when focus moves into the iframe, the window fires `blur` with
+ * document.activeElement set to that iframe. That's the reliable signal.
+ */
+function useIframeEngagement(
+  wrapRef: React.RefObject<HTMLElement | null>,
+  onEngage?: () => void,
+) {
+  const cbRef = React.useRef(onEngage);
+  cbRef.current = onEngage;
+  React.useEffect(() => {
+    const onBlur = () => {
+      const el = document.activeElement;
+      if (el && el.tagName === "IFRAME" && wrapRef.current?.contains(el)) {
+        cbRef.current?.();
+      }
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [wrapRef]);
+}
+
+function EmbedVideo({ embedUrl, onPlay }: { embedUrl: string; onPlay?: () => void }) {
+  const wrapRef = React.useRef<HTMLDivElement | null>(null);
+  useIframeEngagement(wrapRef, onPlay);
+  return (
+    <div ref={wrapRef} onClick={onPlay}>
+      <iframe
+        key={embedUrl}
+        src={embedUrl}
+        className="aspect-video w-full rounded-md border bg-black"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        title="Lesson video"
+      />
+    </div>
+  );
+}
+
 function VideoPlayer({ path, url, onPlay }: { path?: string; url?: string; onPlay?: () => void }) {
   const signed = useSignedUrl("course-content", path);
 
@@ -690,19 +742,9 @@ function VideoPlayer({ path, url, onPlay }: { path?: string; url?: string; onPla
     if (parsed.provider === "youtube") {
       return <YouTubeEmbed embedUrl={parsed.embedUrl} originalUrl={parsed.originalUrl} onPlay={onPlay} />;
     }
-    // Other embed providers (Vimeo, Loom, Drive) — fire onPlay on iframe focus/click
-    return (
-      <div onClick={onPlay}>
-        <iframe
-          key={parsed.embedUrl}
-          src={parsed.embedUrl}
-          className="aspect-video w-full rounded-md border bg-black"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          title="Lesson video"
-        />
-      </div>
-    );
+    // Other embed providers (Vimeo, Loom, Drive) — clicking into the iframe
+    // counts as opening the video (window-blur focus trick).
+    return <EmbedVideo embedUrl={parsed.embedUrl} onPlay={onPlay} />;
   }
 
   if (!path) return <EmptyMedia label="No video added yet" />;
@@ -712,10 +754,12 @@ function VideoPlayer({ path, url, onPlay }: { path?: string; url?: string; onPla
 
 function PdfViewer({ path, onView }: { path?: string; onView?: () => void }) {
   const url = useSignedUrl("course-content", path);
+  const wrapRef = React.useRef<HTMLDivElement | null>(null);
+  useIframeEngagement(wrapRef, onView);
   if (!path) return <EmptyMedia label="No PDF uploaded" />;
   if (!url) return <div className="h-[60vh] w-full animate-pulse rounded-md bg-muted" />;
   return (
-    <div className="space-y-2" onClick={onView}>
+    <div ref={wrapRef} className="space-y-2" onClick={onView}>
       <iframe src={url} title="PDF" className="h-[60vh] w-full rounded-md border bg-white" />
       <Button asChild size="sm" variant="outline">
         <a href={url} target="_blank" rel="noreferrer" onClick={onView}>
