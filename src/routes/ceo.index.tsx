@@ -3,38 +3,15 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { AlertTriangle, Sparkles, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { MemberGradeReport } from "@/components/MemberGradeReport";
-import { useConfirm } from "@/components/ui/confirm-dialog";
-import {
-  CompletionBar,
-  IssueBadge,
-  InchargeScorecard,
-  KpiTile,
-  MiniAvatar,
-  type InchargeRow,
-} from "@/components/dashboard/ProgressPrimitives";
-import {
-  InchargeMemberStrip,
-  type InchargeBlock,
-} from "@/components/ceo/InchargeMemberStrip";
+import { cn } from "@/lib/utils";
+import { type InchargeRow } from "@/components/dashboard/ProgressPrimitives";
+import { type InchargeBlock } from "@/components/ceo/InchargeMemberStrip";
+import { MemberLiveCard } from "@/components/dashboard/MemberLiveCard";
+import { loadLiveBoard, downloadLiveBoardReport } from "@/lib/live-board";
 
 import {
   aggregateGrades,
@@ -390,231 +367,109 @@ export async function fetchOrgPerformance(): Promise<OrgPerformance> {
   };
 }
 
+function greeting(hour: number): string {
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 function CeoDashboard() {
   const { profile } = useAuth();
-  const perfQuery = useQuery({
-    queryKey: ["ceo", "org-performance-v3-with-projects"],
-    queryFn: fetchOrgPerformance,
+  const boardQuery = useQuery({
+    queryKey: ["ceo", "members-live-board"],
+    queryFn: loadLiveBoard,
+    refetchInterval: 60_000,
   });
-  const perf = perfQuery.data;
-  const confirm = useConfirm();
+  const board = boardQuery.data;
 
-  const [gradeMember, setGradeMember] = React.useState<{
-    id: string;
-    name: string | null;
-    franchiseName: string | null;
-  } | null>(null);
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
 
-  const handleArchive = React.useCallback(
-    async (id: string, name: string) => {
-      const ok = await confirm({
-        title: "Archive franchise?",
-        description: `Archive "${name}"? Members will be detached. You can restore for 30 days; after that it can be permanently deleted.`,
-        confirmLabel: "Archive",
-        variant: "destructive",
-      });
-      if (!ok) return;
-      const { error } = await supabase.rpc("archive_franchise", { _franchise_id: id });
-      if (error) return toast.error(error.message);
-      toast.success("Franchise archived");
-      perfQuery.refetch();
-    },
-    [confirm, perfQuery],
-  );
+  const firstName = profile?.full_name?.split(" ")[0] ?? "";
+  const timeLabel = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(now);
 
-  const monthLabel = new Intl.DateTimeFormat(undefined, {
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
+  const hoursTodayH = board ? Math.round((board.hoursTodaySec / 3600) * 10) / 10 : 0;
+  const targetTodayH = board ? Math.round((board.dailyTargetSecSum / 3600) * 10) / 10 : 0;
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      {/* Summary strip */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
         <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">
-            IRM Academy
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Welcome{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""} ·
-            full academy view
+          <p className="text-sm font-semibold">
+            {greeting(now.getHours())}{firstName ? `, ${firstName}` : ""}
           </p>
+          <p className="text-xs text-muted-foreground">{timeLabel}</p>
         </div>
-        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-          Training Progress Dashboard · {monthLabel}
-        </p>
-      </header>
-
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiTile
-          label="Total Members"
-          value={perf?.totalMembers ?? "—"}
-          subtitle={
-            perf
-              ? `${perf.totalFranchises} ${perf.totalFranchises === 1 ? "franchise" : "franchises"}`
-              : undefined
-          }
-          tone="indigo"
-        />
-        <KpiTile
-          label="Avg Training Completion"
-          value={perf ? `${perf.avgCompletion}%` : "—"}
-          subtitle="Across all courses"
-          tone={
-            !perf
-              ? "neutral"
-              : perf.avgCompletion >= 75
-                ? "emerald"
-                : perf.avgCompletion >= 50
-                  ? "sky"
-                  : "amber"
-          }
-        />
-        <KpiTile
-          label="Avg Grade Score"
-          value={perf ? `${perf.org.averagePercent}%` : "—"}
-          subtitle="All graded submissions"
-          tone={
-            !perf
-              ? "neutral"
-              : perf.org.averagePercent >= 85
-                ? "emerald"
-                : perf.org.averagePercent >= 75
-                  ? "sky"
-                  : "amber"
-          }
-        />
-        <KpiTile
-          label="Pending to Grade"
-          value={perf?.pendingTotal ?? "—"}
-          subtitle={
-            perf?.oldestPendingDays !== null && perf?.oldestPendingDays !== undefined
-              ? `Oldest: ${perf.oldestPendingDays}d`
-              : "Caught up"
-          }
-          tone={(perf?.pendingTotal ?? 0) > 0 ? "amber" : "emerald"}
-        />
+        <div className="h-8 w-px bg-white/8" />
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
+          <span>
+            <span className="font-semibold tabular-nums">
+              {board?.presentToday ?? "—"}/{board?.totalMembers ?? "—"}
+            </span>{" "}
+            <span className="text-muted-foreground">present today</span>
+          </span>
+          <span>
+            <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-emerald-300">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+              {board?.workingNow ?? "—"}
+            </span>{" "}
+            <span className="text-muted-foreground">working now</span>
+          </span>
+          <span>
+            <span className="font-semibold tabular-nums">
+              {hoursTodayH}h / {targetTodayH}h
+            </span>{" "}
+            <span className="text-muted-foreground">hours today vs target</span>
+          </span>
+          <span>
+            <span
+              className={cn(
+                "font-semibold tabular-nums",
+                (board?.pendingReview ?? 0) > 0 ? "text-amber-300" : "text-emerald-300",
+              )}
+            >
+              {board?.pendingReview ?? "—"}
+            </span>{" "}
+            <span className="text-muted-foreground">pending review</span>
+          </span>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-auto gap-1.5"
+          disabled={!board}
+          onClick={() => board && downloadLiveBoardReport(board)}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export report
+        </Button>
       </div>
 
-      {/* Franchise overview — donut + member roster, click member to open grade report */}
-      <InchargeMemberStrip
-        blocks={perf?.inchargeBlocks ?? []}
-        onMemberClick={(id, name, franchiseName) => setGradeMember({ id, name, franchiseName })}
-        onArchive={handleArchive}
-      />
-
-      {/* Members needing attention */}
-      <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/[0.04] to-rose-500/[0.04]">
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <AlertTriangle className="h-4 w-4 text-amber-400" />
-                Members needing attention
-              </CardTitle>
-              <CardDescription>Overdue, no activity, or failing</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member</TableHead>
-                  <TableHead>Franchise</TableHead>
-                  <TableHead className="text-right">Courses Assigned</TableHead>
-                  <TableHead>Avg Completion</TableHead>
-                  <TableHead className="text-right">Avg Grade</TableHead>
-                  <TableHead>Issue</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(perf?.attention ?? []).slice(0, 12).map((m) => {
-                  const tone: "indigo" | "rose" | "amber" =
-                    m.issues.some((i) => i.tone === "rose")
-                      ? "rose"
-                      : "amber";
-                  return (
-                    <TableRow key={m.userId} className="hover:bg-white/[0.02]">
-                      <TableCell>
-                        <span className="inline-flex items-center gap-2">
-                          <MiniAvatar name={m.fullName} tone={tone} />
-                          <span className="font-medium">{m.fullName ?? "—"}</span>
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {m.franchiseName ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {m.coursesAssigned}
-                      </TableCell>
-                      <TableCell>
-                        <CompletionBar pct={m.avgCompletion} width={110} />
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {m.agg.total > 0 ? (
-                          <span
-                            className={
-                              m.agg.averagePercent >= 80
-                                ? "text-emerald-400"
-                                : m.agg.averagePercent >= 70
-                                  ? "text-amber-400"
-                                  : "text-rose-400"
-                            }
-                          >
-                            {m.agg.averagePercent}%
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {m.issues.slice(0, 2).map((i, idx) => (
-                            <IssueBadge key={idx} label={i.label} tone={i.tone} />
-                          ))}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {(!perf || perf.attention.length === 0) && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                      {perfQuery.isLoading
-                        ? "Scanning members…"
-                        : "Every member across the academy is on track. 🎉"}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Incharge scorecard (kept for grader management) */}
-      {perf && perf.incharges.length > 0 && <InchargeScorecard rows={perf.incharges} />}
-
-      {/* Member grade report — opens when clicking a member row in the overview grid */}
-      <Dialog
-        open={!!gradeMember}
-        onOpenChange={(o) => !o && setGradeMember(null)}
-      >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Member grade report</DialogTitle>
-          </DialogHeader>
-          {gradeMember && (
-            <MemberGradeReport
-              userId={gradeMember.id}
-              fullName={gradeMember.name}
-              franchiseName={gradeMember.franchiseName}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Member grid */}
+      {boardQuery.isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading members…
+        </div>
+      ) : !board || board.members.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            No members yet.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {board.members.map((m) => (
+            <MemberLiveCard key={m.userId} member={m} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
