@@ -7,8 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, Sparkles, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { type InchargeRow } from "@/components/dashboard/ProgressPrimitives";
+import { KpiTile, type InchargeRow } from "@/components/dashboard/ProgressPrimitives";
 import { type InchargeBlock } from "@/components/ceo/InchargeMemberStrip";
 import { MemberLiveCard } from "@/components/dashboard/MemberLiveCard";
 import { loadLiveBoard, downloadLiveBoardReport } from "@/lib/live-board";
@@ -399,57 +398,82 @@ function CeoDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Summary strip */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold">
-            {greeting(now.getHours())}{firstName ? `, ${firstName}` : ""}
+      {/* Overview banner */}
+      <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-lg font-semibold">
+              {greeting(now.getHours())}{firstName ? `, ${firstName}` : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {timeLabel} · Today's class overview
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={!board}
+            onClick={() => board && downloadLiveBoardReport(board)}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export report
+          </Button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+          <KpiTile
+            label="Present today"
+            value={`${board?.presentToday ?? "—"}/${board?.totalMembers ?? "—"}`}
+            subtitle={
+              board
+                ? `${board.offDayToday} off day${board.offDayToday === 1 ? "" : "s"}`
+                : undefined
+            }
+            tone="indigo"
+          />
+          <KpiTile
+            label="On time"
+            value={board?.presentOnTime ?? "—"}
+            subtitle="started on schedule"
+            tone="emerald"
+          />
+          <KpiTile
+            label="Late"
+            value={board?.presentLate ?? "—"}
+            subtitle="started after schedule"
+            tone={(board?.presentLate ?? 0) > 0 ? "amber" : "neutral"}
+          />
+          <KpiTile
+            label="Absent"
+            value={board?.absentToday ?? "—"}
+            subtitle="working day, no session"
+            tone={(board?.absentToday ?? 0) > 0 ? "rose" : "neutral"}
+          />
+          <KpiTile
+            label="Working now"
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+                {board?.workingNow ?? "—"}
+              </span>
+            }
+            subtitle="live this instant"
+            tone="emerald"
+          />
+          <KpiTile
+            label="Hours today"
+            value={`${hoursTodayH}h`}
+            subtitle={`of ${targetTodayH}h target`}
+            tone={hoursTodayH >= targetTodayH && targetTodayH > 0 ? "emerald" : "sky"}
+          />
+        </div>
+
+        {(board?.pendingReview ?? 0) > 0 && (
+          <p className="mt-3 text-xs text-amber-300">
+            {board!.pendingReview} submission{board!.pendingReview === 1 ? "" : "s"} pending review.
           </p>
-          <p className="text-xs text-muted-foreground">{timeLabel}</p>
-        </div>
-        <div className="h-8 w-px bg-white/8" />
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
-          <span>
-            <span className="font-semibold tabular-nums">
-              {board?.presentToday ?? "—"}/{board?.totalMembers ?? "—"}
-            </span>{" "}
-            <span className="text-muted-foreground">present today</span>
-          </span>
-          <span>
-            <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-emerald-300">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-              {board?.workingNow ?? "—"}
-            </span>{" "}
-            <span className="text-muted-foreground">working now</span>
-          </span>
-          <span>
-            <span className="font-semibold tabular-nums">
-              {hoursTodayH}h / {targetTodayH}h
-            </span>{" "}
-            <span className="text-muted-foreground">hours today vs target</span>
-          </span>
-          <span>
-            <span
-              className={cn(
-                "font-semibold tabular-nums",
-                (board?.pendingReview ?? 0) > 0 ? "text-amber-300" : "text-emerald-300",
-              )}
-            >
-              {board?.pendingReview ?? "—"}
-            </span>{" "}
-            <span className="text-muted-foreground">pending review</span>
-          </span>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto gap-1.5"
-          disabled={!board}
-          onClick={() => board && downloadLiveBoardReport(board)}
-        >
-          <Download className="h-3.5 w-3.5" />
-          Export report
-        </Button>
+        )}
       </div>
 
       {/* Member grid */}

@@ -28,6 +28,8 @@ export interface LiveMember {
   currentLessonTitle: string | null;
   lateInPkt: string | null; // "10:24 AM" when first session today was late
   lastEndPkt: string | null; // last session end (for offline chip)
+  actualStartPkt: string | null; // first session today's clock time, whether on-time or late
+  scheduledStartPkt: string; // work_start_time configured for this member, always present
   atRisk: boolean;
   riskReasons: string[];
   // KPI tiles
@@ -49,6 +51,11 @@ export interface LiveBoard {
   hoursTodaySec: number;
   dailyTargetSecSum: number;
   pendingReview: number;
+  // Banner breakdown (all "today", PKT calendar day)
+  presentOnTime: number; // had a session today, first one not late
+  presentLate: number; // had a session today, first one started late
+  absentToday: number; // working day for them, no session at all today
+  offDayToday: number; // not a working day for them today
 }
 
 // ---------- PKT helpers ----------
@@ -76,6 +83,19 @@ function fmtPktClock(iso: string): string {
     minute: "2-digit",
     hour12: true,
   }).format(new Date(iso));
+}
+
+// Formats a bare "HH:MM:SS" (as stored on profiles.work_start_time) as a PKT
+// wall-clock string, e.g. "10:00 AM" — this is the schedule the incharge/CEO
+// configured for the member, not anything derived from actual sessions.
+function fmtScheduledClock(workStartTime: string): string {
+  const [h, m] = workStartTime.split(":").map((n) => parseInt(n, 10) || 0);
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(Date.UTC(2000, 0, 1, h, m)));
 }
 
 function minutesLatePkt(startedAtIso: string, workStartTime: string): number {
@@ -196,6 +216,8 @@ export async function loadLiveBoard(): Promise<LiveBoard> {
     );
     const lateMin = firstToday ? minutesLatePkt(firstToday, workStart) : 0;
     const lateInPkt = firstToday && lateMin > LATE_GRACE_MIN ? fmtPktClock(firstToday) : null;
+    const actualStartPkt = firstToday ? fmtPktClock(firstToday) : null;
+    const scheduledStartPkt = fmtScheduledClock(workStart);
 
     // Live session
     const live = mySessions.find((s) => {
@@ -204,11 +226,22 @@ export async function loadLiveBoard(): Promise<LiveBoard> {
       return Date.now() - new Date(lh).getTime() < LIVE_STALE_MS;
     });
 
-    // Last session end
+    // Last session end (may be from a previous day — label it as such so
+    // "last seen 4:05 PM" is never mistaken for something that happened
+    // today when the member hasn't actually started yet).
     const lastEnd = mySessions.reduce<string | null>(
       (max, s) => (s.ended_at && (max === null || s.ended_at > max) ? s.ended_at : max),
       null,
     );
+    const lastEndLabel = lastEnd
+      ? pktDateKey(new Date(lastEnd)) === todayKey
+        ? fmtPktClock(lastEnd)
+        : `${fmtPktClock(lastEnd)}, ${new Intl.DateTimeFormat("en-US", {
+            timeZone: PKT,
+            month: "short",
+            day: "numeric",
+          }).format(new Date(lastEnd))}`
+      : null;
 
     // Week hours vs target
     const hoursWeekSec = mySessions
@@ -262,7 +295,9 @@ export async function loadLiveBoard(): Promise<LiveBoard> {
       liveStartedAtMs: live ? new Date(live.started_at).getTime() : null,
       currentLessonTitle: currentLessonByUser.get(p.id) ?? null,
       lateInPkt,
-      lastEndPkt: lastEnd ? fmtPktClock(lastEnd) : null,
+      lastEndPkt: lastEndLabel,
+      actualStartPkt,
+      scheduledStartPkt,
       atRisk,
       riskReasons,
       hoursWeekSec,
@@ -295,6 +330,10 @@ export async function loadLiveBoard(): Promise<LiveBoard> {
       0,
     ),
     pendingReview,
+    presentOnTime: rows.filter((r) => r.presentToday && !r.lateInPkt).length,
+    presentLate: rows.filter((r) => r.presentToday && !!r.lateInPkt).length,
+    absentToday: rows.filter((r) => !r.presentToday && r.status === "offline").length,
+    offDayToday: rows.filter((r) => r.status === "off_day").length,
   };
 }
 
@@ -305,6 +344,10 @@ export function downloadLiveBoardReport(board: LiveBoard): void {
     Member: m.fullName,
     Franchise: m.franchiseName ?? "",
     Status: m.status === "live" ? "Live" : m.status === "offline" ? "Offline" : "Off day",
+    "Scheduled start": m.scheduledStartPkt,
+    "Actual start today": m.actualStartPkt ?? (m.status === "off_day" ? "" : "Not started"),
+    Late: m.lateInPkt ? "Yes" : "",
+    "Last seen": m.lastEndPkt ?? "",
     "At risk": m.atRisk ? m.riskReasons.join("; ") : "",
     "Overall %": m.overallPct,
     "Hours this week": Math.round((m.hoursWeekSec / 3600) * 10) / 10,
@@ -316,6 +359,10 @@ export function downloadLiveBoardReport(board: LiveBoard): void {
   }));
   const summary = [
     { Metric: "Present today", Value: `${board.presentToday}/${board.totalMembers}` },
+    { Metric: "Present on time", Value: board.presentOnTime },
+    { Metric: "Present late", Value: board.presentLate },
+    { Metric: "Absent today", Value: board.absentToday },
+    { Metric: "Off day today", Value: board.offDayToday },
     { Metric: "Working now", Value: board.workingNow },
     {
       Metric: "Hours today vs target",

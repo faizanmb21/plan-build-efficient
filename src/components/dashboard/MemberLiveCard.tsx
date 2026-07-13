@@ -127,7 +127,7 @@ export function MemberLiveCard({ member }: { member: LiveMember }) {
             )}
             {m.lateInPkt && (
               <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
-                late in {m.lateInPkt}
+                started {m.lateInPkt} · late
               </span>
             )}
             {m.atRisk && (
@@ -139,6 +139,17 @@ export function MemberLiveCard({ member }: { member: LiveMember }) {
               </span>
             )}
           </div>
+
+          {/* Scheduled vs actual start — the ask was specifically to surface
+              this for offline members so the CEO can cross-check who was
+              supposed to be working and either never showed or ran late. */}
+          {m.status === "offline" && (
+            <p className="mt-1 text-[10px] text-muted-foreground/80">
+              {m.actualStartPkt
+                ? `Started ${m.actualStartPkt} · scheduled ${m.scheduledStartPkt}`
+                : `Hasn't started today · scheduled ${m.scheduledStartPkt}`}
+            </p>
+          )}
         </div>
       </div>
 
