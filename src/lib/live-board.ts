@@ -13,7 +13,7 @@ const DAY_MS = 86_400_000;
 const LIVE_STALE_MS = 10 * 60 * 1000;
 const LATE_GRACE_MIN = 5;
 
-export type LiveStatus = "live" | "offline" | "off_day";
+export type LiveStatus = "live" | "paused" | "offline" | "off_day";
 
 export interface LiveMember {
   userId: string;
@@ -219,12 +219,17 @@ export async function loadLiveBoard(): Promise<LiveBoard> {
     const actualStartPkt = firstToday ? fmtPktClock(firstToday) : null;
     const scheduledStartPkt = fmtScheduledClock(workStart);
 
-    // Live session
-    const live = mySessions.find((s) => {
+    // Live session — actively clocked in, not paused, heartbeat still fresh.
+    const openFresh = (s: (typeof mySessions)[number]) => {
       if (s.ended_at || (s as any).status === "completed") return false;
       const lh = (s as any).last_heartbeat_at ?? s.started_at;
       return Date.now() - new Date(lh).getTime() < LIVE_STALE_MS;
-    });
+    };
+    const live = mySessions.find((s) => openFresh(s) && (s as any).status !== "paused");
+    // Paused counts separately — they clocked in today but aren't actively
+    // working right now, so they must not be counted as "working now" or
+    // show a ticking elapsed timer.
+    const pausedSession = !live ? mySessions.find((s) => openFresh(s) && (s as any).status === "paused") : undefined;
 
     // Last session end (may be from a previous day — label it as such so
     // "last seen 4:05 PM" is never mistaken for something that happened
@@ -282,7 +287,21 @@ export async function loadLiveBoard(): Promise<LiveBoard> {
     const atRisk = riskReasons.length > 0;
 
     const isWorkingDayToday = workingDays.includes(pktWeekday(now));
-    const status: LiveStatus = live ? "live" : isWorkingDayToday ? "offline" : "off_day";
+    const status: LiveStatus = live
+      ? "live"
+      : pausedSession
+        ? "paused"
+        : isWorkingDayToday
+          ? "offline"
+          : "off_day";
+
+    // Elapsed time shown on the card is the server-tracked active_seconds —
+    // NOT wall-clock time since clock-in. active_seconds freezes while
+    // paused and only counts real tracked work, so it can never overstate
+    // how long someone has actually been working (matches the same
+    // server-authoritative model the clock engine itself uses).
+    const liveSession = live ?? pausedSession;
+    const liveActiveSec = liveSession ? (liveSession.active_seconds ?? 0) : null;
 
     return {
       userId: p.id,
@@ -291,8 +310,8 @@ export async function loadLiveBoard(): Promise<LiveBoard> {
       initials: initialsOf(fullName),
       overallPct,
       status,
-      liveElapsedSec: live ? Math.max(0, Math.round((Date.now() - new Date(live.started_at).getTime()) / 1000)) : null,
-      liveStartedAtMs: live ? new Date(live.started_at).getTime() : null,
+      liveElapsedSec: liveActiveSec,
+      liveStartedAtMs: liveSession ? new Date(liveSession.started_at).getTime() : null,
       currentLessonTitle: currentLessonByUser.get(p.id) ?? null,
       lateInPkt,
       lastEndPkt: lastEndLabel,

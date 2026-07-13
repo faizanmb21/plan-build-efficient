@@ -38,10 +38,11 @@ function ProgressRingAvatar({ pct, initials }: { pct: number; initials: string }
   );
 }
 
-function elapsedHM(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  return `${h}:${String(m).padStart(2, "0")}`;
+// Unambiguous "2h 29m" / "45 min" — never a bare "2:29" that reads as
+// minutes:seconds. This is active work time (server-tracked, frozen while
+// paused), not raw wall-clock time since clock-in.
+function elapsedLabel(sec: number): string {
+  return formatDuration(sec);
 }
 
 function MiniTile({
@@ -110,7 +111,15 @@ export function MemberLiveCard({ member }: { member: LiveMember }) {
                   </span>
                 )}
                 {m.liveElapsedSec != null && (
-                  <span className="font-mono opacity-80">· {elapsedHM(m.liveElapsedSec)}</span>
+                  <span className="font-mono opacity-80">· {elapsedLabel(m.liveElapsedSec)} active</span>
+                )}
+              </span>
+            )}
+            {m.status === "paused" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-medium text-sky-300">
+                ❙❙ PAUSED
+                {m.liveElapsedSec != null && (
+                  <span className="font-mono opacity-80">· {elapsedLabel(m.liveElapsedSec)} active</span>
                 )}
               </span>
             )}
